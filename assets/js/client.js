@@ -2,6 +2,7 @@
 import { $, $$, ic, esc, uid, tc, sha, unpack, modal, toast, dueLabel, fmtDate, copyText, shareOrCopy, safeName, fpsLabel } from './util.js';
 import { Store, MODE } from './store.js';
 import { mountViewer, snapHTML, posterOf } from './viewer.js';
+import { openZoom } from './zoom.js';
 import { replyLink, requestMessage, reportHTML, printHTML, shareFile, STATUS } from './exports.js';
 
 export async function renderClient(app, params) {
@@ -98,7 +99,7 @@ export async function renderClient(app, params) {
         <span class="kind">${kind}</span>
         ${sent ? `<span class="tag st-${st}">${STATUS[st]}</span>` : `<button class="icon-x" data-del aria-label="삭제" title="삭제">${ic('trash', 15)}</button>`}
       </div>
-      <div data-seek>${snapHTML(it, n, P.ar, posterOf(p.src, P.poster || p.pv), sent ? '장면 사진 없음' : '장면 사진은 보낼 때 자동으로 붙어요')}</div>
+      <div data-zoom role="button" tabindex="0" aria-label="${n}번 크게 보기">${snapHTML(it, n, P.ar, posterOf(p.src, P.poster || p.pv), sent ? '장면 사진 없음' : '장면 사진은 보낼 때 자동으로 붙어요')}</div>
       ${sent ? `<p class="tx">${esc(it.tx || '(내용 없음)')}</p>` : `<textarea rows="2" placeholder="어떻게 고치면 좋을지 적어 주세요" data-tx>${esc(it.tx)}</textarea>`}
       ${thread(it, sent)}
     </article>`;
@@ -143,6 +144,7 @@ export async function renderClient(app, params) {
       return;
     }
     if (e.target.closest('textarea,input,form')) return;
+    if (e.target.closest('[data-zoom]')) { zoom(id); return; }
     const it = allItems().find(x => x.id === id); if (!it) return;
     selected = id; activeId = it._sent ? null : id;
     P.pause(); P.seek(it.t);
@@ -150,6 +152,44 @@ export async function renderClient(app, params) {
     $$('.item', list).forEach(c => c.classList.toggle('sel', c.dataset.id === id));
     V.render();
   });
+  list.addEventListener('keydown', e => { if ((e.key === 'Enter' || e.key === ' ') && e.target.matches('[data-zoom]')) { e.preventDefault(); zoom(e.target.closest('.item').dataset.id); } });
+
+  /* ---------- 크게 보기 ---------- */
+  const visible = () => tab === 'draft' ? state.draft.slice().sort((a, b) => a.t - b.t) : state.sent.slice().reverse().flatMap(r => r.items.map(it => ({ ...it, _sent: r.rid })));
+  function zoom(id) {
+    const vis = visible(), index = vis.findIndex(it => it.id === id); if (index < 0) return;
+    selected = id; renderList();
+    openZoom({
+      items: visible, index, ar: P.ar, poster: posterOf(p.src, P.poster || p.pv), fps: () => P.effFps(), numOf: it => numOf(it.id),
+      emptyText: it => it._sent ? '장면 사진 없음' : '장면 사진은 보낼 때 자동으로 붙어요',
+      from: it => $(`.list [data-id="${it.id}"] .snap`, app),
+      detail: it => {
+        const sent = !!it._sent, st = it.st || 'open';
+        return `${sent ? `<div class="zrow"><span class="tag st-${st}">${STATUS[st]}</span></div><p class="ztx">${esc(it.tx || '(내용 없음)')}</p>`
+          : `<label class="field"><span>수정할 내용</span><textarea class="ztx-in" data-ztx rows="5" placeholder="어떻게 고치면 좋을지 적어 주세요">${esc(it.tx)}</textarea></label>`}
+          <div class="zacts"><button class="btn" data-zact="play">${ic('play', 14)}이 장면 재생</button>${sent ? '' : `<button class="btn ghost danger" data-zact="del">${ic('trash', 14)}삭제</button>`}</div>
+          ${sent ? thread(it, true) : ''}`;
+      },
+      wire: (el, it, api) => {
+        const ta = $('[data-ztx]', el);
+        if (ta) { ta.addEventListener('input', () => { const d = state.draft.find(x => x.id === it.id); if (d) { d.tx = ta.value; save(); renderList(); } }); if (!it.tx) setTimeout(() => ta.focus(), 260); }
+        el.addEventListener('click', ev => {
+          const b = ev.target.closest('[data-zact]'); if (!b) return;
+          if (b.dataset.zact === 'play') { api.close(); P.seek(Math.max(0, it.t - 1.5)); P.play(); }
+          if (b.dataset.zact === 'del') { const k = state.draft.findIndex(x => x.id === it.id); if (k >= 0) state.draft.splice(k, 1); save(); renderList(); if (!visible().length) api.close(); else api.refresh(); }
+        });
+        const f = $('[data-reply]', el);
+        f && f.addEventListener('submit', async ev => { ev.preventDefault(); const b = $('input', f).value.trim(); if (!b) return; await replyTo(it.id, b); api.refresh(); });
+      },
+      onClose: it => { if (it) { selected = it.id; P.pause(); P.seek(it.t); if (it.th) P.showFreeze(it.th, it.t); renderList(); } },
+    });
+  }
+  async function replyTo(id, b) {
+    const req = state.sent.find(r => r.items.some(it => it.id === id)); const it = req.items.find(x => x.id === id);
+    it.rp = [...(it.rp || []), { by: 'c', n: state.from || '', b, at: Date.now() }];
+    save(); await Store.submit(p.id, req); renderList(); toast('답글을 남겼어요');
+  }
+
   let txT;
   list.addEventListener('input', e => {
     const ta = e.target.closest('[data-tx]'); if (!ta) return;
@@ -159,10 +199,7 @@ export async function renderClient(app, params) {
   list.addEventListener('submit', async e => {
     e.preventDefault();
     const f = e.target.closest('[data-reply]'); const input = $('input', f); const b = input.value.trim(); if (!b) return;
-    const id = f.closest('.item').dataset.id;
-    const req = state.sent.find(r => r.items.some(it => it.id === id)); const it = req.items.find(x => x.id === id);
-    it.rp = [...(it.rp || []), { by: 'c', n: state.from || '', b, at: Date.now() }];
-    save(); await Store.submit(p.id, req); renderList(); toast('답글을 남겼어요');
+    await replyTo(f.closest('.item').dataset.id, b);
   });
   $$('[data-tab]', app).forEach(b => b.addEventListener('click', () => { tab = b.dataset.tab; renderList(); }));
   const autoGrow = ta => { ta.style.height = 'auto'; ta.style.height = Math.min(220, ta.scrollHeight + 2) + 'px'; };

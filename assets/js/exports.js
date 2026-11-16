@@ -83,7 +83,9 @@ main{padding:20px clamp(16px,4vw,48px) 60px;display:grid;gap:14px}
 .pos{font:500 11px var(--mono);color:var(--dim);margin-top:4px}.tx{white-space:pre-wrap;margin:10px 0;font-size:15.5px}
 .rp{display:grid;grid-template-columns:auto 1fr auto;gap:2px 10px;padding:8px 10px;margin-top:6px;border-radius:8px;background:var(--raised);border:1px solid var(--div);font-size:13.5px}.rp.d{border-left:2px solid var(--accent)}.rp b{font-size:12px}.rp time{font:500 10.5px var(--mono);color:var(--dim)}.rp span{white-space:pre-wrap}
 footer{padding:0 clamp(16px,4vw,48px) 40px;color:var(--dim);font:500 11px var(--mono);letter-spacing:.06em}
-@media print{:root{color-scheme:light;--bg:#fff;--panel:#fff;--raised:#f6f3f2;--line:#ccc;--div:#ddd;--text:#111;--muted:#444;--dim:#666}body{font-size:12px}header{padding:0 0 12px}main{padding:12px 0}.card{grid-template-columns:300px 1fr;border-color:#ddd}.notice{margin:12px 0 0}.row a{display:none}footer{padding:0}@page{margin:14mm}}
+.snap{cursor:zoom-in}.snap-zoom{position:absolute;right:6px;top:6px;display:grid;place-items:center;width:26px;height:26px;border-radius:6px;background:#120e0eb8;border:1px solid var(--line);color:var(--text)}
+.lb{position:fixed;inset:0;z-index:9;display:grid;place-items:center;padding:16px;background:#0a0707f2;cursor:zoom-out}.lb .snap{width:min(100%,calc((100vh - 32px) * var(--ar)));cursor:zoom-out}.lb .snap-zoom{display:none}.lb .pin{transform:scale(1.25)}
+@media print{.snap-zoom,.lb{display:none!important}:root{color-scheme:light;--bg:#fff;--panel:#fff;--raised:#f6f3f2;--line:#ccc;--div:#ddd;--text:#111;--muted:#444;--dim:#666}body{font-size:12px}header{padding:0 0 12px}main{padding:12px 0}.card{grid-template-columns:300px 1fr;border-color:#ddd}.notice{margin:12px 0 0}.row a{display:none}footer{padding:0}@page{margin:14mm}}
 </style></head><body>
 <header><div><div class="wm"><b>SENSE</b> <i>director</i></div></div><div class="grow"><div class="eb">${role === 'director' ? 'Director feedback' : 'Revision request'}</div><h1>${title}</h1>
 <div class="sum">${items.length}건 · ${esc(reqs.map(r => r.from).filter(Boolean).join(', ') || '클라이언트')} · ${fmtDate(Date.now())}${p.d ? ' · ' + esc(dueLabel(p.d)) : ''}</div></div>
@@ -92,6 +94,7 @@ ${p.n && role === 'director' ? `<div class="notice">${esc(p.n)}</div>` : ''}
 <main>${cards || '<p>수정 포인트가 없습니다.</p>'}</main>
 <footer>SENSE DIRECTOR · OSNS.studio — 이 파일을 디렉터 콘솔에 끌어 놓으면 수신함으로 들어갑니다.</footer>
 <script type="application/json" id="sd-data">${data}</script>
+<script>document.addEventListener('click',function(e){var lb=document.querySelector('.lb');if(lb){lb.remove();return;}var s=e.target.closest('.snap');if(!s)return;var w=document.createElement('div');w.className='lb';var c=s.cloneNode(true);w.style.setProperty('--ar',s.clientWidth/s.clientHeight);w.appendChild(c);document.body.appendChild(w);});document.addEventListener('keydown',function(e){if(e.key==='Escape'){var lb=document.querySelector('.lb');lb&&lb.remove();}});<\/script>
 </body></html>`;
 }
 

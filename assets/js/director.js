@@ -2,6 +2,7 @@
 import { $, $$, ic, esc, uid, tc, sha, modal, toast, dueLabel, fmtDate, copyText, shareOrCopy, parseSource, safeName, fpsLabel, unpack, srcText, srcKind, STD_FPS } from './util.js';
 import { Store, MODE } from './store.js';
 import { mountViewer, snapHTML, posterOf } from './viewer.js';
+import { openZoom } from './zoom.js';
 import { probe } from './player.js';
 import { putMedia, fmtSize } from './media.js';
 import { clientLink, feedbackMessage, reportHTML, printHTML, shareFile, parseIncoming, STATUS } from './exports.js';
@@ -362,18 +363,48 @@ function renderInbox(side, p, getSel, setSel) {
       return `<article class="item${sel ? ' sel' : ''} st-${st}" data-id="${it.id}" data-rid="${r.rid}">
         <div class="item-head"><span class="no">${String(n).padStart(2, '0')}</span><button class="tcbtn" data-seek title="이 시점으로">${tc(it.t, fps)}</button>
           <button class="icon-x" data-loop title="앞뒤 2초 반복 재생" aria-label="앞뒤 재생">${ic('loop', 15)}</button></div>
-        <div data-seek>${snapHTML(it, n, p.ar || [16, 9], poster)}</div>
+        <div data-zoom role="button" tabindex="0" aria-label="${n}번 크게 보기">${snapHTML(it, n, p.ar || [16, 9], poster)}</div>
         <p class="tx">${esc(it.tx || '(내용 없음)')}</p>
-        <div class="seg status" role="group" aria-label="반영 상태">${['open', 'doing', 'done', 'hold'].map(k => `<button class="btn st-${k}${st === k ? ' on' : ''}" data-st="${k}">${STATUS[k]}</button>`).join('')}</div>
-        <div class="thread">${(it.rp || []).map(x => `<div class="rp ${x.by}"><b>${x.by === 'd' ? '나' : esc(x.n || r.from || '클라이언트')}</b><span>${esc(x.b)}</span><time>${fmtDate(x.at)}</time></div>`).join('')}
-          <div class="qchips">${REPLY_CHIPS.map(c => `<button class="chipbtn" data-q>${esc(c)}</button>`).join('')}</div>
-          <form class="reply" data-reply><input placeholder="댓글로 답하기" aria-label="댓글"><button class="btn small" aria-label="댓글 달기">${ic('reply', 14)}</button></form>
-        </div>
+        ${statusSeg(st)}
+        ${threadHTML(it, r)}
       </article>`;
     }
     bindMenu(side);
     if (V) V.render();
   };
+  function threadHTML(it, r) {
+    return `<div class="thread">${(it.rp || []).map(x => `<div class="rp ${x.by}"><b>${x.by === 'd' ? '나' : esc(x.n || r.from || '클라이언트')}</b><span>${esc(x.b)}</span><time>${fmtDate(x.at)}</time></div>`).join('')}
+          <div class="qchips">${REPLY_CHIPS.map(c => `<button class="chipbtn" data-q>${esc(c)}</button>`).join('')}</div>
+          <form class="reply" data-reply><input placeholder="댓글로 답하기" aria-label="댓글"><button class="btn small" aria-label="댓글 달기">${ic('reply', 14)}</button></form>
+        </div>`;
+  }
+  const statusSeg = st => `<div class="seg status" role="group" aria-label="반영 상태">${['open', 'doing', 'done', 'hold'].map(k => `<button class="btn st-${k}${st === k ? ' on' : ''}" data-st="${k}">${STATUS[k]}</button>`).join('')}</div>`;
+  const addReply = (rid, id, b) => update(rid, id, it => { it.rp = [...(it.rp || []), { by: 'd', n: p.by || '디렉터', b, at: Date.now() }]; if ((it.st || 'open') === 'open' && /반영하겠|반영할게/.test(b)) it.st = 'doing'; });
+  /* ---------- 크게 보기 ---------- */
+  const visible = () => Store.inbox(p.id).sort((a, b) => b.at - a.at).flatMap(r => r.items.filter(it => filter === 'all' || (it.st || 'open') === filter).sort((a, b) => a.t - b.t).map(it => ({ ...it, _rid: r.rid, _from: r.from })));
+  function zoom(id) {
+    const vis = visible(), index = vis.findIndex(it => it.id === id); if (index < 0) return;
+    const order = () => Store.inbox(p.id).flatMap(r => r.items).sort((a, b) => a.t - b.t);
+    setSel(id); draw();
+    openZoom({
+      items: visible, index, ar: p.ar || [16, 9], poster: posterOf(p.src, p.poster), fps: () => V ? V.P.effFps() : (p.fps || 30), numOf: it => order().findIndex(x => x.id === it.id) + 1,
+      from: it => $(`.list [data-id="${it.id}"] .snap`, side),
+      detail: it => `<div class="zfrom">${esc(it._from || '클라이언트')}</div><p class="ztx">${esc(it.tx || '(내용 없음)')}</p>
+        ${statusSeg(it.st || 'open')}
+        <div class="zacts"><button class="btn" data-zact="loop">${ic('loop', 14)}앞뒤 2초 재생</button></div>
+        ${threadHTML(it, { from: it._from })}`,
+      wire: (el, it, api) => {
+        el.addEventListener('click', ev => {
+          const stb = ev.target.closest('[data-st]'); if (stb) { update(it._rid, it.id, x => x.st = stb.dataset.st); api.refresh(); return; }
+          const q = ev.target.closest('[data-q]'); if (q) { const inp = $('[data-reply] input', el); inp.value = q.textContent; inp.focus(); return; }
+          if (ev.target.closest('[data-zact=loop]')) { api.close(); setSel(it.id); V && V.loopAround(it.t); }
+        });
+        $('[data-reply]', el).addEventListener('submit', ev => { ev.preventDefault(); const b = $('[data-reply] input', el).value.trim(); if (!b) return; addReply(it._rid, it.id, b); api.refresh(); });
+      },
+      onClose: it => { if (it && V) { setSel(it.id); V.P.pause(); V.P.seek(it.t); if (it.th) V.P.showFreeze(it.th, it.t); draw(); } },
+    });
+  }
+  side.addEventListener('keydown', e => { if ((e.key === 'Enter' || e.key === ' ') && e.target.matches('[data-zoom]')) { e.preventDefault(); zoom(e.target.closest('.item').dataset.id); } });
   const update = (rid, id, f) => {
     const inbox = Store.inbox(p.id), r = inbox.find(x => x.rid === rid), it = r && r.items.find(x => x.id === id);
     if (!it) return; f(it); Store.saveInbox(p.id, inbox); draw();
@@ -400,6 +431,7 @@ function renderInbox(side, p, getSel, setSel) {
     if (q) { const inp = $('[data-reply] input', card); inp.value = q.textContent; inp.focus(); return; }
     if (e.target.closest('[data-loop]')) { setSel(id); V && V.loopAround(it.t); draw(); return; }
     if (e.target.closest('form,input')) return;
+    if (e.target.closest('[data-zoom]')) { zoom(id); return; }
     setSel(id);
     if (V) { V.P.pause(); V.P.seek(it.t); if (it.th) V.P.showFreeze(it.th, it.t); }
     $$('.item', side).forEach(c => c.classList.toggle('sel', c.dataset.id === id)); V && V.render();
@@ -407,7 +439,7 @@ function renderInbox(side, p, getSel, setSel) {
   side.addEventListener('submit', e => {
     e.preventDefault();
     const form = e.target.closest('[data-reply]'), card = form.closest('.item'), b = $('input', form).value.trim(); if (!b) return;
-    update(card.dataset.rid, card.dataset.id, it => { it.rp = [...(it.rp || []), { by: 'd', n: p.by || '디렉터', b, at: Date.now() }]; if ((it.st || 'open') === 'open' && /반영하겠|반영할게/.test(b)) it.st = 'doing'; });
+    addReply(card.dataset.rid, card.dataset.id, b);
     toast('댓글을 달았어요. 다 달았으면 "회신 보내기"로 돌려보내 주세요');
   });
   function bindMenu(root) {

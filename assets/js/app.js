@@ -2,6 +2,7 @@
 import { hashParams, toast } from './util.js';
 import { renderClient } from './client.js';
 import { renderDirector, importDialog } from './director.js';
+import { closeAllZooms } from './zoom.js';
 
 const app = document.getElementById('app');
 let mode = '';
@@ -10,6 +11,7 @@ async function route() {
   document.onkeydown = null;
   document.getElementById('toast')?.classList.remove('on');
   document.querySelectorAll('.modal').forEach(m => m.remove());
+  closeAllZooms();
   if (params.c) {
     if (mode === 'client:' + params.c + ':' + (params.f || '')) return;
     mode = 'client:' + params.c + ':' + (params.f || '');

@@ -110,6 +110,23 @@ const pointer = (sel, pts) => ev(`(async()=>{const el=document.querySelector(${J
   ok(!(await ev("/[\\u{1F300}-\\u{1FAFF}\\u{2600}-\\u{27BF}]/u.test(document.body.innerText)")), 'no emoji in client UI');
   await ev("document.querySelector('.list .item').click()"); await delay(400);
   await shot('05-client-items');
+  // 카드 장면을 누르면 크게 보기
+  await ev("document.querySelector('.list .item [data-zoom]').click()");
+  await until("document.querySelector('.zoom.on')", 3000, 'zoom opens'); await delay(400);
+  ok(await ev("document.querySelector('.zoom-inner img').src.startsWith('data:image/jpeg') && document.querySelector('.zoom-inner').getBoundingClientRect().width > 700"), 'client: card opens enlarged scene');
+  ok(await ev("document.querySelector('[data-zcount]').textContent==='1 / 3' && document.querySelector('.zoom-inner .pin')!==null"), 'zoom shows pin and position in list');
+  await ev("document.querySelector('[data-z=next]').click()"); await delay(150);
+  ok(await ev("document.querySelector('[data-zcount]').textContent==='2 / 3' && document.querySelector('.zoom-inner polyline')!==null"), 'zoom: next item (with drawing)');
+  await ev("document.dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowLeft',bubbles:true}))"); await delay(150);
+  ok(await ev("document.querySelector('[data-zcount]').textContent==='1 / 3'"), 'zoom: arrow key navigation');
+  await ev("document.querySelector('[data-z=in]').click()"); await delay(250);
+  ok(await ev("parseInt(document.querySelector('[data-pct]').textContent)>100"), 'zoom: magnify');
+  await ev("(()=>{const t=document.querySelector('[data-ztx]');t.value='컷을 반 박자 앞당겨 주세요 (확대해서 확인)';t.dispatchEvent(new Event('input',{bubbles:true}));})()");
+  ok(await ev("document.querySelector('.list .item textarea').value.includes('확대해서 확인')"), 'zoom: edit text in place, card updates');
+  await shot('05b-client-zoom');
+  await ev("document.querySelector('[data-ztx]').blur();document.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true}))");
+  await until("!document.querySelector('.zoom')", 2000, 'zoom closes');
+  ok(true, 'zoom: Esc closes back to card');
 
   /* 4. 수정요청 보내기 */
   await click('[data-act=send]');
@@ -141,8 +158,16 @@ const pointer = (sel, pts) => ev(`(async()=>{const el=document.querySelector(${J
   const its = inbox2[0].items.slice().sort((a, b) => a.t - b.t);
   ok(its[0].st === 'done' && its[0].rp[0].b === '반영하겠습니다' && its[0].rp[0].by === 'd', 'director status + quick reply saved');
   ok(await ev("document.querySelector('.inbox-stats b').textContent==='1'"), 'progress counts done items');
-  await ev("document.querySelectorAll('.pbody .item')[1].querySelector('.snap').click()"); await delay(500);
   await shot('07-director-inbox');
+  await ev("document.querySelectorAll('.pbody .item')[1].querySelector('[data-zoom]').click()");
+  await until("document.querySelector('.zoom.on')", 3000, 'director zoom'); await delay(400);
+  await ev("document.querySelector('.zoom-side [data-st=doing]').click()"); await delay(150);
+  await ev("(()=>{const s=document.querySelector('.zoom-side');s.querySelector('[data-reply] input').value='색감은 다음 버전에서 다시 볼게요';s.querySelector('[data-reply] button').click();})()"); await delay(200);
+  const zr = (await ev(`JSON.parse(localStorage.getItem('sd:inbox:${pid}'))`))[0].items.slice().sort((a, b) => a.t - b.t)[1];
+  ok(zr.st === 'doing' && zr.rp.some(x => x.b.includes('다음 버전')), 'director: status and reply from enlarged view');
+  ok(await ev("document.querySelector('.zoom-side .rp.d')!==null && document.querySelector('.zoom-side .st-doing.on')!==null"), 'director zoom refreshes after change');
+  await shot('07b-director-zoom');
+  await ev("document.querySelector('[data-z=close]').click()"); await until("!document.querySelector('.zoom')", 2000);
 
   /* 6. 클라이언트: 회신 확인 (같은 브라우저 동기화) */
   await go(link);
@@ -182,6 +207,16 @@ const pointer = (sel, pts) => ev(`(async()=>{const el=document.querySelector(${J
   await delay(1200);
   ok(await ev("document.documentElement.scrollWidth<=window.innerWidth+1"), 'no horizontal scroll on phone');
   await shot('09-client-phone');
+  await until("document.querySelector('.stage video') && document.querySelector('.stage video').readyState>=2", 8000);
+  await ev("(async()=>{const v=document.querySelector('.stage video');v.currentTime=3;await new Promise(r=>v.addEventListener('seeked',r,{once:true}));})()");
+  await pointer('.overlay', [[0.55, 0.45], [0.55, 0.45]]);
+  await until("document.querySelectorAll('.list .item').length>=1", 6000, 'phone item');
+  await ev("document.activeElement && document.activeElement.blur(); document.querySelector('.list .item [data-zoom]').click()");
+  await until("document.querySelector('.zoom.on')", 3000, 'phone zoom');
+  await delay(300);
+  ok(await ev("(()=>{const r=document.querySelector('.zoom-inner').getBoundingClientRect();return r.width>=340 && document.documentElement.scrollWidth<=innerWidth+1})()"), 'phone: enlarged view fills the width');
+  await shot('09b-client-phone-zoom');
+  await ev("document.querySelector('[data-z=close]').click()"); await delay(300);
 
   await call('Emulation.clearDeviceMetricsOverride');
 

@@ -18,7 +18,7 @@ export const posterOf = (src, given = '') => given || (src && src.k === 'yt' ? `
 export function snapHTML(it, n, ar = [16, 9], poster = '', emptyText = '장면 사진 없음') {
   const img = it.th ? `<img src="${esc(it.th)}" alt="${n}번 장면" loading="lazy">`
     : (poster ? `<img src="${esc(poster)}" alt="" class="fallback" loading="lazy">` : '') + `<span class="nosnap">${esc(emptyText)}</span>`;
-  return `<div class="snap" style="aspect-ratio:${ar[0]}/${ar[1]}">${img}${strokesSVG(it.s)}${pinHTML(it, n)}</div>`;
+  return `<div class="snap" style="aspect-ratio:${ar[0]}/${ar[1]}" title="크게 보기">${img}${strokesSVG(it.s)}${pinHTML(it, n)}<span class="snap-zoom" aria-hidden="true">${ic('expand', 14)}</span></div>`;
 }
 
 /**
