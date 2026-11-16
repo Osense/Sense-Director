@@ -169,6 +169,31 @@ const pointer = (sel, pts) => ev(`(async()=>{const el=document.querySelector(${J
   await shot('07b-director-zoom');
   await ev("document.querySelector('[data-z=close]').click()"); await until("!document.querySelector('.zoom')", 2000);
 
+  /* 5c. 디렉터도 핀·펜으로 클라이언트에게 안내 */
+  ok(await ev("!!document.querySelector('.pbody.inbox .toolbar [data-tool=pin]')"), 'director viewer has pin/pen tools');
+  await ev("document.querySelector('[data-pane=notes]').click()");
+  await ev("(async()=>{const v=document.querySelector('.stage video');v.currentTime=4;await new Promise(r=>v.addEventListener('seeked',r,{once:true}));})()");
+  await ev("document.querySelector('.pbody.inbox [data-tool=pin]').click()");
+  await pointer('.overlay', [[0.7, 0.3], [0.7, 0.3]]);
+  await until("document.querySelectorAll('.list .item.note').length===1", 6000, 'director note');
+  ok(await ev("document.querySelector('.item.note .no.d').textContent==='D1' && document.activeElement.matches('[data-ntx]')"), 'director note D1 created, typing focused');
+  await ev("(()=>{const t=document.activeElement;t.value='이 컷은 색보정 전이에요. 색감은 보지 말아 주세요';t.dispatchEvent(new Event('input',{bubbles:true}));t.blur();})()");
+  await ev("document.querySelector('.pbody.inbox [data-tool=pen]').click()");
+  await pointer('.overlay', [[0.6, 0.6], [0.65, 0.62], [0.7, 0.66]]);
+  await delay(300);
+  ok(await ev("document.querySelectorAll('.list .item.note').length===1 && document.querySelector('.item.note .snap polyline')"), 'director pen stroke on same frame merges into note');
+  ok(await ev("!!document.querySelector('.overlay .pin.d') && !!document.querySelector('.overlay .ann.d')"), 'director annotations drawn in director color on stage');
+  await ev("(async()=>{const v=document.querySelector('.stage video');v.currentTime=8;await new Promise(r=>v.addEventListener('seeked',r,{once:true}));})()");
+  await ev("document.dispatchEvent(new KeyboardEvent('keydown',{key:'m',bubbles:true}))");
+  await until("document.querySelectorAll('.list .item.note').length===2", 6000, 'director memo note');
+  await ev("(()=>{const t=document.activeElement;t.value='자막 위치는 여기로 바뀔 예정이에요';t.dispatchEvent(new Event('input',{bubbles:true}));t.blur();})()");
+  await delay(400);
+  const pnotes = await ev(`(async()=>{const {Store}=await import('/assets/js/store.js');return Store.getProject(${JSON.stringify(pid)}).notes})()`);
+  ok(pnotes.length === 2 && pnotes.every(n => n.by === 'd' && n.tx) && pnotes[0].th.startsWith('data:image'), 'director notes saved with text and snapshot');
+  const dnLen = await ev(`(async()=>{const E=await import('/assets/js/exports.js');const U=await import('/assets/js/util.js');const {Store}=await import('/assets/js/store.js');const l=await E.clientLink(Store.getProject(${JSON.stringify(pid)}));return (await U.unpack(l.split('#c=')[1])).dn.length})()`);
+  ok(dnLen === 2, 'client link carries director notes');
+  await shot('07c-director-notes');
+
   /* 6. 클라이언트: 회신 확인 (같은 브라우저 동기화) */
   await go(link);
   await until("document.querySelector('[data-tab=sent]')", 8000);
@@ -179,6 +204,16 @@ const pointer = (sel, pts) => ev(`(async()=>{const el=document.querySelector(${J
   await delay(300);
   ok((await ev(`JSON.parse(localStorage.getItem('sd:inbox:${pid}'))`))[0].items.some(it => (it.rp || []).some(r => r.by === 'c')), 'client reply goes back to director');
   await shot('08-client-feedback');
+  ok(await ev("!document.querySelector('[data-tab=notes]').hidden && document.querySelector('[data-n=notes]').textContent==='2'"), 'client sees director notes tab');
+  await ev("document.querySelector('[data-tab=notes]').click()");
+  ok(await ev("document.querySelectorAll('.list .item.note').length===2 && document.querySelector('.list .item.note .tx').textContent.includes('색보정 전')"), 'client reads director notes');
+  await ev("document.querySelector('.list .item.note').click()"); await delay(500);
+  ok(await ev("!!document.querySelector('.overlay .pin.d')"), 'client sees director pin on video');
+  await ev("(()=>{const f=document.querySelector('.list .item.note [data-reply]');f.querySelector('input').value='네, 색감은 넘어갈게요';f.querySelector('button').click();})()");
+  await delay(300);
+  const nrp = await ev(`(async()=>{const {Store}=await import('/assets/js/store.js');return Store.getProject(${JSON.stringify(pid)}).notes.flatMap(n=>n.rp||[])})()`);
+  ok(nrp.some(x => x.by === 'c' && x.b.includes('넘어갈게요')), 'client reply on director note reaches director (same browser)');
+  await shot('08b-client-director-notes');
 
   /* 7. 다른 기기 흉내: 회신 링크(&f=)와 수정요청 링크(#r=) */
   const { fbLink, rLink, html } = await ev(`(async()=>{const E=await import('/assets/js/exports.js');const {Store}=await import('/assets/js/store.js');
@@ -191,6 +226,17 @@ const pointer = (sel, pts) => ev(`(async()=>{const el=document.querySelector(${J
   await ev("document.querySelector('[data-tab=sent]').click()");
   await until("document.querySelectorAll('.list .item.sent').length===3 && document.querySelector('.list .rp.d')", 6000, 'feedback link restores replies');
   ok(true, 'director feedback link restores statuses and replies on a fresh device');
+  ok(await ev("document.querySelector('[data-n=notes]').textContent==='2'"), 'fresh device: director notes arrive via link');
+  await ev("document.querySelector('[data-tab=notes]').click()");
+  await ev("(()=>{const f=document.querySelectorAll('.list .item.note [data-reply]')[1];f.querySelector('input').value='위치 확인했어요';f.querySelector('button').click();})()");
+  await delay(300);
+  ok(await ev("document.querySelector('[data-count]').textContent.includes('답글')"), 'fresh device: note reply waits to be sent');
+  await click('[data-act=send]'); await until("document.querySelector('[data-name]')");
+  await ev("document.querySelector('.modal .foot .primary').click()");
+  await until("document.querySelector('.sent-ok')", 6000, 'reply-only send');
+  const nrLink = await ev(`(async()=>{const E=await import('/assets/js/exports.js');const {Store}=await import('/assets/js/store.js');const req=Store.inbox(${JSON.stringify(pid)}).slice(-1)[0];return req.nr && req.nr.length ? await E.replyLink(E.projectPayload({...Store.getProject?.(${JSON.stringify(pid)})||{}, id:${JSON.stringify(pid)}, title:'단편영화 1차 편집본', src:${JSON.stringify({ k: 'url', url: VIDEO })}, notes:${JSON.stringify(pnotes.map(n => ({ ...n, th: undefined })))}}), req) : ''})()`);
+  ok(!!nrLink, 'reply-only request carries note replies');
+  await ev("document.querySelector('.modal .foot .primary').click()");
   await ev("localStorage.clear()");
   await go(BASE); await go(rLink);
   await until("document.querySelectorAll('.pbody.inbox .item').length===3", 8000, 'import via #r link');
@@ -198,6 +244,11 @@ const pointer = (sel, pts) => ev(`(async()=>{const el=document.querySelector(${J
   ok(html.includes('id="sd-data"') && html.includes('00:00:02:15') && html.includes('반영'), 'HTML report includes data, time address and status');
   const back = await ev(`(async()=>{const E=await import('/assets/js/exports.js');const d=await E.parseIncoming(${JSON.stringify(html)});return d.reqs[0].items.length})()`);
   ok(back === 3, 'HTML report can be imported back');
+  await ev("localStorage.clear()");
+  await go(BASE); await go(nrLink);
+  await until("location.hash.includes('tab=inbox')", 8000, 'import note replies');
+  const merged = await ev(`(async()=>{const {Store}=await import('/assets/js/store.js');return Store.getProject(${JSON.stringify(pid)}).notes.flatMap(n=>n.rp||[]).map(x=>x.b)})()`);
+  ok(merged.includes('위치 확인했어요'), 'director import merges client replies on notes');
 
   /* 8. 휴대폰 화면 */
   await call('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 2, mobile: true });

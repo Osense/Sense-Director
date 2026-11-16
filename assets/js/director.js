@@ -5,7 +5,7 @@ import { mountViewer, snapHTML, posterOf } from './viewer.js';
 import { openZoom } from './zoom.js';
 import { probe } from './player.js';
 import { putMedia, fmtSize } from './media.js';
-import { clientLink, feedbackMessage, reportHTML, printHTML, shareFile, parseIncoming, STATUS } from './exports.js';
+import { clientLink, feedbackMessage, reportHTML, printHTML, shareFile, parseIncoming, STATUS, noteLabel } from './exports.js';
 
 const NOTICE_CHIPS = ['피드백은 마감일까지 부탁드립니다.', '수정할 장면에서 멈추고 핀을 찍은 뒤 내용을 적어 주세요.', '자막·색보정·음악은 각각 따로 적어 주시면 빨라요.', '음악은 저작권 확인 중이라 바뀔 수 있어요.', '최종본이 아닌 1차 편집본입니다.'];
 const REPLY_CHIPS = ['반영하겠습니다', '확인했습니다', '다음 버전에 반영할게요', '논의가 필요해요', '원본 의도를 유지할게요'];
@@ -118,11 +118,17 @@ async function startNew(url = '', given = null) {
 function importInto(pp, reqs) {
   let p = Store.getProject(pp.id);
   if (!p) { // 다른 기기에서 만든 프로젝트: 링크 정보로 다시 만든다
-    p = { id: pp.id, title: pp.t, notice: pp.n, due: pp.d, src: pp.src, ar: pp.ar, fps: pp.fps, fpsHow: pp.fh, poster: pp.pv || '', pinHash: pp.ph, salt: pp.s, by: pp.by, pin: '', createdAt: Date.now(), imported: true };
+    p = { id: pp.id, title: pp.t, notice: pp.n, due: pp.d, src: pp.src, ar: pp.ar, fps: pp.fps, fpsHow: pp.fh, poster: pp.pv || '', notes: (pp.dn || []).map(n => ({ ...n, by: 'd', rp: n.rp || [] })), pinHash: pp.ph, salt: pp.s, by: pp.by, pin: '', createdAt: Date.now(), imported: true };
     Store.saveProject(p);
   }
   let added = 0;
-  for (const r of reqs) { r.items.forEach(it => { it.st = it.st || 'open'; it.rp = it.rp || []; }); if (Store.importRequest(p.id, r)) added++; }
+  for (const r of reqs) {
+    r.items.forEach(it => { it.st = it.st || 'open'; it.rp = it.rp || []; });
+    // 클라이언트가 디렉터 안내에 단 답글
+    for (const x of r.nr || []) { const n = (p.notes || []).find(k => k.id === x.id); if (!n) continue; n.rp = n.rp || []; for (const rp of x.rp) if (!n.rp.some(o => o.at === rp.at && o.b === rp.b)) n.rp.push(rp); n.rp.sort((a, b) => a.at - b.at); }
+    if (Store.importRequest(p.id, r)) added++;
+  }
+  Store.saveProject(p);
   return p.id;
 }
 
@@ -149,13 +155,14 @@ async function importDialog(fileText) {
 }
 
 /* ---------- 프로젝트 화면 ---------- */
+const params_pane = p => (p.notes || []).length && !Store.inbox(p.id).length ? 'notes' : 'req';
 function renderProject(main, p, tab) {
   const inbox = Store.inbox(p.id), all = inbox.flatMap(r => r.items);
   main.innerHTML = `
     <div class="phead">
       <input class="ptitle-in" data-f="title" value="${esc(p.title)}" placeholder="프로젝트 이름" aria-label="프로젝트 이름" spellcheck="false">
       <div class="tabs" role="tablist">
-        <button role="tab" data-tab="inbox" class="${tab === 'inbox' ? 'on' : ''}">${ic('inbox')}받은 수정요청 <b>${all.length}</b></button>
+        <button role="tab" data-tab="inbox" class="${tab === 'inbox' ? 'on' : ''}">${ic('inbox')}수정요청 · 안내 <b>${all.length}</b></button>
         <button role="tab" data-tab="setup" class="${tab === 'setup' ? 'on' : ''}">${ic('sliders')}설정 · 공유</button>
       </div>
     </div>
@@ -168,11 +175,16 @@ function renderProject(main, p, tab) {
 
   const viewerEl = $('[data-viewer]', main);
   let selected = null;
-  const items = () => Store.inbox(p.id).flatMap(r => r.items).sort((a, b) => a.t - b.t);
+  const items = () => [...Store.inbox(p.id).flatMap(r => r.items), ...(p.notes || [])].sort((a, b) => a.t - b.t);
+  const hooks = {};
   if (p.src) {
     V = mountViewer(viewerEl, p.src, {
       items: tab === 'inbox' ? items : null,
       selected: () => selected,
+      // 디렉터도 핀·펜으로 클라이언트에게 안내를 남긴다
+      tools: tab === 'inbox', mine: 'd',
+      label: it => hooks.label ? hooks.label(it) : '',
+      onPin: a => hooks.pin && hooks.pin(a), onStroke: s => hooks.stroke && hooks.stroke(s), onMemo: () => hooks.memo && hooks.memo(),
       onMeta: m => { // 알아서 알아낸 화면비·프레임 수를 저장 → 클라이언트 링크에도 들어간다
         let ch = false;
         if (m.ar && (m.ar[0] !== (p.ar || [])[0] || m.ar[1] !== (p.ar || [])[1])) { p.ar = m.ar; ch = true; }
@@ -190,7 +202,7 @@ function renderProject(main, p, tab) {
   }
 
   if (tab === 'setup') renderSetup($('[data-side]', main), p, main);
-  else renderInbox($('[data-side]', main), p, () => selected, id => { selected = id; });
+  else renderInbox($('[data-side]', main), p, () => selected, id => { selected = id; }, hooks, params_pane(p));
 
   document.onkeydown = e => {
     if (document.querySelector('.modal.open')) return;
@@ -256,6 +268,7 @@ function renderSetup(side, p, main) {
         <a class="btn" data-act="preview" target="_blank" rel="noopener">${ic('eye')}클라이언트 화면</a>
       </div>
       <div class="qr" data-qr hidden></div>
+      ${(p.notes || []).length ? `<p class="note">${ic('pin', 13)} 디렉터 안내 <b>${p.notes.length}건</b>이 링크에 함께 들어가요.</p>` : ''}
       <p class="note dim">핀 번호는 링크와 따로 보내면 더 안전해요. 링크에는 핀 번호 대신 확인용 값만 들어가요.${MODE === 'mock' ? ' 시험 버전에서는 핀 확인이 브라우저 안에서만 이뤄져요.' : ''}</p>
     </div>
     <div class="card danger-zone"><button class="btn ghost danger small" data-act="delete">${ic('trash', 14)}프로젝트 삭제</button></div>`;
@@ -322,124 +335,200 @@ function drawQR(el, text) {
 }
 
 /* ---------- 받은 수정요청 ---------- */
-function renderInbox(side, p, getSel, setSel) {
-  let filter = 'all';
+function renderInbox(side, p, getSel, setSel, hooks, initialPane) {
+  let filter = 'all', pane = initialPane || 'req', activeNote = null;
+  const notes = () => (p.notes || (p.notes = [])).slice().sort((a, b) => a.t - b.t);
+  const saveNotes = () => { Store.saveProject(p); side.closest('.pmain')?._queueLink?.(); };
+  const label = it => it.by === 'd' ? noteLabel(p.notes, it.id) : String(Store.inbox(p.id).flatMap(r => r.items).sort((a, b) => a.t - b.t).findIndex(x => x.id === it.id) + 1).padStart(2, '0');
+  hooks.label = label;
+
+  /* ---------- 디렉터 안내 만들기: 핀·펜·메모 ---------- */
+  async function addNote({ x = null, y = null, s = [] }) {
+    if (!V || !V.P.ready()) return;
+    V.P.pause();
+    const snap = await V.P.snapshot();
+    const it = { id: 'd' + uid(6), by: 'd', t: snap.t, x, y, s, tx: '', th: snap.img, rp: [], at: Date.now() };
+    (p.notes || (p.notes = [])).push(it);
+    activeNote = it.id; setSel(it.id); pane = 'notes'; saveNotes(); draw();
+    const ta = $(`[data-id="${it.id}"] [data-ntx]`, side); if (ta) { ta.focus(); ta.closest('.item').scrollIntoView({ block: 'nearest', behavior: 'smooth' }); }
+  }
+  hooks.pin = a => addNote(a);
+  hooks.memo = () => addNote({});
+  hooks.stroke = pts => {
+    const a = (p.notes || []).find(n => n.id === activeNote);
+    if (a && V && V.P.paused() && Math.abs(a.t - V.P.time()) < 1 / V.P.effFps() + 0.02) { a.s = [...(a.s || []), pts]; saveNotes(); draw(); return; }
+    addNote({ s: [pts] });
+  };
+
   const draw = () => {
-    const inbox = Store.inbox(p.id).sort((a, b) => b.at - a.at), all = inbox.flatMap(r => r.items);
-    const order = all.slice().sort((a, b) => a.t - b.t), numOf = id => order.findIndex(it => it.id === id) + 1;
+    const inbox = Store.inbox(p.id).sort((a, b) => b.at - a.at), all = inbox.flatMap(r => r.items), ns = notes();
     const cnt = k => all.filter(it => (it.st || 'open') === k).length, done = cnt('done');
-    const fps = V ? V.P.effFps() : (p.fps || 30), poster = posterOf(p.src, p.poster), missing = all.filter(it => !it.th).length;
+    const fps = V ? V.P.effFps() : (p.fps || 30), poster = posterOf(p.src, p.poster);
+    const missing = all.filter(it => !it.th).length + ns.filter(it => !it.th).length;
+    const sendable = all.length || ns.length;
     side.innerHTML = `
+      <div class="side-tabs" role="tablist">
+        <button role="tab" class="${pane === 'req' ? 'on' : ''}" data-pane="req">받은 요청 <b>${all.length}</b></button>
+        <button role="tab" class="${pane === 'notes' ? 'on' : ''}" data-pane="notes">내 안내 <b class="d">${ns.length}</b></button>
+      </div>
       <div class="inbox-head">
+        ${pane === 'req' ? `
         <div class="progress" title="반영 ${done} / ${all.length}"><i style="width:${all.length ? done / all.length * 100 : 0}%"></i></div>
-        <div class="inbox-stats"><b>${done}</b><span>/ ${all.length} 반영</span><span class="dim">진행 ${cnt('doing')} · 보류 ${cnt('hold')} · 대기 ${cnt('open')}</span></div>
+        <div class="inbox-stats"><b>${done}</b><span>/ ${all.length} 반영</span><span class="dim">진행 ${cnt('doing')} · 보류 ${cnt('hold')} · 대기 ${cnt('open')}</span></div>`
+        : `<p class="note-hint">${ic('pin', 14)}<span>영상에 핀·펜으로 표시하면 <b>디렉터 안내</b>가 돼요. 클라이언트 화면에 노란 표시로 보이고, 클라이언트가 답글을 달 수 있어요.</span></p>`}
         ${missing && V && V.canShare() ? `<button class="btn small ghost thumbs-btn" data-act="thumbs">${ic('cam', 14)}장면 사진 없는 ${missing}건 만들기</button>` : ''}
         <div class="thumb-progress" data-tp hidden><i></i><span></span></div>
         <div class="inbox-actions">
-          <div class="seg small" role="group" aria-label="상태 필터">${['all', 'open', 'doing', 'done', 'hold'].map(k => `<button class="btn${filter === k ? ' on' : ''}" data-filter="${k}">${k === 'all' ? '전체' : STATUS[k]}</button>`).join('')}</div>
+          ${pane === 'req' ? `<div class="seg small" role="group" aria-label="상태 필터">${['all', 'open', 'doing', 'done', 'hold'].map(k => `<button class="btn${filter === k ? ' on' : ''}" data-filter="${k}">${k === 'all' ? '전체' : STATUS[k]}</button>`).join('')}</div>` : '<span></span>'}
           <div class="split" data-menu-root>
-            <button class="btn primary" data-act="feedback" ${all.length ? '' : 'disabled'}>${ic('send')}회신 보내기</button>
-            <button class="btn primary caret" data-act="fb-more" aria-label="회신 방법" ${all.length ? '' : 'disabled'}>${ic('down', 14)}</button>
+            <button class="btn primary" data-act="feedback" ${sendable ? '' : 'disabled'} title="상태·댓글·디렉터 안내를 클라이언트에게">${ic('send')}${all.length ? '회신 보내기' : '안내 보내기'}</button>
+            <button class="btn primary caret" data-act="fb-more" aria-label="보내는 방법" ${sendable ? '' : 'disabled'}>${ic('down', 14)}</button>
             <div class="menu" role="menu" hidden>
-              <button data-fb="msg">${ic('msg')}<span><b>메시지로 보내기</b><small>상태·댓글 요약 + 클라이언트 확인 링크</small></span></button>
+              <button data-fb="msg">${ic('msg')}<span><b>메시지로 보내기</b><small>안내·상태·댓글 요약 + 클라이언트 확인 링크</small></span></button>
               <button data-fb="html">${ic('file')}<span><b>HTML 보내기</b><small>장면 사진과 댓글이 담긴 파일</small></span></button>
               <button data-fb="pdf">${ic('print')}<span><b>PDF 보내기</b><small>인쇄 창에서 'PDF로 저장'</small></span></button>
             </div>
           </div>
         </div>
       </div>
-      <div class="list">${inbox.length ? inbox.map(r => {
-        const its = r.items.filter(it => filter === 'all' || (it.st || 'open') === filter).sort((a, b) => a.t - b.t);
-        if (!its.length) return '';
-        return `<div class="group"><div class="group-head">${esc(r.from || '클라이언트')} · ${fmtDate(r.at)} · ${r.items.length}건</div>${its.map(it => card(it, r, numOf(it.id), fps, poster)).join('')}</div>`;
-      }).join('') || '<div class="empty"><b>이 상태의 요청이 없어요</b></div>' : `<div class="empty">
-        <b>아직 받은 수정요청이 없어요</b>
-        <span>"설정 · 공유"에서 링크와 핀 번호를 클라이언트에게 보내 주세요.</span>
-        <span>클라이언트가 메시지나 HTML 파일로 보냈다면 위의 "가져오기"를 쓰거나 파일을 이 화면에 끌어 놓으세요.</span>
-        ${MODE === 'mock' ? '<span class="dim">시험 버전: 같은 브라우저에서 "클라이언트 화면"을 열어 보내면 여기에 바로 들어와요.</span>' : ''}</div>`}
+      <div class="list">${pane === 'notes' ? (ns.length ? ns.map(it => noteCard(it, fps, poster)).join('') : `<div class="empty">
+          <b>클라이언트에게 남길 안내가 없어요</b>
+          <span>${ic('pin', 14)} 핀 · ${ic('pen', 14)} 펜으로 영상 위에 표시하고 내용을 적어 주세요.</span>
+          <span>예: "이 컷은 색보정 전이에요", "자막 위치는 여기로 바뀔 예정"</span>
+          <span class="dim">안내는 클라이언트 링크와 "안내 보내기"에 함께 담겨요.</span></div>`)
+        : inbox.length ? inbox.map(r => {
+          const its = r.items.filter(it => filter === 'all' || (it.st || 'open') === filter).sort((a, b) => a.t - b.t);
+          if (!its.length) return '';
+          return `<div class="group"><div class="group-head">${esc(r.from || '클라이언트')} · ${fmtDate(r.at)} · ${r.items.length}건</div>${its.map(it => card(it, r, label(it), fps, poster)).join('')}</div>`;
+        }).join('') || '<div class="empty"><b>이 상태의 요청이 없어요</b></div>' : `<div class="empty">
+          <b>아직 받은 수정요청이 없어요</b>
+          <span>"설정 · 공유"에서 링크와 핀 번호를 클라이언트에게 보내 주세요.</span>
+          <span>클라이언트가 메시지나 HTML 파일로 보냈다면 위의 "가져오기"를 쓰거나 파일을 이 화면에 끌어 놓으세요.</span>
+          ${MODE === 'mock' ? '<span class="dim">시험 버전: 같은 브라우저에서 "클라이언트 화면"을 열어 보내면 여기에 바로 들어와요.</span>' : ''}</div>`}
       </div>`;
-    function card(it, r, n, fps, poster) {
-      const st = it.st || 'open', sel = getSel() === it.id;
-      return `<article class="item${sel ? ' sel' : ''} st-${st}" data-id="${it.id}" data-rid="${r.rid}">
-        <div class="item-head"><span class="no">${String(n).padStart(2, '0')}</span><button class="tcbtn" data-seek title="이 시점으로">${tc(it.t, fps)}</button>
-          <button class="icon-x" data-loop title="앞뒤 2초 반복 재생" aria-label="앞뒤 재생">${ic('loop', 15)}</button></div>
-        <div data-zoom role="button" tabindex="0" aria-label="${n}번 크게 보기">${snapHTML(it, n, p.ar || [16, 9], poster)}</div>
-        <p class="tx">${esc(it.tx || '(내용 없음)')}</p>
-        ${statusSeg(st)}
-        ${threadHTML(it, r)}
-      </article>`;
-    }
     bindMenu(side);
     if (V) V.render();
   };
-  function threadHTML(it, r) {
-    return `<div class="thread">${(it.rp || []).map(x => `<div class="rp ${x.by}"><b>${x.by === 'd' ? '나' : esc(x.n || r.from || '클라이언트')}</b><span>${esc(x.b)}</span><time>${fmtDate(x.at)}</time></div>`).join('')}
-          <div class="qchips">${REPLY_CHIPS.map(c => `<button class="chipbtn" data-q>${esc(c)}</button>`).join('')}</div>
-          <form class="reply" data-reply><input placeholder="댓글로 답하기" aria-label="댓글"><button class="btn small" aria-label="댓글 달기">${ic('reply', 14)}</button></form>
-        </div>`;
+  function card(it, r, n, fps, poster) {
+    const st = it.st || 'open', sel = getSel() === it.id;
+    return `<article class="item${sel ? ' sel' : ''} st-${st}" data-id="${it.id}" data-rid="${r.rid}">
+      <div class="item-head"><span class="no">${n}</span><button class="tcbtn" data-seek title="이 시점으로">${tc(it.t, fps)}</button>
+        <button class="icon-x" data-loop title="앞뒤 2초 반복 재생" aria-label="앞뒤 재생">${ic('loop', 15)}</button></div>
+      <div data-zoom role="button" tabindex="0" aria-label="${n}번 크게 보기">${snapHTML(it, n, p.ar || [16, 9], poster)}</div>
+      <p class="tx">${esc(it.tx || '(내용 없음)')}</p>
+      ${statusSeg(st)}
+      ${threadHTML(it, r.from)}
+    </article>`;
+  }
+  function noteCard(it, fps, poster) {
+    const n = label(it), sel = getSel() === it.id;
+    const kind = it.x != null ? (it.s && it.s.length ? '핀 + 그림' : '핀') : it.s && it.s.length ? '그림' : '메모';
+    return `<article class="item note${sel ? ' sel' : ''}" data-id="${it.id}" data-note>
+      <div class="item-head"><span class="no d">${n}</span><button class="tcbtn" data-seek title="이 시점으로">${tc(it.t, fps)}</button><span class="kind">${kind}</span>
+        <button class="icon-x" data-ndel aria-label="안내 삭제" title="삭제">${ic('trash', 15)}</button></div>
+      <div data-zoom role="button" tabindex="0" aria-label="${n} 크게 보기">${snapHTML(it, n, p.ar || [16, 9], poster, V && V.needsShare() ? '장면 사진 없음 — 위 버튼으로 만들 수 있어요' : '장면 사진 없음')}</div>
+      <textarea rows="2" placeholder="클라이언트에게 남길 안내를 적어 주세요" data-ntx>${esc(it.tx || '')}</textarea>
+      ${(it.rp || []).length ? threadHTML(it, '클라이언트', true) : ''}
+    </article>`;
+  }
+  function threadHTML(it, from, noteThread = false) {
+    return `<div class="thread">${(it.rp || []).map(x => `<div class="rp ${x.by}"><b>${x.by === 'd' ? '나' : esc(x.n || from || '클라이언트')}</b><span>${esc(x.b)}</span><time>${fmtDate(x.at)}</time></div>`).join('')}
+        ${noteThread ? '' : `<div class="qchips">${REPLY_CHIPS.map(c => `<button class="chipbtn" data-q>${esc(c)}</button>`).join('')}</div>`}
+        <form class="reply" data-reply><input placeholder="${noteThread ? '답글' : '댓글로 답하기'}" aria-label="댓글"><button class="btn small" aria-label="댓글 달기">${ic('reply', 14)}</button></form>
+      </div>`;
   }
   const statusSeg = st => `<div class="seg status" role="group" aria-label="반영 상태">${['open', 'doing', 'done', 'hold'].map(k => `<button class="btn st-${k}${st === k ? ' on' : ''}" data-st="${k}">${STATUS[k]}</button>`).join('')}</div>`;
-  const addReply = (rid, id, b) => update(rid, id, it => { it.rp = [...(it.rp || []), { by: 'd', n: p.by || '디렉터', b, at: Date.now() }]; if ((it.st || 'open') === 'open' && /반영하겠|반영할게/.test(b)) it.st = 'doing'; });
-  /* ---------- 크게 보기 ---------- */
-  const visible = () => Store.inbox(p.id).sort((a, b) => b.at - a.at).flatMap(r => r.items.filter(it => filter === 'all' || (it.st || 'open') === filter).sort((a, b) => a.t - b.t).map(it => ({ ...it, _rid: r.rid, _from: r.from })));
-  function zoom(id) {
-    const vis = visible(), index = vis.findIndex(it => it.id === id); if (index < 0) return;
-    const order = () => Store.inbox(p.id).flatMap(r => r.items).sort((a, b) => a.t - b.t);
-    setSel(id); draw();
-    openZoom({
-      items: visible, index, ar: p.ar || [16, 9], poster: posterOf(p.src, p.poster), fps: () => V ? V.P.effFps() : (p.fps || 30), numOf: it => order().findIndex(x => x.id === it.id) + 1,
-      from: it => $(`.list [data-id="${it.id}"] .snap`, side),
-      detail: it => `<div class="zfrom">${esc(it._from || '클라이언트')}</div><p class="ztx">${esc(it.tx || '(내용 없음)')}</p>
-        ${statusSeg(it.st || 'open')}
-        <div class="zacts"><button class="btn" data-zact="loop">${ic('loop', 14)}앞뒤 2초 재생</button></div>
-        ${threadHTML(it, { from: it._from })}`,
-      wire: (el, it, api) => {
-        el.addEventListener('click', ev => {
-          const stb = ev.target.closest('[data-st]'); if (stb) { update(it._rid, it.id, x => x.st = stb.dataset.st); api.refresh(); return; }
-          const q = ev.target.closest('[data-q]'); if (q) { const inp = $('[data-reply] input', el); inp.value = q.textContent; inp.focus(); return; }
-          if (ev.target.closest('[data-zact=loop]')) { api.close(); setSel(it.id); V && V.loopAround(it.t); }
-        });
-        $('[data-reply]', el).addEventListener('submit', ev => { ev.preventDefault(); const b = $('[data-reply] input', el).value.trim(); if (!b) return; addReply(it._rid, it.id, b); api.refresh(); });
-      },
-      onClose: it => { if (it && V) { setSel(it.id); V.P.pause(); V.P.seek(it.t); if (it.th) V.P.showFreeze(it.th, it.t); draw(); } },
-    });
-  }
-  side.addEventListener('keydown', e => { if ((e.key === 'Enter' || e.key === ' ') && e.target.matches('[data-zoom]')) { e.preventDefault(); zoom(e.target.closest('.item').dataset.id); } });
   const update = (rid, id, f) => {
     const inbox = Store.inbox(p.id), r = inbox.find(x => x.rid === rid), it = r && r.items.find(x => x.id === id);
     if (!it) return; f(it); Store.saveInbox(p.id, inbox); draw();
   };
+  const addReply = (rid, id, b) => update(rid, id, it => { it.rp = [...(it.rp || []), { by: 'd', n: p.by || '디렉터', b, at: Date.now() }]; if ((it.st || 'open') === 'open' && /반영하겠|반영할게/.test(b)) it.st = 'doing'; });
+  const noteOf = id => (p.notes || []).find(n => n.id === id);
+  const noteReply = (id, b) => { const n = noteOf(id); if (!n) return; n.rp = [...(n.rp || []), { by: 'd', n: p.by || '디렉터', b, at: Date.now() }]; saveNotes(); draw(); };
+  const noteDelete = id => {
+    const k = (p.notes || []).findIndex(n => n.id === id); if (k < 0) return;
+    const [gone] = p.notes.splice(k, 1); saveNotes(); draw();
+    toast(`안내를 지웠어요 <button class="link" data-undo>되돌리기</button>`, 4000);
+    const u = $('#toast [data-undo]'); u && u.addEventListener('click', () => { p.notes.push(gone); saveNotes(); draw(); });
+  };
+
+  /* ---------- 크게 보기 ---------- */
+  const visible = () => pane === 'notes' ? notes()
+    : Store.inbox(p.id).sort((a, b) => b.at - a.at).flatMap(r => r.items.filter(it => filter === 'all' || (it.st || 'open') === filter).sort((a, b) => a.t - b.t).map(it => ({ ...it, _rid: r.rid, _from: r.from })));
+  function zoom(id) {
+    const vis = visible(), index = vis.findIndex(it => it.id === id); if (index < 0) return;
+    setSel(id); draw();
+    openZoom({
+      items: visible, index, ar: p.ar || [16, 9], poster: posterOf(p.src, p.poster), fps: () => V ? V.P.effFps() : (p.fps || 30), numOf: label,
+      from: it => $(`.list [data-id="${it.id}"] .snap`, side),
+      detail: it => it.by === 'd'
+        ? `<div class="zfrom d">디렉터 안내</div><label class="field"><span>안내 내용</span><textarea class="ztx-in" data-zntx rows="5" placeholder="클라이언트에게 남길 안내를 적어 주세요">${esc(it.tx || '')}</textarea></label>
+          <div class="zacts"><button class="btn" data-zact="loop">${ic('loop', 14)}앞뒤 2초 재생</button><button class="btn ghost danger" data-zact="ndel">${ic('trash', 14)}삭제</button></div>
+          ${threadHTML(it, '클라이언트', true)}`
+        : `<div class="zfrom">${esc(it._from || '클라이언트')}</div><p class="ztx">${esc(it.tx || '(내용 없음)')}</p>
+          ${statusSeg(it.st || 'open')}
+          <div class="zacts"><button class="btn" data-zact="loop">${ic('loop', 14)}앞뒤 2초 재생</button></div>
+          ${threadHTML(it, it._from)}`,
+      wire: (el, it, api) => {
+        const ta = $('[data-zntx]', el);
+        if (ta) { ta.addEventListener('input', () => { const n = noteOf(it.id); if (n) { n.tx = ta.value; saveNotes(); const c = $(`.list [data-id="${it.id}"] [data-ntx]`, side); if (c) c.value = ta.value; } }); if (!it.tx) setTimeout(() => ta.focus(), 260); }
+        el.addEventListener('click', ev => {
+          const stb = ev.target.closest('[data-st]'); if (stb) { update(it._rid, it.id, x => x.st = stb.dataset.st); api.refresh(); return; }
+          const q = ev.target.closest('[data-q]'); if (q) { const inp = $('[data-reply] input', el); inp.value = q.textContent; inp.focus(); return; }
+          if (ev.target.closest('[data-zact=loop]')) { api.close(); setSel(it.id); V && V.loopAround(it.t); }
+          if (ev.target.closest('[data-zact=ndel]')) { noteDelete(it.id); if (!visible().length) api.close(); else api.refresh(); }
+        });
+        $('[data-reply]', el).addEventListener('submit', ev => {
+          ev.preventDefault(); const b = $('[data-reply] input', el).value.trim(); if (!b) return;
+          if (it.by === 'd') noteReply(it.id, b); else addReply(it._rid, it.id, b);
+          api.refresh();
+        });
+      },
+      onClose: it => { if (it && V) { setSel(it.id); if (it.by === 'd') activeNote = it.id; V.P.pause(); V.P.seek(it.t); if (it.th) V.P.showFreeze(it.th, it.t); draw(); } },
+    });
+  }
+  side.addEventListener('keydown', e => { if ((e.key === 'Enter' || e.key === ' ') && e.target.matches('[data-zoom]')) { e.preventDefault(); zoom(e.target.closest('.item').dataset.id); } });
+  side.addEventListener('input', e => {
+    const ta = e.target.closest('[data-ntx]'); if (!ta) return;
+    const n = noteOf(ta.closest('.item').dataset.id); if (!n) return;
+    n.tx = ta.value; ta.style.height = 'auto'; ta.style.height = Math.min(220, ta.scrollHeight + 2) + 'px';
+    clearTimeout(side._nt); side._nt = setTimeout(saveNotes, 300);
+  });
   side.addEventListener('click', async e => {
+    const pb = e.target.closest('[data-pane]'); if (pb) { pane = pb.dataset.pane; draw(); return; }
     const fb = e.target.closest('[data-filter]'); if (fb) { filter = fb.dataset.filter; draw(); return; }
     if (e.target.closest('[data-act=thumbs]')) {
-      const inbox = Store.inbox(p.id), items = inbox.flatMap(r => r.items), tp = $('[data-tp]', side);
+      const inbox = Store.inbox(p.id), items = [...inbox.flatMap(r => r.items), ...(p.notes || [])], tp = $('[data-tp]', side);
       if (V.needsShare()) {
         const ok = await modal({ title: '장면 사진 만들기', body: `<p class="note">이 탭 화면을 잠깐 공유해서 사진이 없는 ${items.filter(it => !it.th).length}개 장면을 자동으로 찍어요. 끝나면 공유는 바로 꺼져요.</p>`, actions: [{ label: '취소', value: null }, { label: `${ic('cam')}만들기`, kind: 'primary', value: 'go' }] });
         if (ok !== 'go') return;
       }
       const res = await V.makeThumbs(items, (i, n) => { tp.hidden = false; $('i', tp).style.width = i / n * 100 + '%'; $('span', tp).textContent = `장면 사진 만드는 중 ${i}/${n}`; });
-      Store.saveInbox(p.id, inbox); draw();
+      Store.saveInbox(p.id, inbox); saveNotes(); draw();
       toast(res.made ? `장면 사진 ${res.made}장을 만들었어요` : '장면 사진을 만들지 못했어요');
       return;
     }
-    const card = e.target.closest('.item'); if (!card) return;
-    const id = card.dataset.id, rid = card.dataset.rid;
-    const it = Store.inbox(p.id).find(x => x.rid === rid).items.find(x => x.id === id);
+    const cardEl = e.target.closest('.item'); if (!cardEl) return;
+    const id = cardEl.dataset.id, isNote = cardEl.hasAttribute('data-note');
+    const it = isNote ? noteOf(id) : Store.inbox(p.id).find(x => x.rid === cardEl.dataset.rid).items.find(x => x.id === id);
+    if (!it) return;
+    if (isNote && e.target.closest('[data-ndel]')) { noteDelete(id); return; }
     const stb = e.target.closest('[data-st]');
-    if (stb) { update(rid, id, x => x.st = stb.dataset.st); return; }
+    if (stb) { update(cardEl.dataset.rid, id, x => x.st = stb.dataset.st); return; }
     const q = e.target.closest('[data-q]');
-    if (q) { const inp = $('[data-reply] input', card); inp.value = q.textContent; inp.focus(); return; }
+    if (q) { const inp = $('[data-reply] input', cardEl); inp.value = q.textContent; inp.focus(); return; }
     if (e.target.closest('[data-loop]')) { setSel(id); V && V.loopAround(it.t); draw(); return; }
-    if (e.target.closest('form,input')) return;
+    if (e.target.closest('form,input,textarea')) { if (isNote) activeNote = id; return; }
     if (e.target.closest('[data-zoom]')) { zoom(id); return; }
-    setSel(id);
+    setSel(id); if (isNote) activeNote = id;
     if (V) { V.P.pause(); V.P.seek(it.t); if (it.th) V.P.showFreeze(it.th, it.t); }
     $$('.item', side).forEach(c => c.classList.toggle('sel', c.dataset.id === id)); V && V.render();
   });
   side.addEventListener('submit', e => {
     e.preventDefault();
-    const form = e.target.closest('[data-reply]'), card = form.closest('.item'), b = $('input', form).value.trim(); if (!b) return;
-    addReply(card.dataset.rid, card.dataset.id, b);
+    const form = e.target.closest('[data-reply]'), cardEl = form.closest('.item'), b = $('input', form).value.trim(); if (!b) return;
+    if (cardEl.hasAttribute('data-note')) { noteReply(cardEl.dataset.id, b); return; }
+    addReply(cardEl.dataset.rid, cardEl.dataset.id, b);
     toast('댓글을 달았어요. 다 달았으면 "회신 보내기"로 돌려보내 주세요');
   });
   function bindMenu(root) {
@@ -451,14 +540,17 @@ function renderInbox(side, p, getSel, setSel) {
   }
   document.addEventListener('click', e => { const mr = $('[data-menu-root]', side); if (mr && !mr.contains(e.target)) $('.menu', mr).hidden = true; });
   async function feedback(kind) {
-    const reqs = Store.inbox(p.id); if (!reqs.length) return;
-    const link = await clientLink(p, reqs);
-    const name = safeName(`${p.title || '프로젝트'}_수정요청_회신_${new Date().toISOString().slice(0, 10)}`);
-    if (kind === 'msg') { const r = await shareOrCopy({ title: p.title + ' 회신', text: feedbackMessage(p, reqs, link) }); toast(r === 'copied' ? '회신 글과 확인 링크를 복사했어요. 카톡에 붙여 넣어 주세요' : r === 'shared' ? '공유했어요' : '복사하지 못했어요', 3600); }
-    else if (kind === 'html') { await shareFile(name + '.html', reportHTML({ p, reqs, role: 'director', link })); toast('회신 HTML을 내려받았어요'); }
+    const reqs = Store.inbox(p.id); if (!reqs.length && !(p.notes || []).length) return;
+    const link = await clientLink(p, reqs.length ? reqs : null);
+    const name = safeName(`${p.title || '프로젝트'}_${reqs.length ? '수정요청_회신' : '디렉터_안내'}_${new Date().toISOString().slice(0, 10)}`);
+    if (kind === 'msg') { const r = await shareOrCopy({ title: p.title + (reqs.length ? ' 회신' : ' 안내'), text: feedbackMessage(p, reqs, link) }); toast(r === 'copied' ? '안내·회신 글과 확인 링크를 복사했어요. 카톡에 붙여 넣어 주세요' : r === 'shared' ? '공유했어요' : '복사하지 못했어요', 3600); }
+    else if (kind === 'html') { await shareFile(name + '.html', reportHTML({ p, reqs, role: 'director', link })); toast('HTML을 내려받았어요'); }
     else printHTML(reportHTML({ p, reqs, role: 'director' }));
   }
-  Store.onChange(k => { if (k === 'sd:inbox:' + p.id) { draw(); toast('수정요청이 새로 들어왔어요'); } else if (k === 'sd:projects') {} });
+  Store.onChange(k => {
+    if (k === 'sd:inbox:' + p.id) { draw(); toast('수정요청이 새로 들어왔어요'); }
+    else if (k === 'sd:projects') { const fresh = Store.getProject(p.id); if (fresh) { const before = JSON.stringify((p.notes || []).map(n => n.rp)); p.notes = fresh.notes || []; draw(); if (JSON.stringify(p.notes.map(n => n.rp)) !== before) toast('클라이언트가 안내에 답글을 달았어요'); } }
+  });
   draw();
 }
 

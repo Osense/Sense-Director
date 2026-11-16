@@ -82,7 +82,8 @@ export function openZoom(o) {
     $('[data-z=prev]', wrap).disabled = i <= 0; $('[data-z=next]', wrap).disabled = i >= items().length - 1;
     const img = it.th ? `<img src="${esc(it.th)}" alt="${n}번 장면" draggable="false">`
       : (o.poster ? `<img src="${esc(o.poster)}" alt="" class="fallback" draggable="false">` : '') + `<span class="nosnap">${esc(o.emptyText ? o.emptyText(it) : '장면 사진 없음')}</span>`;
-    inner.innerHTML = img + strokesSVG(it.s) + pinHTML(it, n);
+    $('[data-no]', wrap).classList.toggle('d', it.by === 'd');
+    inner.innerHTML = img + strokesSVG(it.s, it.by === 'd' ? 'd' : '') + pinHTML(it, n);
     side.innerHTML = o.detail(it);
     o.wire && o.wire(side, it, api);
   }

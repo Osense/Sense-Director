@@ -5,9 +5,11 @@ import { snapHTML, posterOf } from './viewer.js';
 export const STATUS = { open: '대기', doing: '진행 중', done: '반영', hold: '보류' };
 
 /** 클라이언트 링크에 담는 프로젝트 정보 (핀 번호 자체는 담지 않고 해시만) */
-export const projectPayload = p => ({ v: 1, id: p.id, t: p.title, n: p.notice, d: p.due, src: p.src, ar: p.ar, fps: p.fps, fh: p.fpsHow || '', pv: p.src && p.src.k === 'vimeo' ? p.poster || '' : undefined, ph: p.pinHash, s: p.salt, by: p.by || '' });
-const slimItem = it => ({ id: it.id, t: Math.round(it.t * 1000) / 1000, x: it.x, y: it.y, s: it.s && it.s.length ? it.s : undefined, tx: it.tx || '', st: it.st, rp: it.rp && it.rp.length ? it.rp : undefined });
-export const slimRequest = r => ({ rid: r.rid, from: r.from, at: r.at, items: r.items.map(slimItem) });
+export const projectPayload = p => ({ v: 1, id: p.id, t: p.title, n: p.notice, d: p.due, src: p.src, ar: p.ar, fps: p.fps, dn: p.notes && p.notes.length ? p.notes.map(slimItem) : undefined, fh: p.fpsHow || '', pv: p.src && p.src.k === 'vimeo' ? p.poster || '' : undefined, ph: p.pinHash, s: p.salt, by: p.by || '' });
+function slimItem(it) { return ({ id: it.id, t: Math.round(it.t * 1000) / 1000, x: it.x, y: it.y, s: it.s && it.s.length ? it.s : undefined, tx: it.tx || '', st: it.st, rp: it.rp && it.rp.length ? it.rp : undefined }); }
+export const slimRequest = r => ({ rid: r.rid, from: r.from, at: r.at, items: r.items.map(slimItem), nr: r.nr && r.nr.length ? r.nr : undefined });
+/** 디렉터 안내 번호: 시간순 D1, D2 … */
+export const noteLabel = (notes, id) => 'D' + ((notes || []).slice().sort((a, b) => a.t - b.t).findIndex(x => x.id === id) + 1);
 
 export async function clientLink(p, feedback) {
   let url = appBase() + '#c=' + await pack(projectPayload(p));
@@ -23,6 +25,11 @@ export function requestMessage(p, req, link) {
   const fps = p.fps || 30;
   const lines = [`[Sense Director] 수정요청 · ${p.t || p.title}`, `보낸 사람: ${req.from || '클라이언트'} · ${req.items.length}건 · ${fmtDate(req.at || Date.now())}`, ''];
   req.items.forEach((it, i) => { lines.push(`${pad2(i + 1)}  ${tc(it.t, fps)}  ${pinTxt(it)}${it.s && it.s.length && it.x != null ? ' + 그림' : ''}`); lines.push(it.tx ? it.tx : '(내용 없음)'); lines.push(''); });
+  const dn = (p.dn || p.notes || []).slice().sort((a, b) => a.t - b.t);
+  if (req.nr && req.nr.length) {
+    lines.push('[디렉터 안내에 남긴 답글]');
+    req.nr.forEach(x => { const k = dn.findIndex(n => n.id === x.id); if (k < 0) return; lines.push(`D${k + 1}  ${tc(dn[k].t, fps)}`); x.rp.forEach(r => lines.push('답글: ' + r.b)); lines.push(''); });
+  }
   if (link) lines.push('디렉터 수신함으로 바로 가져오기:', link);
   return lines.join('\n');
 }
@@ -30,7 +37,15 @@ export function requestMessage(p, req, link) {
 export function feedbackMessage(p, reqs, link) {
   const fps = p.fps || 30, all = reqs.flatMap(r => r.items);
   const c = k => all.filter(it => (it.st || 'open') === k).length;
-  const lines = [`[Sense Director] 수정요청 회신 · ${p.title}`, `반영 ${c('done')} · 진행 ${c('doing')} · 보류 ${c('hold')} · 대기 ${c('open')} / 총 ${all.length}건`, ''];
+  const notes = (p.notes || []).slice().sort((a, b) => a.t - b.t);
+  const lines = [`[Sense Director] ${all.length ? '수정요청 회신' : '디렉터 안내'} · ${p.title}`];
+  if (all.length) lines.push(`반영 ${c('done')} · 진행 ${c('doing')} · 보류 ${c('hold')} · 대기 ${c('open')} / 총 ${all.length}건`);
+  lines.push('');
+  if (notes.length) {
+    lines.push(`[디렉터 안내 ${notes.length}건]`);
+    notes.forEach((n, k) => { lines.push(`D${k + 1}  ${tc(n.t, fps)}  ${pinTxt(n)}`); lines.push(n.tx || '(내용 없음)'); lines.push(''); });
+    if (all.length) lines.push('[수정요청]');
+  }
   all.forEach((it, i) => {
     lines.push(`${pad2(i + 1)}  ${tc(it.t, fps)}  [${STATUS[it.st || 'open']}]`);
     if (it.tx) lines.push('요청: ' + it.tx);
@@ -45,8 +60,19 @@ export function feedbackMessage(p, reqs, link) {
 export function reportHTML({ p, reqs, role = 'client', link = '' }) {
   const fps = p.fps || 30, ar = p.ar || [16, 9], ytId = p.src && p.src.k === 'yt' ? p.src.id : '', poster = posterOf(p.src, p.pv || p.poster);
   const items = reqs.flatMap(r => r.items.map(it => ({ ...it, from: r.from })));
+  const notes = role === 'director' ? (p.notes || []).slice().sort((a, b) => a.t - b.t) : [];
   const data = JSON.stringify({ kind: 'sense-director', v: 1, p: projectPayload(p), reqs }).replace(/</g, '\\u003c');
   const ytLink = t => ytId ? `https://youtu.be/${ytId}?t=${Math.floor(t)}` : p.src && p.src.k === 'vimeo' ? `https://vimeo.com/${p.src.id}${p.src.h ? '/' + p.src.h : ''}#t=${Math.floor(t)}s` : '';
+  const noteCards = notes.map((it, k) => `
+  <article class="card note">
+    ${snapHTML(it, 'D' + (k + 1), ar, poster)}
+    <div class="meta">
+      <div class="row"><span class="no d">D${k + 1}</span><b class="tc">${tc(it.t, fps)}</b><span class="tag">디렉터 안내</span>${ytLink(it.t) ? `<a href="${ytLink(it.t)}" target="_blank" rel="noopener">이 시점 보기</a>` : ''}</div>
+      <div class="pos">${esc(pinTxt(it))}</div>
+      <p class="tx">${esc(it.tx || '(내용 없음)')}</p>
+      ${(it.rp || []).map(r => `<div class="rp ${r.by === 'd' ? 'd' : 'c'}"><b>${r.by === 'd' ? '디렉터' : esc(r.n || '클라이언트')}</b><span>${esc(r.b)}</span><time>${fmtDate(r.at)}</time></div>`).join('')}
+    </div>
+  </article>`).join('');
   const cards = items.map((it, i) => `
   <article class="card">
     ${snapHTML(it, i + 1, ar, poster)}
@@ -83,6 +109,7 @@ main{padding:20px clamp(16px,4vw,48px) 60px;display:grid;gap:14px}
 .pos{font:500 11px var(--mono);color:var(--dim);margin-top:4px}.tx{white-space:pre-wrap;margin:10px 0;font-size:15.5px}
 .rp{display:grid;grid-template-columns:auto 1fr auto;gap:2px 10px;padding:8px 10px;margin-top:6px;border-radius:8px;background:var(--raised);border:1px solid var(--div);font-size:13.5px}.rp.d{border-left:2px solid var(--accent)}.rp b{font-size:12px}.rp time{font:500 10.5px var(--mono);color:var(--dim)}.rp span{white-space:pre-wrap}
 footer{padding:0 clamp(16px,4vw,48px) 40px;color:var(--dim);font:500 11px var(--mono);letter-spacing:.06em}
+.pin.d,.no.d,.pin.d b{background:var(--amber)}.pin b{white-space:nowrap}.ann.d g{stroke:var(--amber)}.card.note{border-left:2px solid var(--amber)}.sec{margin:8px 0 0;font:500 11px var(--mono);letter-spacing:.12em;color:var(--dim)}
 .snap{cursor:zoom-in}.snap-zoom{position:absolute;right:6px;top:6px;display:grid;place-items:center;width:26px;height:26px;border-radius:6px;background:#120e0eb8;border:1px solid var(--line);color:var(--text)}
 .lb{position:fixed;inset:0;z-index:9;display:grid;place-items:center;padding:16px;background:#0a0707f2;cursor:zoom-out}.lb .snap{width:min(100%,calc((100vh - 32px) * var(--ar)));cursor:zoom-out}.lb .snap-zoom{display:none}.lb .pin{transform:scale(1.25)}
 @media print{.snap-zoom,.lb{display:none!important}:root{color-scheme:light;--bg:#fff;--panel:#fff;--raised:#f6f3f2;--line:#ccc;--div:#ddd;--text:#111;--muted:#444;--dim:#666}body{font-size:12px}header{padding:0 0 12px}main{padding:12px 0}.card{grid-template-columns:300px 1fr;border-color:#ddd}.notice{margin:12px 0 0}.row a{display:none}footer{padding:0}@page{margin:14mm}}
@@ -91,7 +118,7 @@ footer{padding:0 clamp(16px,4vw,48px) 40px;color:var(--dim);font:500 11px var(--
 <div class="sum">${items.length}건 · ${esc(reqs.map(r => r.from).filter(Boolean).join(', ') || '클라이언트')} · ${fmtDate(Date.now())}${p.d ? ' · ' + esc(dueLabel(p.d)) : ''}</div></div>
 ${link ? `<a href="${esc(link)}">${role === 'director' ? '클라이언트 화면에서 열기' : '디렉터 수신함으로 가져오기'}</a>` : ''}</header>
 ${p.n && role === 'director' ? `<div class="notice">${esc(p.n)}</div>` : ''}
-<main>${cards || '<p>수정 포인트가 없습니다.</p>'}</main>
+<main>${noteCards ? `<h2 class="sec">디렉터 안내 ${notes.length}건</h2>${noteCards}${cards ? `<h2 class="sec">수정요청 ${items.length}건</h2>` : ''}` : ''}${cards || (noteCards ? '' : '<p>수정 포인트가 없습니다.</p>')}</main>
 <footer>SENSE DIRECTOR · OSNS.studio — 이 파일을 디렉터 콘솔에 끌어 놓으면 수신함으로 들어갑니다.</footer>
 <script type="application/json" id="sd-data">${data}</script>
 <script>document.addEventListener('click',function(e){var lb=document.querySelector('.lb');if(lb){lb.remove();return;}var s=e.target.closest('.snap');if(!s)return;var w=document.createElement('div');w.className='lb';var c=s.cloneNode(true);w.style.setProperty('--ar',s.clientWidth/s.clientHeight);w.appendChild(c);document.body.appendChild(w);});document.addEventListener('keydown',function(e){if(e.key==='Escape'){var lb=document.querySelector('.lb');lb&&lb.remove();}});<\/script>

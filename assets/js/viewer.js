@@ -10,7 +10,7 @@ export function strokesSVG(strokes = [], cls = '') {
   const lines = strokes.map(s => { const pts = []; for (let i = 0; i < s.length; i += 2) pts.push(s[i] + ',' + s[i + 1]); return `<polyline points="${pts.join(' ')}"/>`; }).join('');
   return `<svg class="ann ${cls}" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"><g>${lines}</g></svg>`;
 }
-export const pinHTML = (it, n, extra = '') => it.x == null ? '' : `<span class="pin${it.y < 18 ? ' below' : ''}${extra}" style="left:${it.x}%;top:${it.y}%"><b>${n}</b></span>`;
+export const pinHTML = (it, n, extra = '') => it.x == null ? '' : `<span class="pin${it.y < 18 ? ' below' : ''}${it.by === 'd' ? ' d' : ''}${extra}" style="left:${it.x}%;top:${it.y}%"><b>${n}</b></span>`;
 
 /** 대표 이미지(장면 사진이 없을 때 흐리게 깔아 둔다) */
 export const posterOf = (src, given = '') => given || (src && src.k === 'yt' ? `https://i.ytimg.com/vi/${src.id}/hqdefault.jpg` : '');
@@ -18,7 +18,7 @@ export const posterOf = (src, given = '') => given || (src && src.k === 'yt' ? `
 export function snapHTML(it, n, ar = [16, 9], poster = '', emptyText = '장면 사진 없음') {
   const img = it.th ? `<img src="${esc(it.th)}" alt="${n}번 장면" loading="lazy">`
     : (poster ? `<img src="${esc(poster)}" alt="" class="fallback" loading="lazy">` : '') + `<span class="nosnap">${esc(emptyText)}</span>`;
-  return `<div class="snap" style="aspect-ratio:${ar[0]}/${ar[1]}" title="크게 보기">${img}${strokesSVG(it.s)}${pinHTML(it, n)}<span class="snap-zoom" aria-hidden="true">${ic('expand', 14)}</span></div>`;
+  return `<div class="snap" style="aspect-ratio:${ar[0]}/${ar[1]}" title="크게 보기">${img}${strokesSVG(it.s, it.by === 'd' ? 'd' : '')}${pinHTML(it, n)}<span class="snap-zoom" aria-hidden="true">${ic('expand', 14)}</span></div>`;
 }
 
 /**
@@ -80,7 +80,7 @@ export function mountViewer(root, src, opts = {}) {
   }
   function renderMarks() {
     const d = P.duration(); if (!d || !opts.items) { marks.innerHTML = ''; return; }
-    marks.innerHTML = opts.items().map((it, i) => `<i class="st-${it.st || 'open'}" style="left:${clamp(it.t / d * 100, 0, 100)}%" title="${i + 1} · ${tc(it.t, P.effFps())}"></i>`).join('');
+    marks.innerHTML = opts.items().map((it, i) => `<i class="st-${it.by === 'd' ? 'd' : it.st || 'open'}" style="left:${clamp(it.t / d * 100, 0, 100)}%" title="${opts.label ? opts.label(it, i) : i + 1} · ${tc(it.t, P.effFps())}"></i>`).join('');
   }
   /** 지금 시점에 해당하는 핀·그림만 다시 그린다 */
   function render() {
@@ -94,9 +94,9 @@ export function mountViewer(root, src, opts = {}) {
       const near = paused ? Math.abs(it.t - t) <= win : (t >= it.t - 0.05 && t <= it.t + win);
       if (!near && it.id !== sel) return;
       if (!near && it.id === sel && Math.abs(it.t - t) > win) return;
-      html += strokesSVG(it.s, it.id === sel ? 'sel' : '') + pinHTML(it, i + 1, it.id === sel ? ' sel' : '');
+      html += strokesSVG(it.s, (it.id === sel ? 'sel ' : '') + (it.by === 'd' ? 'd' : '')) + pinHTML(it, opts.label ? opts.label(it, i) : i + 1, it.id === sel ? ' sel' : '');
     });
-    if (live) html += strokesSVG([live], 'live');
+    if (live) html += strokesSVG([live], 'live' + (opts.mine === 'd' ? ' d' : ''));
     overlay.innerHTML = html;
     renderMarks();
   }
