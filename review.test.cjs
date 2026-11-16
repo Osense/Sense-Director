@@ -6,8 +6,8 @@ const assert = require('node:assert/strict');
 const vm = require('node:vm');
 const htmlFile=fs.readdirSync(__dirname).find(f=>f.endsWith('.html'));
 const pageTitle=fs.readFileSync(path.join(__dirname,htmlFile),'utf8').match(/<title>(.*?)<\/title>/)[1];
-const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'hhss-browser-'));
-const browser = spawn('C:/Program Files/Google/Chrome/Application/chrome.exe', [
+const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'sense-director-browser-'));
+const browser = spawn(process.env.CHROME || (process.platform === 'win32' ? 'C:/Program Files/Google/Chrome/Application/chrome.exe' : 'google-chrome'), [
   '--headless=new', '--disable-gpu', '--no-sandbox', '--no-first-run', '--window-size=1440,1000','--remote-debugging-port=9227',
   '--auto-accept-this-tab-capture','--enable-usermedia-screen-capturing',`--auto-select-tab-capture-source-by-title=${pageTitle}`,`--auto-select-desktop-capture-source=${pageTitle}`,
   `--user-data-dir=${profile}`, 'http://127.0.0.1:8765/',
