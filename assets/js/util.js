@@ -95,6 +95,10 @@ export function parseSource(raw) {
   if (!url) return null;
   const m = url.match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?(?:.*&)?v=|shorts\/|embed\/|live\/|v\/))([A-Za-z0-9_-]{11})/) || (/^[A-Za-z0-9_-]{11}$/.test(url) ? [0, url] : null);
   if (m) return { k: 'yt', id: m[1], short: /\/shorts\//.test(url) };
+  const vp = url.match(/player\.vimeo\.com\/video\/(\d+)(?:[^#]*[?&]h=([0-9a-f]+))?/i);
+  if (vp) return { k: 'vimeo', id: vp[1], h: vp[2] || undefined };
+  const v = url.match(/vimeo\.com\/(?:[^?#]*\/)?(\d{6,})(?:\/([0-9a-f]{6,}))?/i);
+  if (v) return { k: 'vimeo', id: v[1], h: v[2] || (url.match(/[?&]h=([0-9a-f]+)/i) || [])[1] };
   if (/^https?:\/\/.+/i.test(url)) return { k: 'url', url };
   return null;
 }
@@ -160,3 +164,13 @@ export function dueLabel(due) {
   if (days === 0) return `오늘 마감 · ${md}`;
   return `D-${days} · ${md}`;
 }
+
+/** 영상 출처를 사람이 읽는 주소로 */
+export function srcText(src) {
+  if (!src) return '';
+  if (src.k === 'yt') return 'https://youtu.be/' + src.id;
+  if (src.k === 'vimeo') return 'https://vimeo.com/' + src.id + (src.h ? '/' + src.h : '');
+  if (src.k === 'file') return src.name || '영상 파일';
+  return src.url;
+}
+export const srcKind = src => !src ? '' : ({ yt: 'YouTube', vimeo: 'Vimeo', file: '영상 파일', url: '영상 주소' })[src.k];

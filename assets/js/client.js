@@ -1,8 +1,7 @@
 /* 클라이언트 화면 — 핀 번호로 들어와 핀·펜으로 수정요청을 남기고 디렉터에게 보낸다 */
 import { $, $$, ic, esc, uid, tc, sha, unpack, modal, toast, dueLabel, fmtDate, copyText, shareOrCopy, safeName, fpsLabel } from './util.js';
 import { Store, MODE } from './store.js';
-import { mountViewer, snapHTML } from './viewer.js';
-import { Cap } from './player.js';
+import { mountViewer, snapHTML, posterOf } from './viewer.js';
 import { replyLink, requestMessage, reportHTML, printHTML, shareFile, STATUS } from './exports.js';
 
 export async function renderClient(app, params) {
@@ -49,11 +48,12 @@ export async function renderClient(app, params) {
         <button role="tab" class="on" data-tab="draft">작성 중 <b data-n="draft">0</b></button>
         <button role="tab" data-tab="sent">보낸 요청 <b data-n="sent">0</b></button>
       </div>
+      <div class="thumb-progress" data-tp hidden><i></i><span></span></div>
       <div class="list" data-list></div>
     </aside>
   </main>`;
 
-  let tab = 'draft', selected = null, activeId = null, askedCap = false;
+  let tab = 'draft', selected = null, activeId = null;
   const allItems = () => [...state.sent.flatMap(r => r.items.map(it => ({ ...it, _sent: r.rid }))), ...state.draft].sort((a, b) => a.t - b.t);
   const numOf = id => allItems().findIndex(it => it.id === id) + 1;
   const save = () => Store.saveClient(p.id, state);
@@ -72,23 +72,10 @@ export async function renderClient(app, params) {
   if (p.ar) P.setMeta({ ar: p.ar });
   if (p.fps) P.setMeta({ fps: p.fps, how: p.fh || 'measured' });
 
-  async function ensureCapture() {
-    if (!P.needsCapture() || askedCap) return;
-    askedCap = true;
-    const r = await modal({
-      title: '장면 사진을 같이 붙일까요?',
-      body: `<p class="note">유튜브 영상은 보안상 바로 찍을 수 없어서, <b>이 탭 화면 공유</b>를 한 번 허용하면 핀을 찍을 때마다 그 장면이 사진으로 붙어요. 화면은 이 기기 밖으로 나가지 않아요.</p>
-             <p class="note dim">공유 창이 뜨면 <b>이 탭</b>을 고르고 '공유'를 눌러 주세요.</p>`,
-      actions: [{ label: '사진 없이 계속', value: 'no' }, { label: `${ic('cam')}장면 사진 켜기`, kind: 'primary', value: 'yes' }],
-    });
-    if (r === 'yes') { const ok = await Cap.start(P.stage); toast(ok ? '장면 사진이 켜졌어요' : '화면 공유가 취소됐어요. 아래 "장면 캡처 켜기"로 언제든 켤 수 있어요', 3600); }
-  }
-
   async function addItem({ x = null, y = null, s = [] }) {
     if (!P.ready()) return;
     P.pause();
-    await ensureCapture();
-    const snap = await P.snapshot();
+    const snap = await P.snapshot(); // 영상 주소·파일은 바로 찍히고, 유튜브·비메오는 보낼 때 한 번에 찍는다
     const it = { id: uid(6), t: snap.t, x, y, s, tx: '', th: snap.img, st: 'open', rp: [], at: Date.now() };
     state.draft.push(it); state.draft.sort((a, b) => a.t - b.t);
     activeId = it.id; selected = it.id; tab = 'draft';
@@ -111,7 +98,7 @@ export async function renderClient(app, params) {
         <span class="kind">${kind}</span>
         ${sent ? `<span class="tag st-${st}">${STATUS[st]}</span>` : `<button class="icon-x" data-del aria-label="삭제" title="삭제">${ic('trash', 15)}</button>`}
       </div>
-      <div data-seek>${snapHTML(it, n, P.ar, p.src.k === 'yt' ? p.src.id : '')}</div>
+      <div data-seek>${snapHTML(it, n, P.ar, posterOf(p.src, P.poster || p.pv), sent ? '장면 사진 없음' : '장면 사진은 보낼 때 자동으로 붙어요')}</div>
       ${sent ? `<p class="tx">${esc(it.tx || '(내용 없음)')}</p>` : `<textarea rows="2" placeholder="어떻게 고치면 좋을지 적어 주세요" data-tx>${esc(it.tx)}</textarea>`}
       ${thread(it, sent)}
     </article>`;
@@ -203,9 +190,38 @@ export async function renderClient(app, params) {
       onOpen: w => { const i = $('[data-name]', w); i.addEventListener('keydown', e => { if (e.key === 'Enter') $('.foot .primary', w).click(); }); },
     });
   }
+  /** 보내기 직전: 장면 사진이 없는 항목을 한 번에 찍는다 */
+  async function ensureThumbs(items) {
+    const need = items.filter(it => !it.th);
+    if (!need.length) return { made: 0, skipped: 0 };
+    if (V.needsShare()) {
+      if (!V.canShare()) return { made: 0, skipped: need.length, reason: 'unsupported' };
+      const r = await modal({
+        title: '장면 사진을 붙여서 보낼까요?',
+        body: `<p class="note">작업할 때는 화면 공유 없이 가볍게 쓰고, 보낼 때 <b>한 번만</b> 이 탭 화면을 공유해 ${need.length}개 장면을 자동으로 찍어요. 몇 초면 끝나고 공유는 바로 꺼져요.</p>
+          <p class="note dim">공유 창에서 <b>이 탭</b>을 고르고 '공유'를 눌러 주세요. 화면은 기기 밖으로 나가지 않아요. 사진이 없어도 시간 주소와 핀·그림으로 디렉터가 같은 장면을 볼 수 있어요.</p>`,
+        actions: [{ label: '사진 없이 보내기', value: 'skip' }, { label: `${ic('cam')}사진 만들고 보내기`, kind: 'primary', value: 'go' }],
+      });
+      if (r === null) return null;
+      if (r === 'skip') return { made: 0, skipped: need.length };
+    }
+    const tp = $('[data-tp]', app), sendBtn = $('[data-act=send]', app), label = sendBtn.innerHTML;
+    document.getElementById('toast')?.classList.remove('on');
+    sendBtn.disabled = true;
+    const res = await V.makeThumbs(need, (i, n) => {
+      tp.hidden = false; $('i', tp).style.width = (i / n * 100) + '%'; $('span', tp).textContent = `장면 사진 만드는 중 ${i}/${n}`;
+      sendBtn.innerHTML = `${ic('cam')}장면 사진 ${i}/${n}`;
+    });
+    tp.hidden = true; sendBtn.disabled = false; sendBtn.innerHTML = label;
+    save(); renderList();
+    if (res.reason === 'denied') toast('화면 공유를 취소해서 사진 없이 보내요');
+    return { made: res.made, skipped: need.length - res.made, reason: res.reason };
+  }
   async function send() {
     if (!state.draft.length) { toast(state.sent.length ? '새로 작성한 수정 포인트가 없어요' : '먼저 화면에 핀을 찍거나 그려 주세요'); return; }
     if (await askName() !== 'go') return;
+    const th = await ensureThumbs(state.draft);
+    if (th === null) return;
     const req = { rid: uid(8), from: state.from || '', at: Date.now(), items: state.draft.map(it => ({ ...it })) };
     let delivered = false;
     try { await Store.submit(p.id, req); delivered = true; } catch {}
@@ -214,6 +230,7 @@ export async function renderClient(app, params) {
     const r = await modal({
       title: delivered ? '수정요청을 보냈어요' : '전송하지 못했어요',
       body: `<div class="sent-ok">${ic(delivered ? 'check' : 'close', 28)}<b>${req.items.length}건</b></div>
+        ${th.skipped ? `<p class="note dim">${th.reason === 'unsupported' ? '이 기기에서는 장면 사진을 만들 수 없어 ' : ''}장면 사진 없이 보낸 항목 ${th.skipped}건 — 시간 주소와 핀·그림은 그대로 전달돼요.</p>` : ''}
         <p class="note">${MODE === 'mock' ? '지금은 <b>서버 없는 시험 버전</b>이라 같은 브라우저의 디렉터 콘솔에만 바로 들어가요. 디렉터가 다른 기기라면 아래 방법 중 하나로 한 번 더 보내 주세요.' : '디렉터에게 전달되었어요.'}</p>
         <div class="fallbacks">
           <button class="btn" data-fb="msg">${ic('msg')}메시지로 보내기</button>
@@ -228,6 +245,7 @@ export async function renderClient(app, params) {
   async function fallback(kind, req = currentRequest(), link) {
     if (!req) { toast('보낼 수정 포인트가 없어요'); return; }
     if (!state.from && kind !== 'pdf') { if (await askName() !== 'go') return; req.from = state.from; save(); }
+    if (kind !== 'msg' && req.rid === 'draft') { const th = await ensureThumbs(state.draft); if (th === null) return; req = currentRequest(); }
     const r = { ...req, rid: req.rid === 'draft' ? 'm' + uid(6) : req.rid, from: state.from || req.from };
     link = link || await replyLink(p, r);
     const name = safeName(`${p.t || '수정요청'}_수정요청_${new Date().toISOString().slice(0, 10)}`);
@@ -253,7 +271,7 @@ export async function renderClient(app, params) {
     return modal({
       title: '사용법', wide: true,
       body: `<ol class="steps"><li><b>찾기</b>재생하다가 고칠 장면에서 멈춰요. <kbd>,</kbd> <kbd>.</kbd>로 한 프레임씩 맞출 수 있어요.</li>
-      <li><b>표시</b>핀(P)으로 누르거나 펜(D)으로 그려요. 장면 사진과 시간 주소가 오른쪽에 붙어요.</li>
+      <li><b>표시</b>핀(P)으로 누르거나 펜(D)으로 그려요. 시간 주소가 오른쪽에 붙고, 장면 사진은 보낼 때 한 번에 만들어져요.</li>
       <li><b>적기</b>붙은 카드에 바로 내용을 적어요. 펜으로 이어 그린 획은 같은 카드에 합쳐져요.</li>
       <li><b>보내기</b>오른쪽 위 "수정요청 보내기". 안 되면 옆 화살표에서 메시지·HTML·PDF로 보내요.</li>
       <li><b>회신</b>디렉터가 단 댓글과 반영 상태는 "보낸 요청"에서 볼 수 있어요.</li></ol>

@@ -12,11 +12,12 @@ export function strokesSVG(strokes = [], cls = '') {
 }
 export const pinHTML = (it, n, extra = '') => it.x == null ? '' : `<span class="pin${it.y < 18 ? ' below' : ''}${extra}" style="left:${it.x}%;top:${it.y}%"><b>${n}</b></span>`;
 
+/** 대표 이미지(장면 사진이 없을 때 흐리게 깔아 둔다) */
+export const posterOf = (src, given = '') => given || (src && src.k === 'yt' ? `https://i.ytimg.com/vi/${src.id}/hqdefault.jpg` : '');
 /** 카드용 스냅샷: 이미지 위에 핀·그림을 다시 얹는다 */
-export function snapHTML(it, n, ar = [16, 9], ytId = '') {
+export function snapHTML(it, n, ar = [16, 9], poster = '', emptyText = '장면 사진 없음') {
   const img = it.th ? `<img src="${esc(it.th)}" alt="${n}번 장면" loading="lazy">`
-    : ytId ? `<img src="https://i.ytimg.com/vi/${esc(ytId)}/hqdefault.jpg" alt="" class="fallback" loading="lazy"><span class="nosnap">장면 미리보기 없음</span>`
-      : '<span class="nosnap">장면 미리보기 없음</span>';
+    : (poster ? `<img src="${esc(poster)}" alt="" class="fallback" loading="lazy">` : '') + `<span class="nosnap">${esc(emptyText)}</span>`;
   return `<div class="snap" style="aspect-ratio:${ar[0]}/${ar[1]}">${img}${strokesSVG(it.s)}${pinHTML(it, n)}</div>`;
 }
 
@@ -36,8 +37,7 @@ export function mountViewer(root, src, opts = {}) {
         <button class="btn" data-tool="pen" title="펜 (D)">${ic('pen')}펜</button>
       </div>
       <button class="btn ghost" data-act="memo" title="핀 없이 지금 시점에 메모 (M)">${ic('note')}메모만</button>
-      <span class="tool-hint" data-hint>화면을 누르면 영상이 멈추고 그 장면이 오른쪽에 붙어요</span>
-      <span class="cap-state" data-cap hidden></span>
+      <span class="tool-hint" data-hint>화면을 누르면 영상이 멈추고 그 시점이 오른쪽에 붙어요</span>
     </div>` : ''}
     <div class="controls">
       <button class="btn icon play" data-act="play" aria-label="재생 (Space)" title="재생 / 정지 (Space, K)">${ic('play', 18)}</button>
@@ -107,7 +107,7 @@ export function mountViewer(root, src, opts = {}) {
     root.querySelectorAll('[data-tool]').forEach(b => b.classList.toggle('on', b.dataset.tool === t));
     overlay.dataset.tool = t;
     const h = $('[data-hint]', root);
-    if (h) h.textContent = t === 'pen' ? '화면에 그리면 영상이 멈추고, 이어 그린 획은 같은 메모에 붙어요' : '화면을 누르면 영상이 멈추고 그 장면이 오른쪽에 붙어요';
+    if (h) h.textContent = t === 'pen' ? '화면에 그리면 영상이 멈추고, 이어 그린 획은 같은 메모에 붙어요' : '화면을 누르면 영상이 멈추고 그 시점이 오른쪽에 붙어요';
   }
   setTool(opts.tools ? 'pin' : 'none');
 
@@ -127,16 +127,6 @@ export function mountViewer(root, src, opts = {}) {
     overlay.addEventListener('pointerup', end); overlay.addEventListener('pointercancel', end);
     root.querySelectorAll('[data-tool]').forEach(b => b.addEventListener('click', () => setTool(b.dataset.tool)));
     $('[data-act=memo]', root).addEventListener('click', () => opts.onMemo && opts.onMemo());
-    const capEl = $('[data-cap]', root);
-    const capUI = () => {
-      if (P.kind !== 'yt') { capEl.hidden = true; return; }
-      capEl.hidden = false;
-      capEl.innerHTML = Cap.active ? `${ic('cam', 14)}장면 캡처 켜짐` : `<button class="btn small ghost" data-cap-on>${ic('cam', 14)}장면 캡처 켜기</button>`;
-      capEl.classList.toggle('on', Cap.active);
-      const b = $('[data-cap-on]', capEl); b && b.addEventListener('click', () => Cap.start(stage));
-    };
-    Cap.listeners.add(capUI); capUI();
-    V._capUI = capUI;
   }
   $('[data-act=play]', root).addEventListener('click', () => P.toggle());
   $('[data-act=prev]', root).addEventListener('click', () => P.step(-1));
@@ -147,7 +137,40 @@ export function mountViewer(root, src, opts = {}) {
   marks.addEventListener('click', e => e.stopPropagation());
   updateFps();
 
-  V.destroy = () => { P.destroy(); if (V._capUI) Cap.listeners.delete(V._capUI); };
+  V.destroy = () => { P.destroy(); };
+  /**
+   * 장면 사진 한 번에 만들기 — 작업 중에는 화면 공유 없이, 보낼 때만.
+   * 영상 주소·파일은 바로 찍고, 유튜브·비메오는 이 탭 화면 공유를 잠깐 켜서 찍은 뒤 끈다.
+   */
+  V.needsShare = () => !P.live();
+  V.canShare = () => P.live() || Cap.supported();
+  V.makeThumbs = async (items, onProgress = () => {}) => {
+    const need = items.filter(it => !it.th);
+    if (!need.length) return { made: 0, need: 0 };
+    const live = P.live();
+    const t0 = P.time(); P.pause();
+    // 핀·그림 층을 먼저 숨긴 뒤 화면 공유를 시작한다 → 첫 프레임부터 깨끗한 장면
+    stage.classList.add('capturing'); root.classList.add('thumbing'); P.hideFreeze();
+    if (!live) {
+      const fail = reason => { stage.classList.remove('capturing'); root.classList.remove('thumbing'); return { made: 0, need: need.length, reason }; };
+      if (!Cap.supported()) return fail('unsupported');
+      if (!await Cap.start(stage)) return fail(Cap.err === 'NotAllowedError' ? 'denied' : 'error');
+    }
+    let made = 0;
+    try {
+      for (let i = 0; i < need.length; i++) {
+        onProgress(i, need.length);
+        const img = await P.grabAt(need[i].t);
+        if (img) { need[i].th = img; made++; }
+      }
+      onProgress(need.length, need.length);
+    } finally {
+      stage.classList.remove('capturing'); root.classList.remove('thumbing');
+      if (!live) Cap.stop();
+      P.seek(t0); P.pause(); render();
+    }
+    return { made, need: need.length };
+  };
   /** 공통 단축키 */
   V.key = e => {
     const k = e.key;

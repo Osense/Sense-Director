@@ -1,11 +1,11 @@
 /* 링크·메시지·HTML·PDF 만들기 */
 import { pack, appBase, tc, esc, fmtDate, dueLabel } from './util.js';
-import { snapHTML } from './viewer.js';
+import { snapHTML, posterOf } from './viewer.js';
 
 export const STATUS = { open: '대기', doing: '진행 중', done: '반영', hold: '보류' };
 
 /** 클라이언트 링크에 담는 프로젝트 정보 (핀 번호 자체는 담지 않고 해시만) */
-export const projectPayload = p => ({ v: 1, id: p.id, t: p.title, n: p.notice, d: p.due, src: p.src, ar: p.ar, fps: p.fps, fh: p.fpsHow || '', ph: p.pinHash, s: p.salt, by: p.by || '' });
+export const projectPayload = p => ({ v: 1, id: p.id, t: p.title, n: p.notice, d: p.due, src: p.src, ar: p.ar, fps: p.fps, fh: p.fpsHow || '', pv: p.src && p.src.k === 'vimeo' ? p.poster || '' : undefined, ph: p.pinHash, s: p.salt, by: p.by || '' });
 const slimItem = it => ({ id: it.id, t: Math.round(it.t * 1000) / 1000, x: it.x, y: it.y, s: it.s && it.s.length ? it.s : undefined, tx: it.tx || '', st: it.st, rp: it.rp && it.rp.length ? it.rp : undefined });
 export const slimRequest = r => ({ rid: r.rid, from: r.from, at: r.at, items: r.items.map(slimItem) });
 
@@ -43,13 +43,13 @@ export function feedbackMessage(p, reqs, link) {
 
 /** 혼자 열리는 HTML 보고서. 디렉터 콘솔에 끌어 놓으면 그대로 수신함으로 들어간다. */
 export function reportHTML({ p, reqs, role = 'client', link = '' }) {
-  const fps = p.fps || 30, ar = p.ar || [16, 9], ytId = p.src && p.src.k === 'yt' ? p.src.id : '';
+  const fps = p.fps || 30, ar = p.ar || [16, 9], ytId = p.src && p.src.k === 'yt' ? p.src.id : '', poster = posterOf(p.src, p.pv || p.poster);
   const items = reqs.flatMap(r => r.items.map(it => ({ ...it, from: r.from })));
   const data = JSON.stringify({ kind: 'sense-director', v: 1, p: projectPayload(p), reqs }).replace(/</g, '\\u003c');
-  const ytLink = t => ytId ? `https://youtu.be/${ytId}?t=${Math.floor(t)}` : '';
+  const ytLink = t => ytId ? `https://youtu.be/${ytId}?t=${Math.floor(t)}` : p.src && p.src.k === 'vimeo' ? `https://vimeo.com/${p.src.id}${p.src.h ? '/' + p.src.h : ''}#t=${Math.floor(t)}s` : '';
   const cards = items.map((it, i) => `
   <article class="card">
-    ${snapHTML(it, i + 1, ar, ytId)}
+    ${snapHTML(it, i + 1, ar, poster)}
     <div class="meta">
       <div class="row"><span class="no">${pad2(i + 1)}</span><b class="tc">${tc(it.t, fps)}</b><span class="tag st-${it.st || 'open'}">${STATUS[it.st || 'open']}</span>${ytLink(it.t) ? `<a href="${ytLink(it.t)}" target="_blank" rel="noopener">이 시점 보기</a>` : ''}</div>
       <div class="pos">${esc(pinTxt(it))}${it.from ? ' · ' + esc(it.from) : ''}</div>

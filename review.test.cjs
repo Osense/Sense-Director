@@ -8,7 +8,8 @@ const VIDEO = BASE + 'test-media/clip.mp4';
 const SHOTS = process.env.SHOTS || '';
 const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'sense-director-test-'));
 const chrome = process.env.CHROME || (process.platform === 'win32' ? 'C:/Program Files/Google/Chrome/Application/chrome.exe' : 'google-chrome');
-const browser = spawn(chrome, ['--headless=new', '--disable-gpu', '--no-sandbox', '--no-first-run', '--window-size=1440,900', '--remote-debugging-port=9227', '--autoplay-policy=no-user-gesture-required', `--user-data-dir=${profile}`, 'about:blank'], { stdio: 'ignore' });
+const ONLINE = process.argv.includes('--online');
+const browser = spawn(chrome, ['--headless=new', '--disable-gpu', '--no-sandbox', '--no-first-run', '--window-size=1440,900', '--remote-debugging-port=9227', '--autoplay-policy=no-user-gesture-required', '--auto-accept-this-tab-capture', '--use-fake-ui-for-media-stream', `--user-data-dir=${profile}`, 'about:blank'], { stdio: 'ignore' });
 const delay = ms => new Promise(r => setTimeout(r, ms));
 let ws, id = 0; const pending = new Map();
 const call = (method, params = {}) => new Promise((res, rej) => { const t = setTimeout(() => rej(Error('timeout ' + method)), 30000); pending.set(++id, m => { clearTimeout(t); res(m); }); ws.send(JSON.stringify({ id, method, params })); });
@@ -16,6 +17,7 @@ async function ev(expr) { const r = await call('Runtime.evaluate', { expression:
 async function until(expr, ms = 10000, label = expr) { const end = Date.now() + ms; while (Date.now() < end) { try { if (await ev(expr)) return; } catch {} await delay(100); } throw Error('Timed out: ' + label); }
 async function go(url) { await call('Page.navigate', { url }); await delay(400); await until("document.readyState==='complete'"); }
 async function shot(name) { if (!SHOTS) return; const r = await call('Page.captureScreenshot', { format: 'png' }); fs.mkdirSync(SHOTS, { recursive: true }); fs.writeFileSync(path.join(SHOTS, name + '.png'), Buffer.from(r.result.data, 'base64')); }
+async function setFile(sel, file) { const d = await call('DOM.getDocument', { depth: -1, pierce: true }); const q = await call('DOM.querySelector', { nodeId: d.result.root.nodeId, selector: sel }); if (!q.result || !q.result.nodeId) throw Error('no input ' + sel); await call('DOM.setFileInputFiles', { nodeId: q.result.nodeId, files: [file] }); }
 const pass = []; const ok = (c, m) => { if (!c) throw Error('FAIL: ' + m); pass.push(m); };
 const click = sel => ev(`(()=>{const e=document.querySelector(${JSON.stringify(sel)});if(!e)throw Error('no '+${JSON.stringify(sel)});e.click();return true})()`);
 const pointer = (sel, pts) => ev(`(async()=>{const el=document.querySelector(${JSON.stringify(sel)}),r=el.getBoundingClientRect();const P=${JSON.stringify(pts)};
@@ -26,7 +28,7 @@ const pointer = (sel, pts) => ev(`(async()=>{const el=document.querySelector(${J
   ws = new WebSocket(tabs.find(t => t.type === 'page').webSocketDebuggerUrl);
   await new Promise(r => ws.addEventListener('open', r, { once: true }));
   ws.addEventListener('message', e => { const m = JSON.parse(e.data); if (pending.has(m.id)) { pending.get(m.id)(m); pending.delete(m.id); } });
-  await call('Page.enable'); await call('Runtime.enable');
+  await call('Page.enable'); await call('Runtime.enable'); await call('DOM.enable');
   await call('Browser.grantPermissions', { permissions: ['clipboardReadWrite', 'clipboardSanitizedWrite'], origin: BASE.slice(0, -1) }).catch(() => {});
 
   /* 1. 디렉터: 영상 링크로 프로젝트 만들기 */
@@ -181,6 +183,75 @@ const pointer = (sel, pts) => ev(`(async()=>{const el=document.querySelector(${J
   ok(await ev("document.documentElement.scrollWidth<=window.innerWidth+1"), 'no horizontal scroll on phone');
   await shot('09-client-phone');
 
+  await call('Emulation.clearDeviceMetricsOverride');
+
+  /* 9. 영상 파일 올리기(목업) */
+  await ev("localStorage.clear()");
+  await go(BASE);
+  await until("document.querySelector('[data-drop] input')");
+  await setFile('[data-drop] input', path.join(__dirname, 'test-media', 'clip.mp4'));
+  await until("location.hash.includes('tab=setup') && document.querySelector('.stage video') && document.querySelector('.stage video').readyState>=2", 15000, 'uploaded file plays');
+  ok(await ev("(()=>{const {Store}=window;return true})()") && await ev(`(async()=>{const {Store}=await import('/assets/js/store.js');const p=Store.projects()[0];return p.src.k==='file' && p.src.name==='clip.mp4' && p.title==='clip'})()`), 'file upload (mock) creates project from file');
+  ok(await ev("document.querySelector('[data-meta]').textContent.includes('영상 파일')"), 'source kind shown');
+  const fLink = await ev("document.querySelector('[data-link]').value"), fPin = await ev("[...document.querySelectorAll('.pin-show span')].map(s=>s.textContent).join('')");
+  await go(fLink); await until("document.querySelector('.pin-boxes input')");
+  await typePin(fPin); await delay(600);
+  await ev("document.querySelector('.modal .foot .primary') && document.querySelector('.modal .foot .primary').click()");
+  await until("document.querySelector('.stage video') && document.querySelector('.stage video').readyState>=2", 10000, 'client plays uploaded file (same browser)');
+  ok(true, 'client plays uploaded file in same browser');
+  // 다른 기기 흉내: 저장된 파일이 없으면 같은 파일을 골라 연결
+  await ev("new Promise(r=>{const q=indexedDB.deleteDatabase('sense-director-media');q.onsuccess=q.onerror=q.onblocked=()=>r(1)})");
+  await go(BASE); await go(fLink);
+  await until("document.querySelector('.file-missing') || document.querySelector('.pin-boxes')", 8000);
+  if (await ev("!!document.querySelector('.pin-boxes')")) { await typePin(fPin); await delay(600); }
+  await ev("document.querySelector('.modal .foot .primary') && document.querySelector('.modal .foot .primary').click()");
+  await until("document.querySelector('.file-missing')", 8000, 'missing-file prompt');
+  await shot('10-client-file-missing');
+  await setFile('.file-missing input', path.join(__dirname, 'test-media', 'clip.mp4'));
+  await until("document.querySelector('.stage video') && document.querySelector('.stage video').readyState>=2", 10000, 'relinked file plays');
+  ok(true, 'other device relinks the same file and plays');
+
+  if (ONLINE) {
+    /* 10. 유튜브: 작업 중 화면 공유 없음 → 보낼 때 장면 사진 한 번에 */
+    await ev("localStorage.clear()");
+    await go(BASE); await until("document.querySelector('.hero-form input')");
+    await ev(`document.querySelector('.hero-form input').value='https://www.youtube.com/watch?v=aqz-KE-bpKQ';document.querySelector('.hero-form .btn').click()`);
+    await until("document.querySelector('[data-link]') && document.querySelector('[data-link]').value.includes('#c=') && document.querySelector('[data-dur]').textContent!=='00:00:00:00'", 20000, 'youtube project');
+    const yLink = await ev("document.querySelector('[data-link]').value"), yPin = await ev("[...document.querySelectorAll('.pin-show span')].map(s=>s.textContent).join('')");
+    await go(yLink); await until("document.querySelector('.pin-boxes input')"); await typePin(yPin);
+    await until("document.querySelector('.stage iframe')", 10000);
+    await until("document.querySelector('[data-dur]').textContent!=='00:00:00:00'", 20000, 'youtube ready');
+    await ev("(()=>{const b=document.querySelector('[data-act=play]');b.click()})()"); await delay(2500); await ev("document.querySelector('[data-act=play]').click()"); await delay(400);
+    await pointer('.overlay', [[0.4, 0.4], [0.4, 0.4]]);
+    await until("document.querySelectorAll('.list .item').length===1", 6000, 'yt pin item');
+    ok(!(await ev("!!document.querySelector('.modal')")), 'YouTube: no screen-share prompt while working');
+    ok(await ev("document.querySelector('.item .nosnap').textContent.includes('보낼 때')"), 'YouTube: card says snapshot will be made at send');
+    await ev("(()=>{const t=document.activeElement;t.value='여기 색 보정';t.dispatchEvent(new Event('input',{bubbles:true}));t.blur();})()");
+    await ev("document.querySelector('.stage iframe') && 0"); 
+    await ev("(()=>{document.querySelector('[data-act=play]').click()})()"); await delay(1800); await ev("document.querySelector('[data-act=play]').click()"); await delay(400);
+    await pointer('.overlay', [[0.6, 0.6], [0.6, 0.6]]);
+    await until("document.querySelectorAll('.list .item').length===2", 6000, 'yt 2nd item');
+    await click('[data-act=send]'); await until("document.querySelector('[data-name]')");
+    await ev("document.querySelector('[data-name]').value='YT 테스트';document.querySelector('.modal .foot .primary').click()");
+    await until("[...document.querySelectorAll('.modal h3')].some(h=>h.textContent.includes('장면 사진'))", 6000, 'thumb prompt at send');
+    ok(true, 'YouTube: asks once at send to make snapshots');
+    await ev("document.querySelector('.modal .foot .primary').click()");
+    await until("document.querySelector('.sent-ok')", 40000, 'yt sent');
+    const yr = await ev(`(async()=>{const {Store}=await import('/assets/js/store.js');const p=Store.projects()[0];return Store.inbox(p.id)[0].items.map(it=>(it.th||'').slice(0,22))})()`);
+    ok(yr.length === 2, 'YouTube request delivered');
+    console.log('  youtube snapshots:', yr.map(x => x || '(none)').join(' | '));
+    ok(yr.every(x => x.startsWith('data:image/jpeg')), 'YouTube: snapshots generated in one pass at send');
+    await ev("document.querySelector('.modal .foot .primary').click()");
+    await ev("document.querySelector('[data-tab=sent]').click()"); await delay(300);
+    await shot('11-client-youtube-sent');
+
+    /* 11. 비메오 */
+    await ev("localStorage.clear()"); await go(BASE); await until("document.querySelector('.hero-form input')");
+    await ev(`document.querySelector('.hero-form input').value='https://vimeo.com/76979871';document.querySelector('.hero-form .btn').click()`);
+    await until("document.querySelector('.stage iframe[src*=vimeo]') && document.querySelector('[data-dur]').textContent!=='00:00:00:00'", 25000, 'vimeo ready');
+    ok(await ev("document.querySelector('[data-meta]').textContent.includes('Vimeo') && document.querySelector('[data-f=title]').value.length>0"), 'Vimeo: embeds, title and duration detected');
+    await shot('12-director-vimeo');
+  }
   console.log('PASS ' + pass.length + ':\n- ' + pass.join('\n- '));
   browser.kill(); process.exit(0);
 })().catch(e => { console.error(e.message || e); console.log('passed before failure: ' + pass.join(', ')); browser.kill(); process.exit(1); });

@@ -1,8 +1,9 @@
 /* 디렉터 콘솔 — 영상 임베드, 프로젝트·안내사항·핀 설정, 링크 공유, 받은 수정요청에 댓글로 환류 */
-import { $, $$, ic, esc, uid, tc, sha, modal, toast, dueLabel, fmtDate, copyText, shareOrCopy, parseSource, safeName, fpsLabel, unpack } from './util.js';
+import { $, $$, ic, esc, uid, tc, sha, modal, toast, dueLabel, fmtDate, copyText, shareOrCopy, parseSource, safeName, fpsLabel, unpack, srcText, srcKind, STD_FPS } from './util.js';
 import { Store, MODE } from './store.js';
-import { mountViewer, snapHTML } from './viewer.js';
-import { probeYouTube } from './player.js';
+import { mountViewer, snapHTML, posterOf } from './viewer.js';
+import { probe } from './player.js';
+import { putMedia, fmtSize } from './media.js';
 import { clientLink, feedbackMessage, reportHTML, printHTML, shareFile, parseIncoming, STATUS } from './exports.js';
 
 const NOTICE_CHIPS = ['피드백은 마감일까지 부탁드립니다.', '수정할 장면에서 멈추고 핀을 찍은 뒤 내용을 적어 주세요.', '자막·색보정·음악은 각각 따로 적어 주시면 빨라요.', '음악은 저작권 확인 중이라 바뀔 수 있어요.', '최종본이 아닌 1차 편집본입니다.'];
@@ -68,7 +69,8 @@ function renderHome(main) {
   main.innerHTML = `<div class="hero">
     <div class="eyebrow">New review</div>
     <h2>영상 링크를 붙여 넣으면<br>검수 링크가 바로 만들어져요</h2>
-    <form class="hero-form" data-hero><input placeholder="유튜브 링크 또는 mp4 영상 주소" aria-label="영상 링크" autofocus><button class="btn primary">${ic('plus')}만들기</button></form>
+    <form class="hero-form" data-hero><input placeholder="유튜브 · 비메오 링크 또는 mp4 영상 주소" aria-label="영상 링크" autofocus><button class="btn primary">${ic('plus')}만들기</button></form>
+    <label class="drop-file" data-drop>${ic('import', 18)}<span><b>영상 파일 올리기</b><small>mp4·mov·webm — 끌어 놓거나 눌러서 고르기</small></span><input type="file" accept="video/*,.mp4,.mov,.m4v,.webm,.mkv" hidden></label>
     <ol class="flow">
       <li><b>01</b><span>영상 임베드</span><small>화면비·프레임 수는 알아서 맞춰요</small></li>
       <li><b>02</b><span>안내사항 · 핀 번호</span><small>4자리 핀으로 클라이언트만 열어요</small></li>
@@ -78,20 +80,44 @@ function renderHome(main) {
     </ol>
   </div>`;
   $('[data-hero]', main).addEventListener('submit', e => { e.preventDefault(); startNew($('input', main).value); });
+  const drop = $('[data-drop]', main);
+  $('input', drop).addEventListener('change', async e => { const f = e.target.files[0]; if (f) { const src = await uploadFile(f); if (src) startNew('', src); } });
+  drop.addEventListener('dragover', e => { e.preventDefault(); e.stopPropagation(); drop.classList.add('over'); });
+  drop.addEventListener('dragleave', () => drop.classList.remove('over'));
+  drop.addEventListener('drop', async e => { e.preventDefault(); e.stopPropagation(); drop.classList.remove('over'); const f = e.dataTransfer.files[0]; if (f && /^video\//.test(f.type || 'video/')) { const src = await uploadFile(f); if (src) startNew('', src); } });
 }
 
-async function startNew(url = '') {
-  const src = parseSource(url);
-  if (url && !src) { toast('유튜브 링크나 영상 주소를 알아볼 수 없어요'); return; }
+/** 영상 파일 올리기 — 시험 버전: 서버 대신 이 브라우저에 저장 */
+async function uploadFile(file) {
+  if (file.type && !file.type.startsWith('video/')) { toast('영상 파일을 골라 주세요'); return null; }
+  let setP;
+  const done = modal({
+    title: '영상 올리는 중', dismissible: false,
+    body: `<div class="upload"><b>${esc(file.name)}</b><span class="dim">${fmtSize(file.size)}</span><div class="progress big"><i data-up></i></div><span class="up-pct" data-pct>0%</span></div>
+      <p class="note dim">${MODE === 'mock' ? '시험 버전: 서버 대신 이 브라우저에 저장해요. 다른 기기의 클라이언트는 같은 파일을 직접 골라 연결해요.' : ''}</p>`,
+    onOpen: (w, close) => { setP = (x, end) => { $('[data-up]', w).style.width = x * 100 + '%'; $('[data-pct]', w).textContent = Math.round(x * 100) + '%'; if (end) setTimeout(() => close('ok'), 250); }; },
+  });
+  try {
+    const fid = 'f' + uid(10);
+    const meta = await putMedia(fid, file, x => setP && setP(x));
+    setP(1, true); await done;
+    toast('영상을 올렸어요');
+    return { k: 'file', ...meta };
+  } catch { setP && setP(0, true); await done; toast('영상을 저장하지 못했어요. 브라우저 저장 공간을 확인해 주세요'); return null; }
+}
+
+async function startNew(url = '', given = null) {
+  const src = given || parseSource(url);
+  if (url && !src) { toast('유튜브·비메오 링크나 영상 주소를 알아볼 수 없어요'); return; }
   const p = await newProject({ src });
-  if (src && src.k === 'yt') { const m = await probeYouTube(src); Object.assign(p, { title: p.title || m.title, ar: m.ar, fps: m.fps || 0, fpsHow: m.fps ? 'title' : '' }); p.pinHash = await sha(p.salt + p.pin); Store.saveProject(p); }
+  if (src) { const m = await probe(src); Object.assign(p, { title: p.title || m.title, ar: m.ar, fps: m.fps || 0, fpsHow: m.fps ? 'title' : '', poster: m.poster || '' }); Store.saveProject(p); }
   location.hash = '#p=' + p.id + '&tab=setup';
 }
 
 function importInto(pp, reqs) {
   let p = Store.getProject(pp.id);
   if (!p) { // 다른 기기에서 만든 프로젝트: 링크 정보로 다시 만든다
-    p = { id: pp.id, title: pp.t, notice: pp.n, due: pp.d, src: pp.src, ar: pp.ar, fps: pp.fps, fpsHow: pp.fh, pinHash: pp.ph, salt: pp.s, by: pp.by, pin: '', createdAt: Date.now(), imported: true };
+    p = { id: pp.id, title: pp.t, notice: pp.n, due: pp.d, src: pp.src, ar: pp.ar, fps: pp.fps, fpsHow: pp.fh, poster: pp.pv || '', pinHash: pp.ph, salt: pp.s, by: pp.by, pin: '', createdAt: Date.now(), imported: true };
     Store.saveProject(p);
   }
   let added = 0;
@@ -149,8 +175,9 @@ function renderProject(main, p, tab) {
       onMeta: m => { // 알아서 알아낸 화면비·프레임 수를 저장 → 클라이언트 링크에도 들어간다
         let ch = false;
         if (m.ar && (m.ar[0] !== (p.ar || [])[0] || m.ar[1] !== (p.ar || [])[1])) { p.ar = m.ar; ch = true; }
-        if (m.fps && m.fpsHow === 'measured' && (m.fps !== p.fps || p.fpsHow !== 'measured')) { p.fps = m.fps; p.fpsHow = 'measured'; ch = true; }
+        if (m.fps && m.fpsHow === 'measured' && p.fpsHow !== 'set' && (m.fps !== p.fps || p.fpsHow !== 'measured')) { p.fps = m.fps; p.fpsHow = 'measured'; ch = true; }
         if (m.title && !p.title) { p.title = m.title; $('[data-f=title]', main).value = m.title; ch = true; }
+        if (m.poster && m.poster !== p.poster) { p.poster = m.poster; ch = true; }
         if (ch) { Store.saveProject(p); queueLink(); renderMeta(); }
       },
       onReady: info => { p.duration = info.duration; if (!p.title && info.title) { p.title = info.title; $('[data-f=title]', main).value = info.title; } Store.saveProject(p); renderMeta(); },
@@ -158,7 +185,7 @@ function renderProject(main, p, tab) {
     if (p.ar) V.P.setMeta({ ar: p.ar });
     if (p.fps) V.P.setMeta({ fps: p.fps, how: p.fpsHow || 'measured' });
   } else {
-    viewerEl.innerHTML = `<div class="viewer"><div class="stage empty-stage"><div><b>영상 링크를 넣어 주세요</b><span>오른쪽 "영상" 칸에 유튜브 링크나 mp4 주소를 붙여 넣으면 여기서 바로 재생돼요.</span></div></div></div>`;
+    viewerEl.innerHTML = `<div class="viewer"><div class="stage empty-stage"><div><b>영상을 넣어 주세요</b><span>오른쪽 "영상" 칸에 유튜브·비메오 링크나 mp4 주소를 붙여 넣거나 영상 파일을 올리면 여기서 바로 재생돼요.</span></div></div></div>`;
   }
 
   if (tab === 'setup') renderSetup($('[data-side]', main), p, main);
@@ -174,10 +201,17 @@ function renderProject(main, p, tab) {
   function renderMeta() {
     const el = $('[data-meta]', main); if (!el || !V) return;
     const P = V.P;
-    el.innerHTML = `<span class="chip">${P.ar[0]}:${P.ar[1]}${P.ar[0] < P.ar[1] ? ' 세로' : ''}</span>
-      <span class="chip ${P.fpsHow === 'measured' ? 'measured' : ''}" title="${P.fpsHow === 'measured' ? '재생하며 측정한 값' : P.fpsHow === 'title' ? '영상 정보에서 읽은 값 — 재생하면 측정해서 확인해요' : '재생하면 자동으로 측정해요'}">${P.fps ? fpsLabel(P.fps) : 'fps 측정 전'}${P.fpsHow === 'measured' ? ' · 측정됨' : P.fpsHow === 'title' ? ' · 영상 정보' : ''}</span>
-      ${p.duration ? `<span class="chip">${tc(p.duration, P.effFps())}</span>` : ''}
-      ${P.kind === 'yt' && !P.fps ? '<span class="hint">재생 + 장면 캡처를 켜면 프레임 수를 정확히 재요</span>' : ''}`;
+    const how = P.fpsHow === 'measured' ? '측정됨' : P.fpsHow === 'title' ? '영상 정보' : P.fpsHow === 'set' ? '직접 지정' : P.live() ? '재생하면 측정' : '기본값';
+    el.innerHTML = `<span class="chip">${srcKind(p.src)}</span><span class="chip">${P.ar[0]}:${P.ar[1]}${P.ar[0] < P.ar[1] ? ' 세로' : ''}</span>
+      <label class="chip fps-pick ${P.fpsHow === 'measured' ? 'measured' : ''}" title="프레임 수 — 시간 주소의 프레임 번호 기준">
+        <select data-fps-pick aria-label="프레임 수">${['', ...STD_FPS].map(f => `<option value="${f}" ${(f === '' ? !P.fps : f === P.fps) ? 'selected' : ''}>${f === '' ? '30fps (기본)' : fpsLabel(f)}</option>`).join('')}</select><span>${how}</span></label>
+      ${p.duration ? `<span class="chip">${tc(p.duration, P.effFps())}</span>` : ''}`;
+    $('[data-fps-pick]', el).addEventListener('change', e => {
+      const f = +e.target.value || 0;
+      p.fps = f; p.fpsHow = f ? 'set' : ''; Store.saveProject(p); queueLink();
+      if (f) V.P.setMeta({ fps: f, how: 'set', force: true }); else { V.P.fps = 0; V.P.fpsHow = ''; }
+      renderMeta(); V.render();
+    });
   }
   let linkT;
   function queueLink() { clearTimeout(linkT); linkT = setTimeout(() => main.dispatchEvent(new CustomEvent('linkchange')), 250); }
@@ -187,11 +221,12 @@ function renderProject(main, p, tab) {
 
 /* ---------- 설정 · 공유 ---------- */
 function renderSetup(side, p, main) {
-  const srcText = p.src ? (p.src.k === 'yt' ? 'https://youtu.be/' + p.src.id : p.src.url) : '';
+  const isFile = p.src && p.src.k === 'file';
   side.innerHTML = `
     <div class="card">
       <div class="card-title">영상</div>
-      <input class="field-in" data-f="src" value="${esc(srcText)}" placeholder="유튜브 링크 또는 mp4 영상 주소" aria-label="영상 링크" spellcheck="false">
+      <div class="linkbox"><input class="field-in" data-f="src" value="${esc(isFile ? '' : srcText(p.src))}" placeholder="${isFile ? esc(p.src.name + ' · ' + fmtSize(p.src.size || 0)) : '유튜브 · 비메오 링크 또는 mp4 영상 주소'}" aria-label="영상 링크" spellcheck="false">
+        <label class="btn" title="영상 파일 올리기">${ic('import')}파일<input type="file" data-upload accept="video/*,.mp4,.mov,.m4v,.webm,.mkv" hidden></label></div>
       <div class="meta-row" data-meta></div>
     </div>
     <div class="card">
@@ -236,13 +271,18 @@ function renderSetup(side, p, main) {
   main.addEventListener('linkchange', refreshLink);
   refreshLink();
 
-  f('src').addEventListener('change', async e => {
+  const changeSrc = async src => {
+    p.src = src; p.fps = 0; p.fpsHow = ''; p.poster = ''; p.ar = src && src.k === 'yt' && src.short ? [9, 16] : [16, 9]; p.duration = 0;
+    if (src) { const m = await probe(src); p.ar = m.ar; p.fps = m.fps || 0; p.fpsHow = m.fps ? 'title' : ''; p.poster = m.poster || ''; if (!p.title) p.title = m.title; }
+    if (Store.inbox(p.id).length) toast('영상을 바꿨어요. 이미 받은 요청은 이전 영상 기준 시간이에요', 4200);
+    const h = '#p=' + p.id + '&tab=setup'; if (location.hash === h) dispatchEvent(new HashChangeEvent('hashchange')); else location.hash = h;
+  };
+  f('src').addEventListener('change', e => {
     const src = parseSource(e.target.value);
-    if (e.target.value && !src) { toast('유튜브 링크나 영상 주소를 알아볼 수 없어요'); return; }
-    p.src = src; p.fps = 0; p.fpsHow = ''; p.ar = src && src.k === 'yt' && src.short ? [9, 16] : [16, 9]; p.duration = 0;
-    if (src && src.k === 'yt') { const m = await probeYouTube(src); p.ar = m.ar; p.fps = m.fps || 0; p.fpsHow = m.fps ? 'title' : ''; if (!p.title) p.title = m.title; }
-    Store.saveProject(p); const h = '#p=' + p.id + '&tab=setup'; if (location.hash === h) dispatchEvent(new HashChangeEvent('hashchange')); else location.hash = h;
+    if (e.target.value && !src) { toast('유튜브·비메오 링크나 영상 주소를 알아볼 수 없어요'); return; }
+    changeSrc(src);
   });
+  $('[data-upload]', side).addEventListener('change', async e => { const file = e.target.files[0]; if (!file) return; const src = await uploadFile(file); if (src) changeSrc(src); });
   const bind = (k, ev = 'input') => f(k).addEventListener(ev, e => { p[k] = e.target.value; if (k === 'by') localStorage.setItem('sd:director', p.by); Store.saveProject(p); main._queueLink(); });
   bind('notice'); bind('due', 'change'); bind('by');
   $('[data-chips]', side).addEventListener('click', e => {
@@ -287,11 +327,13 @@ function renderInbox(side, p, getSel, setSel) {
     const inbox = Store.inbox(p.id).sort((a, b) => b.at - a.at), all = inbox.flatMap(r => r.items);
     const order = all.slice().sort((a, b) => a.t - b.t), numOf = id => order.findIndex(it => it.id === id) + 1;
     const cnt = k => all.filter(it => (it.st || 'open') === k).length, done = cnt('done');
-    const fps = V ? V.P.effFps() : (p.fps || 30), ytId = p.src && p.src.k === 'yt' ? p.src.id : '';
+    const fps = V ? V.P.effFps() : (p.fps || 30), poster = posterOf(p.src, p.poster), missing = all.filter(it => !it.th).length;
     side.innerHTML = `
       <div class="inbox-head">
         <div class="progress" title="반영 ${done} / ${all.length}"><i style="width:${all.length ? done / all.length * 100 : 0}%"></i></div>
         <div class="inbox-stats"><b>${done}</b><span>/ ${all.length} 반영</span><span class="dim">진행 ${cnt('doing')} · 보류 ${cnt('hold')} · 대기 ${cnt('open')}</span></div>
+        ${missing && V && V.canShare() ? `<button class="btn small ghost thumbs-btn" data-act="thumbs">${ic('cam', 14)}장면 사진 없는 ${missing}건 만들기</button>` : ''}
+        <div class="thumb-progress" data-tp hidden><i></i><span></span></div>
         <div class="inbox-actions">
           <div class="seg small" role="group" aria-label="상태 필터">${['all', 'open', 'doing', 'done', 'hold'].map(k => `<button class="btn${filter === k ? ' on' : ''}" data-filter="${k}">${k === 'all' ? '전체' : STATUS[k]}</button>`).join('')}</div>
           <div class="split" data-menu-root>
@@ -308,19 +350,19 @@ function renderInbox(side, p, getSel, setSel) {
       <div class="list">${inbox.length ? inbox.map(r => {
         const its = r.items.filter(it => filter === 'all' || (it.st || 'open') === filter).sort((a, b) => a.t - b.t);
         if (!its.length) return '';
-        return `<div class="group"><div class="group-head">${esc(r.from || '클라이언트')} · ${fmtDate(r.at)} · ${r.items.length}건</div>${its.map(it => card(it, r, numOf(it.id), fps, ytId)).join('')}</div>`;
+        return `<div class="group"><div class="group-head">${esc(r.from || '클라이언트')} · ${fmtDate(r.at)} · ${r.items.length}건</div>${its.map(it => card(it, r, numOf(it.id), fps, poster)).join('')}</div>`;
       }).join('') || '<div class="empty"><b>이 상태의 요청이 없어요</b></div>' : `<div class="empty">
         <b>아직 받은 수정요청이 없어요</b>
         <span>"설정 · 공유"에서 링크와 핀 번호를 클라이언트에게 보내 주세요.</span>
         <span>클라이언트가 메시지나 HTML 파일로 보냈다면 위의 "가져오기"를 쓰거나 파일을 이 화면에 끌어 놓으세요.</span>
         ${MODE === 'mock' ? '<span class="dim">시험 버전: 같은 브라우저에서 "클라이언트 화면"을 열어 보내면 여기에 바로 들어와요.</span>' : ''}</div>`}
       </div>`;
-    function card(it, r, n, fps, ytId) {
+    function card(it, r, n, fps, poster) {
       const st = it.st || 'open', sel = getSel() === it.id;
       return `<article class="item${sel ? ' sel' : ''} st-${st}" data-id="${it.id}" data-rid="${r.rid}">
         <div class="item-head"><span class="no">${String(n).padStart(2, '0')}</span><button class="tcbtn" data-seek title="이 시점으로">${tc(it.t, fps)}</button>
           <button class="icon-x" data-loop title="앞뒤 2초 반복 재생" aria-label="앞뒤 재생">${ic('loop', 15)}</button></div>
-        <div data-seek>${snapHTML(it, n, p.ar || [16, 9], ytId)}</div>
+        <div data-seek>${snapHTML(it, n, p.ar || [16, 9], poster)}</div>
         <p class="tx">${esc(it.tx || '(내용 없음)')}</p>
         <div class="seg status" role="group" aria-label="반영 상태">${['open', 'doing', 'done', 'hold'].map(k => `<button class="btn st-${k}${st === k ? ' on' : ''}" data-st="${k}">${STATUS[k]}</button>`).join('')}</div>
         <div class="thread">${(it.rp || []).map(x => `<div class="rp ${x.by}"><b>${x.by === 'd' ? '나' : esc(x.n || r.from || '클라이언트')}</b><span>${esc(x.b)}</span><time>${fmtDate(x.at)}</time></div>`).join('')}
@@ -336,8 +378,19 @@ function renderInbox(side, p, getSel, setSel) {
     const inbox = Store.inbox(p.id), r = inbox.find(x => x.rid === rid), it = r && r.items.find(x => x.id === id);
     if (!it) return; f(it); Store.saveInbox(p.id, inbox); draw();
   };
-  side.addEventListener('click', e => {
+  side.addEventListener('click', async e => {
     const fb = e.target.closest('[data-filter]'); if (fb) { filter = fb.dataset.filter; draw(); return; }
+    if (e.target.closest('[data-act=thumbs]')) {
+      const inbox = Store.inbox(p.id), items = inbox.flatMap(r => r.items), tp = $('[data-tp]', side);
+      if (V.needsShare()) {
+        const ok = await modal({ title: '장면 사진 만들기', body: `<p class="note">이 탭 화면을 잠깐 공유해서 사진이 없는 ${items.filter(it => !it.th).length}개 장면을 자동으로 찍어요. 끝나면 공유는 바로 꺼져요.</p>`, actions: [{ label: '취소', value: null }, { label: `${ic('cam')}만들기`, kind: 'primary', value: 'go' }] });
+        if (ok !== 'go') return;
+      }
+      const res = await V.makeThumbs(items, (i, n) => { tp.hidden = false; $('i', tp).style.width = i / n * 100 + '%'; $('span', tp).textContent = `장면 사진 만드는 중 ${i}/${n}`; });
+      Store.saveInbox(p.id, inbox); draw();
+      toast(res.made ? `장면 사진 ${res.made}장을 만들었어요` : '장면 사진을 만들지 못했어요');
+      return;
+    }
     const card = e.target.closest('.item'); if (!card) return;
     const id = card.dataset.id, rid = card.dataset.rid;
     const it = Store.inbox(p.id).find(x => x.rid === rid).items.find(x => x.id === id);
