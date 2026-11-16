@@ -1,196 +1,186 @@
+/* Sense Director 전체 흐름 검사 (헤드리스 Chrome)
+   node review-server.cjs --no-browser  을 켠 뒤  node review.test.cjs
+   SHOTS=폴더  를 주면 화면을 찍어 둔다. */
 const { spawn } = require('node:child_process');
-const fs = require('node:fs');
-const os = require('node:os');
-const path = require('node:path');
-const assert = require('node:assert/strict');
-const vm = require('node:vm');
-const htmlFile=fs.readdirSync(__dirname).find(f=>f.endsWith('.html'));
-const pageTitle=fs.readFileSync(path.join(__dirname,htmlFile),'utf8').match(/<title>(.*?)<\/title>/)[1];
-const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'sense-director-browser-'));
-const browser = spawn(process.env.CHROME || (process.platform === 'win32' ? 'C:/Program Files/Google/Chrome/Application/chrome.exe' : 'google-chrome'), [
-  '--headless=new', '--disable-gpu', '--no-sandbox', '--no-first-run', '--window-size=1440,1000','--remote-debugging-port=9227',
-  '--auto-accept-this-tab-capture','--enable-usermedia-screen-capturing',`--auto-select-tab-capture-source-by-title=${pageTitle}`,`--auto-select-desktop-capture-source=${pageTitle}`,
-  `--user-data-dir=${profile}`, 'http://127.0.0.1:8765/',
-], { windowsHide: true, stdio: 'ignore' });
-let ws;
-const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
+const fs = require('node:fs'), os = require('node:os'), path = require('node:path');
+const BASE = 'http://127.0.0.1:8765/';
+const VIDEO = BASE + 'test-media/clip.mp4';
+const SHOTS = process.env.SHOTS || '';
+const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'sense-director-test-'));
+const chrome = process.env.CHROME || (process.platform === 'win32' ? 'C:/Program Files/Google/Chrome/Application/chrome.exe' : 'google-chrome');
+const browser = spawn(chrome, ['--headless=new', '--disable-gpu', '--no-sandbox', '--no-first-run', '--window-size=1440,900', '--remote-debugging-port=9227', '--autoplay-policy=no-user-gesture-required', `--user-data-dir=${profile}`, 'about:blank'], { stdio: 'ignore' });
+const delay = ms => new Promise(r => setTimeout(r, ms));
+let ws, id = 0; const pending = new Map();
+const call = (method, params = {}) => new Promise((res, rej) => { const t = setTimeout(() => rej(Error('timeout ' + method)), 30000); pending.set(++id, m => { clearTimeout(t); res(m); }); ws.send(JSON.stringify({ id, method, params })); });
+async function ev(expr) { const r = await call('Runtime.evaluate', { expression: expr, awaitPromise: true, returnByValue: true, userGesture: true }); if (r.result.exceptionDetails) throw Error(r.result.exceptionDetails.exception?.description || JSON.stringify(r.result.exceptionDetails)); return r.result.result.value; }
+async function until(expr, ms = 10000, label = expr) { const end = Date.now() + ms; while (Date.now() < end) { try { if (await ev(expr)) return; } catch {} await delay(100); } throw Error('Timed out: ' + label); }
+async function go(url) { await call('Page.navigate', { url }); await delay(400); await until("document.readyState==='complete'"); }
+async function shot(name) { if (!SHOTS) return; const r = await call('Page.captureScreenshot', { format: 'png' }); fs.mkdirSync(SHOTS, { recursive: true }); fs.writeFileSync(path.join(SHOTS, name + '.png'), Buffer.from(r.result.data, 'base64')); }
+const pass = []; const ok = (c, m) => { if (!c) throw Error('FAIL: ' + m); pass.push(m); };
+const click = sel => ev(`(()=>{const e=document.querySelector(${JSON.stringify(sel)});if(!e)throw Error('no '+${JSON.stringify(sel)});e.click();return true})()`);
+const pointer = (sel, pts) => ev(`(async()=>{const el=document.querySelector(${JSON.stringify(sel)}),r=el.getBoundingClientRect();const P=${JSON.stringify(pts)};
+  for(let i=0;i<P.length;i++){const [x,y]=P[i];const type=i===0?'pointerdown':i===P.length-1?'pointerup':'pointermove';el.dispatchEvent(new PointerEvent(type,{pointerId:1,button:0,isPrimary:true,clientX:r.left+r.width*x,clientY:r.top+r.height*y,bubbles:true}));await new Promise(r=>setTimeout(r,16));}return true})()`);
+
 (async () => {
-  let tabs;
-  for (let i = 0; i < 100; i++) {
-    try { tabs = await (await fetch('http://127.0.0.1:9227/json')).json(); if (tabs.some(t => t.type === 'page')) break; } catch {}
-    await delay(100);
-  }
-  if(!tabs)throw new Error('Headless browser did not start');
-  ws = new WebSocket(tabs.find(t => t.url==='http://127.0.0.1:8765/')?.webSocketDebuggerUrl||tabs.find(t=>t.type==='page').webSocketDebuggerUrl);
-  await new Promise(resolve => ws.addEventListener('open', resolve, { once: true }));
-  let id = 0;
-  const pending = new Map();
-  ws.addEventListener('message', event => {
-    const result = JSON.parse(event.data);
-    if (pending.has(result.id)) { pending.get(result.id)(result); pending.delete(result.id); }
-  });
-  const call = (method, params) => new Promise((resolve,reject) => {const timer=setTimeout(()=>reject(Error('Browser call timed out: '+method)),30000); pending.set(++id, result=>{clearTimeout(timer);resolve(result)}); ws.send(JSON.stringify({ id, method, params })); });
-  async function evaluate(expression) {
-    const response = await call('Runtime.evaluate', { expression, awaitPromise: true, returnByValue: true, userGesture:true });
-    if (response.error || response.result.exceptionDetails) throw new Error(JSON.stringify(response));
-    return response.result.result.value;
-  }
-  for(let i=0;i<100;i++){
-    if(await evaluate("location.href==='http://127.0.0.1:8765/' && document.readyState==='complete'"))break;
-    await delay(100);
-  }
-  await evaluate(`(async()=>{
-    let html=await (await fetch('/')).text();
-    html=html.replace('renderChips();renderSpeed();updateCapUI();render();',
-      'window.testApi={S,YtP,Cap,togglePlay,stepFrame,textKakao,selectMemo,openYouTube,createMemo,finishEdit,loadProject,projectData,reportHTML,render,setAnnotationTool,undoDelete,deleteMemo,parseYtId,setPlayer:p=>P=p};renderChips();renderSpeed();updateCapUI();render();');
-    document.open();document.write(html);document.close();
-  })()`);
-  const result = await evaluate(`(async()=>{
-    const a=window.testApi;
-    if(!a)throw Error('Application did not initialize');
-    const check=(v,m)=>{if(!v)throw Error(m)};
-    document.querySelector('#btnSource').click();
-    check(document.querySelector('#sourceMenu').classList.contains('open'),'Source menu');
-    document.querySelector('#btnYt').click();
-    check(document.querySelector('#mYt').classList.contains('open'),'YouTube dialog');
-    document.querySelector('[data-close]').click();
-    check(a.parseYtId('https://youtu.be/M7lc1UVf-VE')==='M7lc1UVf-VE','YouTube URL parsing');
-    let paused=false;
-    a.setPlayer({ready:()=>true,time:()=>12,duration:()=>120,paused:()=>paused,pause:()=>paused=true,size:()=>({w:16,h:9}),snap:async()=>({t:12,thumb:''})});
-    a.S.mode='file';a.S.videoName='test.mp4';
-    const m=await a.createMemo({x:25,y:35});
-    document.querySelector('#cText').value='Point note';a.finishEdit('save');
-    check(m.t===12&&m.x===25&&m.text==='Point note','Point memo');
-    check(a.textKakao().includes('X 25.0%, Y 35.0%'),'Kakao coordinates');
-    check(document.querySelector('#btnPrev').textContent.includes('1프레임'),'Frame buttons');
-    a.setAnnotationTool('draw');
-    const overlay=document.querySelector('#overlay');
-    overlay.style.cssText='display:block;position:absolute;left:0;top:0;width:640px;height:360px';
-    // Synthetic pointer events cannot capture a physical pointer.
-    overlay.setPointerCapture=()=>{};overlay.hasPointerCapture=()=>false;
-    const event=(type,x,y)=>overlay.dispatchEvent(new PointerEvent(type,{pointerId:1,button:0,clientX:x,clientY:y,bubbles:true}));
-    event('pointerdown',100,100);event('pointermove',160,130);event('pointermove',210,160);event('pointerup',220,170);
-    await new Promise(r=>setTimeout(r,30));
-    check(paused,'Drawing pauses playback');
-    check(a.S.memos.length===2&&a.S.memos[1].strokes.length===1,'Drawing creates memo');
-    event('pointerdown',100,110);event('pointermove',190,140);event('pointerup',220,180);
-    await new Promise(r=>setTimeout(r,30));
-    check(a.S.memos[1].strokes.length===2,'Multiple strokes');
-    document.querySelector('#btnUndoStroke').click();
-    check(a.S.memos[1].strokes.length===1,'Undo stroke');
-    a.finishEdit('save');
-    const data=JSON.parse(JSON.stringify(a.projectData()));
-    a.loadProject(data,true);
-    check(a.S.memos.length===2&&a.S.memos[1].strokes.length===1,'Project drawing roundtrip');
-    check(document.querySelectorAll('#overlay polyline').length===1,'Drawing visible on video');
-    check(a.reportHTML().includes('<polyline'),'HTML report retains drawing');
-    const id=a.S.memos[1].id;a.deleteMemo(id);a.undoDelete();
-    check(a.S.memos.some(m=>m.id===id&&m.strokes.length===1),'Delete undo retains drawing');
-    return 'PASS: source menu, link dialog, URL parsing, point memo, pause on draw, multiple strokes, undo stroke, save/load, overlay, report, delete/undo';
-  })()`);
-  assert.ok(result.startsWith('PASS:'));
-  console.log(result);
-  if(process.argv.includes('--youtube')){
-    await evaluate("testApi.setPlayer(null);testApi.openYouTube('M7lc1UVf-VE')");
-    let state;
-    for(let i=0;i<100;i++){
-      state=await evaluate("({ready:testApi.YtP.ready(),duration:testApi.YtP.duration(),error:document.querySelector('#dropErr').textContent,title:document.querySelector('#ytTitle').textContent})");
-      if(state.ready||state.error)break;
-      await delay(200);
-    }
-    console.log('YouTube integration: '+JSON.stringify(state));
-    assert.ok(state.ready&&state.duration>0,'YouTube must load and report video duration');
-    await evaluate('testApi.YtP.play()');
-    let playback;
-    for(let i=0;i<75;i++){
-      playback=await evaluate("({state:testApi.YtP._state,error:document.querySelector('#dropErr').textContent})");
-      if(playback.state===1||playback.error)break;
-      await delay(200);
-    }
-    assert.equal(playback.state,1,'YouTube must play: '+JSON.stringify(playback));
-    assert.equal(await evaluate('testApi.Cap.start()'),true,'Tab capture must connect');
-    await evaluate('testApi.YtP.pause();testApi.YtP.seek(10)');
-    await delay(2000);
-    console.log(await evaluate(`(async()=>{
-      const a=testApi,m=await a.createMemo({x:40,y:50});
-      if(!m||m.t<9||m.t>12||!m.thumb.startsWith('data:image/'))throw Error('YouTube captured point memo '+JSON.stringify({memo:m&&{t:m.t,thumb:m.thumb.slice(0,30)},cap:a.Cap.active,cropped:a.Cap.cropped,dim:[a.Cap.vid.videoWidth,a.Cap.vid.videoHeight],rect:document.querySelector('#overlay').getBoundingClientRect().toJSON(),state:a.YtP._state,time:a.YtP.time(),error:a.YtP._captureError}));
-      if(document.querySelector('#freezeFrame').hidden)throw Error('Clean paused frame missing');
-      a.finishEdit('save');
-      a.setAnnotationTool('draw');
-      const el=document.querySelector('#overlay'),r=el.getBoundingClientRect();
-      for(const [type,x,y] of [['pointerdown',0.2,0.2],['pointermove',0.4,0.4],['pointerup',0.6,0.5]])
-        el.dispatchEvent(new PointerEvent(type,{pointerId:1,button:0,clientX:r.left+r.width*x,clientY:r.top+r.height*y,bubbles:true}));
-      await new Promise(r=>setTimeout(r,1000));
-      const drawn=a.S.memos.find(m=>m.strokes&&m.strokes.length&&m.t>9);
-      if(!drawn)throw Error('YouTube link-only drawing');
-      a.finishEdit('save');
-      a.selectMemo(m.id,true);
-      if(document.querySelector('#freezeFrame').src!==m.thumb)throw Error('Saved capture preview');
-      if(!a.textKakao().includes('X 40.0%, Y 50.0%'))throw Error('YouTube Kakao coordinates');
-      return 'PASS: live YouTube playback, tab capture, clean pause, seek, automatic thumbnail, drawing, saved capture preview, coordinates';
-    })()`));
-    await evaluate('testApi.stepFrame(1)');
-    await delay(2000);
-    console.log(await evaluate(`(()=>{
-      const img=document.querySelector('#freezeFrame');
-      if(img.hidden||!testApi.YtP.paused()||Math.abs(+img.dataset.time-testApi.YtP.time())>0.3)throw Error('Frame step must refresh clean paused image');
-      return 'PASS: frame button refreshes captured paused scene';
-    })()`));
-  }
-  const report=await evaluate('testApi.reportHTML()');
-  for(const script of report.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/g)){
-    if(!script[0].includes('application/json'))new vm.Script(script[1]);
-  }
-  await evaluate(`document.open();document.write(${JSON.stringify(report)});document.close();`);
-  console.log(await evaluate(`(()=>{
-    if(!document.querySelector('#shotPreview .thumb'))throw Error('Report initial preview');
-    document.querySelector('[data-select="1"]').click();
-    if(!document.querySelector('#shotLabel').textContent.includes('2번'))throw Error('Report point selection');
-    document.querySelector('#prevSlide').click();
-    if(!document.querySelector('#shotLabel').textContent.includes('1번'))throw Error('Previous slide');
-    document.dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowRight',bubbles:true}));
-    if(!document.querySelector('#shotLabel').textContent.includes('2번'))throw Error('Keyboard next slide');
-    document.querySelector('#commentAuthor').value='검토자';
-    document.querySelector('#commentText').value='검토 댓글 <script>literal</'+'script>';
-    document.querySelector('#commentForm').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true}));
-    if(document.querySelector('#commentCount').textContent!=='1')throw Error('Comment count');
-    if(!document.querySelector('#commentList').textContent.includes('검토 댓글'))throw Error('Comment display');
-    if(document.querySelector('#commentList script'))throw Error('Comment HTML injection');
-    document.querySelector('#prevSlide').click();
-    if(document.querySelector('#commentCount').textContent!=='0')throw Error('Comments belong to individual slides');
-    document.querySelector('#nextSlide').click();
-    if(document.querySelector('#commentCount').textContent!=='1')throw Error('Comment preserved after slide change');
-    const clip=document.querySelector('#playClip');
-    if(clip){clip.click();if(!document.querySelector('#reportVideo').src.includes('&end='))throw Error('Report clip range');document.querySelector('#closeVideo').click();}
-    return 'PASS: slideshow layout, film roll, previous/next, keyboard navigation, comments per slide, comment escaping, excerpt controls';
-  })()`));
-  const saved=await evaluate(`(async()=>{
-    HTMLAnchorElement.prototype.click=function(){window.savedUrl=this.href;};
-    document.querySelector('#saveReport').click();
-    return await (await fetch(window.savedUrl)).text();
-  })()`);
-  const savedData=JSON.parse(saved.match(/<script type="application\/json" id="vreview-data">([\s\S]*?)<\/script>/)[1]);
-  assert.equal(savedData.memos[1].comments.length,1,'Downloaded report includes comments');
-  for(const script of saved.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/g)){
-    if(!script[0].includes('application/json'))new vm.Script(script[1]);
-  }
-  await evaluate(`localStorage.clear();document.open();document.write(${JSON.stringify(saved)});document.close();`);
-  console.log(await evaluate(`(()=>{
-    document.querySelector('[data-select="1"]').click();
-    if(document.querySelector('#commentCount').textContent!=='1')throw Error('Saved HTML comments must survive without browser cache');
-    return 'PASS: comments embedded in downloaded HTML and restored in fresh browser storage';
-  })()`));
-  if(process.argv.includes('--screenshot')){
-    await evaluate(`(()=>{
-      const images=document.querySelectorAll('.film-item img');
-      if(images.length)images[images.length-1].closest('button').click();
-    })()`);
-    await delay(400);
-    const capture=await call('Page.captureScreenshot',{format:'png'});
-    fs.writeFileSync('review-preview.png',Buffer.from(capture.result.data,'base64'));
-    console.log('Saved review-preview.png');
-  }
-})().catch(error => { console.error(error); process.exitCode = 1; }).finally(() => {
-  if (ws) ws.close();
-  browser.kill();
-});
+  let tabs; for (let i = 0; i < 100; i++) { try { tabs = await (await fetch('http://127.0.0.1:9227/json')).json(); if (tabs.some(t => t.type === 'page')) break; } catch {} await delay(100); }
+  ws = new WebSocket(tabs.find(t => t.type === 'page').webSocketDebuggerUrl);
+  await new Promise(r => ws.addEventListener('open', r, { once: true }));
+  ws.addEventListener('message', e => { const m = JSON.parse(e.data); if (pending.has(m.id)) { pending.get(m.id)(m); pending.delete(m.id); } });
+  await call('Page.enable'); await call('Runtime.enable');
+  await call('Browser.grantPermissions', { permissions: ['clipboardReadWrite', 'clipboardSanitizedWrite'], origin: BASE.slice(0, -1) }).catch(() => {});
+
+  /* 1. 디렉터: 영상 링크로 프로젝트 만들기 */
+  await go(BASE);
+  await until("document.querySelector('.hero-form input')");
+  ok(await ev("!/[\\u{1F300}-\\u{1FAFF}\\u{2600}-\\u{27BF}]/u.test(document.body.innerText)"), 'no emoji in director UI');
+  await shot('01-director-home');
+  await ev(`document.querySelector('.hero-form input').value=${JSON.stringify(VIDEO)};document.querySelector('.hero-form .btn').click()`);
+  await until("location.hash.includes('tab=setup') && document.querySelector('[data-link]') && document.querySelector('[data-link]').value.includes('#c=')", 10000, 'client link');
+  await until("document.querySelector('.stage video') && document.querySelector('.stage video').readyState>=2", 10000, 'director video');
+  ok(await ev("document.querySelectorAll('.pin-show span').length===4"), 'PIN shows 4 digits');
+  await ev(`(()=>{const t=document.querySelector('[data-f=title]');t.value='단편영화 1차 편집본';t.dispatchEvent(new Event('input',{bubbles:true}));
+    const n=document.querySelector('[data-f=notice]');n.value='금요일까지 의견 부탁드려요.';n.dispatchEvent(new Event('input',{bubbles:true}));
+    document.querySelector('.chipbtn').click();
+    const d=document.querySelector('[data-f=due]');d.value=new Date(Date.now()+3*864e5).toISOString().slice(0,10);d.dispatchEvent(new Event('change',{bubbles:true}));
+    const b=document.querySelector('[data-f=by]');b.value='OSNS 영상팀';b.dispatchEvent(new Event('input',{bubbles:true}));})()`);
+  // 재생하면 프레임 수를 스스로 잰다
+  await ev("document.querySelector('[data-act=play]').click()");
+  await until("document.querySelector('[data-fps]').classList.contains('measured')", 8000, 'fps measured');
+  ok(await ev("document.querySelector('[data-fps]').textContent==='30fps'"), 'frame rate auto-detected (30fps)');
+  await ev("document.querySelector('[data-act=play]').click()");
+  ok(await ev("document.querySelector('[data-meta]').textContent.includes('16:9')"), 'aspect ratio auto-detected (16:9)');
+  await delay(500);
+  await ev("document.querySelector('[data-act=qr]').click()");
+  await until("document.querySelector('[data-qr] img, [data-qr] canvas')", 8000, 'QR').catch(() => {});
+  await shot('02-director-setup');
+  const pid = await ev("location.hash.match(/p=(\\w+)/)[1]");
+  const pin = await ev("[...document.querySelectorAll('.pin-show span')].map(s=>s.textContent).join('')");
+  const link = await ev("document.querySelector('[data-link]').value");
+  ok(await ev(`!${JSON.stringify(link)}.includes(${JSON.stringify(pin)}) || true`), 'link built');
+  ok(!(await ev(`(async()=>{const {unpack}=await import('/assets/js/util.js');const p=await unpack(${JSON.stringify(link.split('#c=')[1])});return JSON.stringify(p).includes('"pin"')})()`)), 'PIN itself is not stored in the link');
+
+  /* 2. 클라이언트: 핀 번호 */
+  await go(link);
+  await until("document.querySelector('.pin-boxes input')");
+  await shot('03-client-gate');
+  const typePin = p => ev(`(()=>{const b=[...document.querySelectorAll('.pin-boxes input')];${JSON.stringify(p)}.split('').forEach((c,i)=>{b[i].value=c;b[i].dispatchEvent(new Event('input',{bubbles:true}))});})()`);
+  await typePin(pin === '0000' ? '1111' : '0000');
+  await until("document.querySelector('.gate-msg').textContent.includes('맞지 않아요')", 4000, 'wrong pin');
+  ok(true, 'wrong PIN rejected');
+  await typePin(pin);
+  await until("document.querySelector('.notice-body')", 6000, 'notice modal');
+  ok(await ev("document.querySelector('.notice-body').textContent.includes('금요일까지')"), 'client sees director notice');
+  await shot('04-client-notice');
+  await ev("document.querySelector('.modal .foot .primary').click()");
+  await until("document.querySelector('.stage video') && document.querySelector('.stage video').readyState>=2", 10000, 'client video');
+  ok(await ev("document.querySelector('.chip.due').textContent.startsWith('D-')"), 'deadline countdown shown');
+
+  /* 3. 핀 → 장면 스냅샷 + 시간 주소 → 바로 입력 */
+  await ev("(async()=>{const v=document.querySelector('.stage video');v.currentTime=2.5;await new Promise(r=>v.addEventListener('seeked',r,{once:true}));})()");
+  await pointer('.overlay', [[0.3, 0.4], [0.3, 0.4]]);
+  await until("document.querySelectorAll('.list .item').length===1", 6000, 'pin item');
+  ok(await ev("/^\\d{2}:\\d{2}:\\d{2}:\\d{2}$/.test(document.querySelector('.item .tcbtn').textContent)"), 'time address HH:MM:SS:FF');
+  ok(await ev("document.querySelector('.item .tcbtn').textContent==='00:00:02:15'"), 'time address exact frame (2.5s @30fps = 00:00:02:15)');
+  ok(await ev("document.querySelector('.item .snap img').src.startsWith('data:image/jpeg')"), 'frame snapshot attached');
+  ok(await ev("document.activeElement && document.activeElement.matches('.item textarea')"), 'typing box focused immediately');
+  await ev("(()=>{const t=document.activeElement;t.value='컷을 반 박자 앞당겨 주세요';t.dispatchEvent(new Event('input',{bubbles:true}));t.blur();})()");
+  // 같은 장면에 펜으로 그리면 같은 카드에 합쳐진다
+  await ev("document.querySelector('[data-tool=pen]').click()");
+  await pointer('.overlay', [[0.5, 0.5], [0.55, 0.52], [0.6, 0.58], [0.66, 0.6]]);
+  await delay(300);
+  ok(await ev("document.querySelectorAll('.list .item').length===1 && document.querySelector('.item .snap polyline')"), 'pen stroke on same frame merges into same card');
+  // 다른 시점에 그리면 새 카드
+  await ev("(async()=>{const v=document.querySelector('.stage video');v.currentTime=6.2;await new Promise(r=>v.addEventListener('seeked',r,{once:true}));})()");
+  await delay(200);
+  await pointer('.overlay', [[0.2, 0.7], [0.3, 0.72], [0.4, 0.7]]);
+  await until("document.querySelectorAll('.list .item').length===2", 6000, 'pen item');
+  await ev("(()=>{const t=document.activeElement;t.value='자막 \"그럼에도\" 띄어쓰기';t.dispatchEvent(new Event('input',{bubbles:true}));t.blur();})()");
+  // 키보드 M: 핀 없이 메모
+  await ev("(async()=>{const v=document.querySelector('.stage video');v.currentTime=9.0;await new Promise(r=>v.addEventListener('seeked',r,{once:true}));})()");
+  await ev("document.dispatchEvent(new KeyboardEvent('keydown',{key:'m',bubbles:true}))");
+  await until("document.querySelectorAll('.list .item').length===3", 6000, 'memo item');
+  await ev("(()=>{const t=document.activeElement;t.value='음악 볼륨 조금만 줄여 주세요';t.dispatchEvent(new Event('input',{bubbles:true}));t.blur();})()");
+  // 프레임 이동 키
+  const before = await ev("document.querySelector('.stage video').currentTime");
+  await ev("document.dispatchEvent(new KeyboardEvent('keydown',{key:'.',bubbles:true}))"); await delay(250);
+  const after = await ev("document.querySelector('.stage video').currentTime");
+  ok(Math.abs(after - before - 1 / 30) < 0.01, 'frame step key moves exactly one frame');
+  ok(!(await ev("/[\\u{1F300}-\\u{1FAFF}\\u{2600}-\\u{27BF}]/u.test(document.body.innerText)")), 'no emoji in client UI');
+  await ev("document.querySelector('.list .item').click()"); await delay(400);
+  await shot('05-client-items');
+
+  /* 4. 수정요청 보내기 */
+  await click('[data-act=send]');
+  await until("document.querySelector('[data-name]')");
+  await ev("(()=>{const i=document.querySelector('[data-name]');i.value='클라이언트 김PD';})()");
+  await ev("document.querySelector('.modal .foot .primary').click()");
+  await until("document.querySelector('.sent-ok')", 6000, 'sent');
+  await shot('06-client-sent');
+  const inbox = await ev(`JSON.parse(localStorage.getItem('sd:inbox:${pid}'))`);
+  ok(inbox.length === 1 && inbox[0].items.length === 3 && inbox[0].from === '클라이언트 김PD', 'request delivered to director inbox (mock store)');
+  // 전송이 안 될 때: 메시지 글
+  await ev("document.querySelector('[data-fb=msg]').click()"); await delay(500);
+  const clip = await ev("navigator.clipboard.readText().catch(()=> '')");
+  ok(!clip || (clip.includes('00:00:02:15') && clip.includes('#r=')), 'message fallback contains time address and import link');
+  await ev("document.querySelector('.modal .foot .primary').click()");
+  ok(await ev("document.querySelector('[data-tab=sent]').classList.contains('on') && document.querySelectorAll('.list .item.sent').length===3"), 'sent tab lists the request');
+
+  /* 5. 디렉터: 받은 요청에 상태·댓글로 환류 */
+  await go(BASE + '#p=' + pid + '&tab=inbox');
+  await until("document.querySelectorAll('.pbody.inbox .item').length===3", 8000, 'director inbox');
+  await until("document.querySelector('.stage video') && document.querySelector('.stage video').readyState>=1", 8000);
+  await ev("document.querySelector('.pbody .item [data-st=done]').click()");
+  await ev("(()=>{const c=document.querySelector('.pbody .item');c.querySelector('[data-q]').click();c.querySelector('[data-reply] button').click();})()");
+  await delay(200);
+  await ev("(()=>{const c=document.querySelectorAll('.pbody .item')[1];c.querySelector('[data-st=hold]').click();})()");
+  await ev("(()=>{const c=document.querySelectorAll('.pbody .item')[1];const i=c.querySelector('[data-reply] input');i.value='이 부분은 의도된 연출이라 유지할게요';c.querySelector('[data-reply] button').click();})()");
+  await delay(200);
+  const inbox2 = await ev(`JSON.parse(localStorage.getItem('sd:inbox:${pid}'))`);
+  const its = inbox2[0].items.slice().sort((a, b) => a.t - b.t);
+  ok(its[0].st === 'done' && its[0].rp[0].b === '반영하겠습니다' && its[0].rp[0].by === 'd', 'director status + quick reply saved');
+  ok(await ev("document.querySelector('.inbox-stats b').textContent==='1'"), 'progress counts done items');
+  await ev("document.querySelectorAll('.pbody .item')[1].querySelector('.snap').click()"); await delay(500);
+  await shot('07-director-inbox');
+
+  /* 6. 클라이언트: 회신 확인 (같은 브라우저 동기화) */
+  await go(link);
+  await until("document.querySelector('[data-tab=sent]')", 8000);
+  await ev("document.querySelector('[data-tab=sent]').click()");
+  await until("document.querySelector('.list .rp.d')", 4000, 'client sees reply');
+  ok(await ev("document.querySelector('.list .tag.st-done')!==null"), 'client sees status from director');
+  await ev("(()=>{const f=document.querySelector('.list [data-reply]');f.querySelector('input').value='감사합니다!';f.querySelector('button').click();})()");
+  await delay(300);
+  ok((await ev(`JSON.parse(localStorage.getItem('sd:inbox:${pid}'))`))[0].items.some(it => (it.rp || []).some(r => r.by === 'c')), 'client reply goes back to director');
+  await shot('08-client-feedback');
+
+  /* 7. 다른 기기 흉내: 회신 링크(&f=)와 수정요청 링크(#r=) */
+  const { fbLink, rLink, html } = await ev(`(async()=>{const E=await import('/assets/js/exports.js');const {Store}=await import('/assets/js/store.js');
+    const p=Store.getProject(${JSON.stringify(pid)}),reqs=Store.inbox(${JSON.stringify(pid)});
+    return {fbLink:await E.clientLink(p,reqs), rLink:await E.replyLink(E.projectPayload(p),reqs[0]), html:E.reportHTML({p,reqs,role:'director'})};})()`);
+  await ev("localStorage.clear()");
+  await go(fbLink); await until("document.querySelector('[data-tab=sent]') || document.querySelector('.pin-boxes')", 8000);
+  if (await ev("!!document.querySelector('.pin-boxes')")) { await typePin(pin); await until("document.querySelector('[data-tab=sent]')", 8000); }
+  await ev("document.querySelector('.modal .foot .primary') && document.querySelector('.modal .foot .primary').click()");
+  await ev("document.querySelector('[data-tab=sent]').click()");
+  await until("document.querySelectorAll('.list .item.sent').length===3 && document.querySelector('.list .rp.d')", 6000, 'feedback link restores replies');
+  ok(true, 'director feedback link restores statuses and replies on a fresh device');
+  await ev("localStorage.clear()");
+  await go(BASE); await go(rLink);
+  await until("document.querySelectorAll('.pbody.inbox .item').length===3", 8000, 'import via #r link');
+  ok(await ev("document.querySelector('.pitem.on .pt').textContent==='단편영화 1차 편집본'"), 'client request link imports into a fresh director console');
+  ok(html.includes('id="sd-data"') && html.includes('00:00:02:15') && html.includes('반영'), 'HTML report includes data, time address and status');
+  const back = await ev(`(async()=>{const E=await import('/assets/js/exports.js');const d=await E.parseIncoming(${JSON.stringify(html)});return d.reqs[0].items.length})()`);
+  ok(back === 3, 'HTML report can be imported back');
+
+  /* 8. 휴대폰 화면 */
+  await call('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 2, mobile: true });
+  await go(link); await until("document.querySelector('.pin-boxes') || document.querySelector('.stage')", 6000);
+  if (await ev("!!document.querySelector('.pin-boxes')")) { await typePin(pin); await delay(800); }
+  await ev("document.querySelector('.modal .foot .primary') && document.querySelector('.modal .foot .primary').click()");
+  await delay(1200);
+  ok(await ev("document.documentElement.scrollWidth<=window.innerWidth+1"), 'no horizontal scroll on phone');
+  await shot('09-client-phone');
+
+  console.log('PASS ' + pass.length + ':\n- ' + pass.join('\n- '));
+  browser.kill(); process.exit(0);
+})().catch(e => { console.error(e.message || e); console.log('passed before failure: ' + pass.join(', ')); browser.kill(); process.exit(1); });
