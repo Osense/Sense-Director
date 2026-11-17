@@ -3,6 +3,7 @@ import { $, $$, ic, esc, uid, tc, sha, modal, toast, dueLabel, fmtDate, copyText
 import { Store, MODE } from './store.js';
 import { mountViewer, snapHTML, posterOf } from './viewer.js';
 import { openZoom } from './zoom.js';
+import { splitter, workspaceSplitters } from './layout.js';
 import { probe } from './player.js';
 import { putMedia, fmtSize } from './media.js';
 import { clientLink, feedbackMessage, reportHTML, printHTML, shareFile, parseIncoming, STATUS, noteLabel } from './exports.js';
@@ -58,8 +59,10 @@ export async function renderDirector(app, params) {
           ${open ? `<i class="badge" title="확인 안 한 요청">${open}</i>` : ''}</a>`;
       }).join('') || '<div class="plist-empty">아직 프로젝트가 없어요</div>'}
     </nav>
+    <div class="splitter col plist-split" aria-label="프로젝트 목록 너비 조정"></div>
     <section class="pmain" data-main></section>
   </div>`;
+  splitter($('.plist-split', app), { container: $('.console', app), cssVar: '--plist', key: 'plist', axis: 'x', after: false, def: 230, min: 150, max: 420 });
   $('[data-act=new]', app).addEventListener('click', () => startNew());
   $('[data-act=import]', app).addEventListener('click', () => importDialog());
   const main = $('[data-main]', app);
@@ -169,8 +172,10 @@ function renderProject(main, p, tab) {
     </div>
     <div class="pbody ${tab}">
       <section class="left" data-viewer></section>
+    <div class="splitter row" aria-label="영상 높이 조정"></div><div class="splitter col" aria-label="수정내역 칸 너비 조정"></div>
       <aside class="side" data-side></aside>
     </div>`;
+  workspaceSplitters(main, 'director-' + tab);
   $$('[data-tab]', main).forEach(b => b.addEventListener('click', () => { location.hash = '#p=' + p.id + '&tab=' + b.dataset.tab; }));
   $('[data-f=title]', main).addEventListener('input', e => { p.title = e.target.value; Store.saveProject(p); const pt = $('.pitem.on .pt'); if (pt) pt.textContent = p.title || '제목 없음'; queueLink(); });
 
@@ -415,7 +420,7 @@ function renderInbox(side, p, getSel, setSel, hooks, initialPane) {
     return `<article class="item${sel ? ' sel' : ''} st-${st}" data-id="${it.id}" data-rid="${r.rid}">
       <div class="item-head"><span class="no">${n}</span><button class="tcbtn" data-seek title="이 시점으로">${tc(it.t, fps)}</button>
         <button class="icon-x" data-loop title="앞뒤 2초 반복 재생" aria-label="앞뒤 재생">${ic('loop', 15)}</button></div>
-      <div data-zoom role="button" tabindex="0" aria-label="${n}번 크게 보기">${snapHTML(it, n, p.ar || [16, 9], poster)}</div>
+      <div data-snapseek role="button" tabindex="0" aria-label="${n}번 장면으로 이동">${snapHTML(it, n, p.ar || [16, 9], poster, undefined, { full: true })}</div>
       <p class="tx">${esc(it.tx || '(내용 없음)')}</p>
       ${statusSeg(st)}
       ${threadHTML(it, r.from)}
@@ -427,7 +432,7 @@ function renderInbox(side, p, getSel, setSel, hooks, initialPane) {
     return `<article class="item note${sel ? ' sel' : ''}" data-id="${it.id}" data-note>
       <div class="item-head"><span class="no d">${n}</span><button class="tcbtn" data-seek title="이 시점으로">${tc(it.t, fps)}</button><span class="kind">${kind}</span>
         <button class="icon-x" data-ndel aria-label="안내 삭제" title="삭제">${ic('trash', 15)}</button></div>
-      <div data-zoom role="button" tabindex="0" aria-label="${n} 크게 보기">${snapHTML(it, n, p.ar || [16, 9], poster, V && V.needsShare() ? '장면 사진 없음 — 위 버튼으로 만들 수 있어요' : '장면 사진 없음')}</div>
+      <div data-snapseek role="button" tabindex="0" aria-label="${n} 장면으로 이동">${snapHTML(it, n, p.ar || [16, 9], poster, V && V.needsShare() ? '장면 사진 없음 — 위 버튼으로 만들 수 있어요' : '장면 사진 없음', { full: true })}</div>
       <textarea rows="2" placeholder="클라이언트에게 남길 안내를 적어 주세요" data-ntx>${esc(it.tx || '')}</textarea>
       ${(it.rp || []).length ? threadHTML(it, '클라이언트', true) : ''}
     </article>`;
@@ -488,7 +493,8 @@ function renderInbox(side, p, getSel, setSel, hooks, initialPane) {
       onClose: it => { if (it && V) { setSel(it.id); if (it.by === 'd') activeNote = it.id; V.P.pause(); V.P.seek(it.t); if (it.th) V.P.showFreeze(it.th, it.t); draw(); } },
     });
   }
-  side.addEventListener('keydown', e => { if ((e.key === 'Enter' || e.key === ' ') && e.target.matches('[data-zoom]')) { e.preventDefault(); zoom(e.target.closest('.item').dataset.id); } });
+  // 썸네일 = 그 프레임으로 이동, 오른쪽 아래 버튼 = 전체화면으로 장면·수정사항 보기
+  side.addEventListener('keydown', e => { if ((e.key === 'Enter' || e.key === ' ') && e.target.matches('[data-snapseek]')) { e.preventDefault(); e.target.click(); } });
   side.addEventListener('input', e => {
     const ta = e.target.closest('[data-ntx]'); if (!ta) return;
     const n = noteOf(ta.closest('.item').dataset.id); if (!n) return;
@@ -520,9 +526,9 @@ function renderInbox(side, p, getSel, setSel, hooks, initialPane) {
     if (q) { const inp = $('[data-reply] input', cardEl); inp.value = q.textContent; inp.focus(); return; }
     if (e.target.closest('[data-loop]')) { setSel(id); V && V.loopAround(it.t); draw(); return; }
     if (e.target.closest('form,input,textarea')) { if (isNote) activeNote = id; return; }
-    if (e.target.closest('[data-zoom]')) { zoom(id); return; }
+    if (e.target.closest('[data-full]')) { zoom(id); return; }
     setSel(id); if (isNote) activeNote = id;
-    if (V) { V.P.pause(); V.P.seek(it.t); if (it.th) V.P.showFreeze(it.th, it.t); }
+    if (V) { V.P.pause(); V.P.seek(it.t); if (it.th) V.P.showFreeze(it.th, it.t); const st = V.P.stage.getBoundingClientRect(); if (st.bottom < 0 || st.top > innerHeight) V.P.stage.scrollIntoView({ block: 'start', behavior: 'smooth' }); }
     $$('.item', side).forEach(c => c.classList.toggle('sel', c.dataset.id === id)); V && V.render();
   });
   side.addEventListener('submit', e => {

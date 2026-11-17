@@ -87,7 +87,7 @@ const pointer = (sel, pts) => ev(`(async()=>{const el=document.querySelector(${J
   ok(await ev("document.activeElement && document.activeElement.matches('.item textarea')"), 'typing box focused immediately');
   await ev("(()=>{const t=document.activeElement;t.value='컷을 반 박자 앞당겨 주세요';t.dispatchEvent(new Event('input',{bubbles:true}));t.blur();})()");
   // 같은 장면에 펜으로 그리면 같은 카드에 합쳐진다
-  await ev("document.querySelector('[data-tool=pen]').click()");
+  await ev("document.querySelector('.toolbar [data-tool=pen]').click()");
   await pointer('.overlay', [[0.5, 0.5], [0.55, 0.52], [0.6, 0.58], [0.66, 0.6]]);
   await delay(300);
   ok(await ev("document.querySelectorAll('.list .item').length===1 && document.querySelector('.item .snap polyline')"), 'pen stroke on same frame merges into same card');
@@ -102,6 +102,11 @@ const pointer = (sel, pts) => ev(`(async()=>{const el=document.querySelector(${J
   await ev("document.dispatchEvent(new KeyboardEvent('keydown',{key:'m',bubbles:true}))");
   await until("document.querySelectorAll('.list .item').length===3", 6000, 'memo item');
   await ev("(()=>{const t=document.activeElement;t.value='음악 볼륨 조금만 줄여 주세요';t.dispatchEvent(new Event('input',{bubbles:true}));t.blur();})()");
+  // 손 도구: 플레이어 자체 컨트롤을 켜고 클릭을 플레이어로 넘긴다
+  await ev("document.querySelector('.toolbar [data-tool=hand]').click()"); await delay(300);
+  ok(await ev("document.querySelector('.stage video').controls===true && getComputedStyle(document.querySelector('.overlay')).pointerEvents==='none'"), 'hand tool: native player controls on, clicks pass through');
+  await ev("document.dispatchEvent(new KeyboardEvent('keydown',{key:'p',bubbles:true}))"); await delay(300);
+  ok(await ev("document.querySelector('.stage video').controls===false && document.querySelector('.toolbar [data-tool=pin]').classList.contains('on')"), 'back to pin: clean screen again');
   // 프레임 이동 키
   const before = await ev("document.querySelector('.stage video').currentTime");
   await ev("document.dispatchEvent(new KeyboardEvent('keydown',{key:'.',bubbles:true}))"); await delay(250);
@@ -159,7 +164,30 @@ const pointer = (sel, pts) => ev(`(async()=>{const el=document.querySelector(${J
   ok(its[0].st === 'done' && its[0].rp[0].b === '반영하겠습니다' && its[0].rp[0].by === 'd', 'director status + quick reply saved');
   ok(await ev("document.querySelector('.inbox-stats b').textContent==='1'"), 'progress counts done items');
   await shot('07-director-inbox');
-  await ev("document.querySelectorAll('.pbody .item')[1].querySelector('[data-zoom]').click()");
+  // 썸네일을 누르면 그 장면으로 이동 (전체화면은 열리지 않음)
+  const it2t = (await ev(`JSON.parse(localStorage.getItem('sd:inbox:${pid}'))`))[0].items.slice().sort((a, b) => a.t - b.t)[1].t;
+  await ev("document.querySelectorAll('.pbody .item')[1].querySelector('[data-snapseek] .snap').click()"); await delay(500);
+  ok(!(await ev("!!document.querySelector('.zoom')")) && Math.abs(await ev("document.querySelector('.stage video').currentTime") - it2t) < 0.05, 'director: thumbnail click jumps to that frame');
+  ok(await ev("!!document.querySelector('.pbody .item [data-snapseek] .snap-full')"), 'director: full-screen button on thumbnail corner');
+  // 경계선을 끌어 수정내역 칸 넓히기
+  const sw0 = await ev("document.querySelector('.pbody .side').getBoundingClientRect().width");
+  await ev(`(()=>{const s=document.querySelector('.pbody .splitter.col'),r=s.getBoundingClientRect(),x=r.left+r.width/2,y=r.top+200;
+    s.dispatchEvent(new PointerEvent('pointerdown',{pointerId:7,button:0,clientX:x,clientY:y,bubbles:true}));
+    window.dispatchEvent(new PointerEvent('pointermove',{pointerId:7,clientX:x-120,clientY:y,bubbles:true}));
+    window.dispatchEvent(new PointerEvent('pointerup',{pointerId:7,clientX:x-120,clientY:y,bubbles:true}));})()`);
+  await delay(200);
+  const sw1 = await ev("document.querySelector('.pbody .side').getBoundingClientRect().width");
+  ok(Math.abs(sw1 - sw0 - 120) < 4, 'drag divider: revision panel widens by the dragged amount');
+  await ev(`(()=>{const s=document.querySelector('.plist-split'),r=s.getBoundingClientRect(),x=r.left+r.width/2,y=r.top+100;
+    s.dispatchEvent(new PointerEvent('pointerdown',{pointerId:8,button:0,clientX:x,clientY:y,bubbles:true}));
+    window.dispatchEvent(new PointerEvent('pointermove',{pointerId:8,clientX:x+60,clientY:y,bubbles:true}));
+    window.dispatchEvent(new PointerEvent('pointerup',{pointerId:8,clientX:x+60,clientY:y,bubbles:true}));})()`);
+  await delay(200);
+  ok(Math.abs(await ev("document.querySelector('.plist').getBoundingClientRect().width") - 290) < 4, 'drag divider: project list resizes');
+  await go(BASE + '#p=' + pid + '&tab=inbox'); await until("document.querySelectorAll('.pbody.inbox .item').length===3", 8000);
+  ok(Math.abs(await ev("document.querySelector('.pbody .side').getBoundingClientRect().width") - sw1) < 4, 'divider sizes are remembered');
+  await until("document.querySelector('.stage video') && document.querySelector('.stage video').readyState>=1", 8000);
+  await ev("document.querySelectorAll('.pbody .item')[1].querySelector('[data-full]').click()");
   await until("document.querySelector('.zoom.on')", 3000, 'director zoom'); await delay(400);
   await ev("document.querySelector('.zoom-side [data-st=doing]').click()"); await delay(150);
   await ev("(()=>{const s=document.querySelector('.zoom-side');s.querySelector('[data-reply] input').value='색감은 다음 버전에서 다시 볼게요';s.querySelector('[data-reply] button').click();})()"); await delay(200);
@@ -311,6 +339,15 @@ const pointer = (sel, pts) => ev(`(async()=>{const el=document.querySelector(${J
     await pointer('.overlay', [[0.4, 0.4], [0.4, 0.4]]);
     await until("document.querySelectorAll('.list .item').length===1", 6000, 'yt pin item');
     ok(!(await ev("!!document.querySelector('.modal')")), 'YouTube: no screen-share prompt while working');
+    const t1 = await ev("document.querySelector('[data-tc]').textContent");
+    await ev("document.querySelector('.toolbar [data-tool=hand]').click()");
+    await until("!document.querySelector('.stage.switching') && document.querySelector('.stage iframe') && /controls=1/.test(document.querySelector('.stage iframe').src)", 15000, 'youtube native controls');
+    ok(true, 'YouTube: hand tool reloads player with its own controls (quality/captions menu)');
+    await delay(800);
+    ok(await ev(`Math.abs((()=>{const [h,m,s,f]=document.querySelector('[data-tc]').textContent.split(':').map(Number);return h*3600+m*60+s+f/30})() - (()=>{const [h,m,s,f]=${JSON.stringify(t1)}.split(':').map(Number);return h*3600+m*60+s+f/30})()) < 1.5`), 'YouTube: position kept across player switch');
+    await ev("document.querySelector('.toolbar [data-tool=pin]').click()");
+    await until("!document.querySelector('.stage.switching') && document.querySelector('.stage iframe') && /controls=0/.test(document.querySelector('.stage iframe').src)", 15000, 'youtube clean player');
+    ok(true, 'YouTube: back to pin restores the clean player');
     ok(await ev("document.querySelector('.item .nosnap').textContent.includes('보낼 때')"), 'YouTube: card says snapshot will be made at send');
     await ev("(()=>{const t=document.activeElement;t.value='여기 색 보정';t.dispatchEvent(new Event('input',{bubbles:true}));t.blur();})()");
     await ev("document.querySelector('.stage iframe') && 0"); 

@@ -3,6 +3,7 @@ import { $, $$, ic, esc, uid, tc, sha, unpack, modal, toast, dueLabel, fmtDate, 
 import { Store, MODE } from './store.js';
 import { mountViewer, snapHTML, posterOf } from './viewer.js';
 import { openZoom } from './zoom.js';
+import { workspaceSplitters } from './layout.js';
 import { replyLink, requestMessage, reportHTML, printHTML, shareFile, STATUS } from './exports.js';
 
 export async function renderClient(app, params) {
@@ -45,6 +46,7 @@ export async function renderClient(app, params) {
   </header>
   <main class="workspace">
     <section class="left" data-viewer></section>
+    <div class="splitter row" aria-label="영상 높이 조정"></div><div class="splitter col" aria-label="수정내역 칸 너비 조정"></div>
     <aside class="side">
       <div class="side-tabs" role="tablist">
         <button role="tab" data-tab="notes" hidden>디렉터 안내 <b class="d" data-n="notes">0</b></button>
@@ -56,6 +58,7 @@ export async function renderClient(app, params) {
     </aside>
   </main>`;
 
+  workspaceSplitters(app, 'client');
   let tab = 'draft', selected = null, activeId = null;
   const allItems = () => [...state.sent.flatMap(r => r.items.map(it => ({ ...it, _sent: r.rid }))), ...state.draft].sort((a, b) => a.t - b.t);
   const numOf = id => allItems().findIndex(it => it.id === id) + 1;
@@ -171,7 +174,7 @@ export async function renderClient(app, params) {
         <b>고칠 곳을 화면에서 눌러 주세요</b>
         <span>${ic('pin', 14)} 핀: 누른 자리에 표시 · ${ic('pen', 14)} 펜: 그려서 표시</span>
         <span>장면과 시간 주소(시:분:초:프레임)가 여기에 붙고, 바로 내용을 적을 수 있어요.</span>
-        <span class="keys">Space 재생 · , . 한 프레임 · ← → 1초 · P 핀 · D 펜 · M 메모</span></div>`;
+        <span class="keys">Space 재생 · , . 한 프레임 · ← → 1초 · P 핀 · D 펜 · H 손 · M 메모</span></div>`;
     } else {
       list.innerHTML = state.sent.length ? state.sent.slice().reverse().map(r => `<div class="group"><div class="group-head">${fmtDate(r.at)} · ${r.items.length}건 보냄${r.from ? ' · ' + esc(r.from) : ''}</div>${r.items.map(it => itemCard({ ...it, _sent: r.rid })).join('')}</div>`).join('')
         : '<div class="empty"><b>아직 보낸 요청이 없어요</b><span>작성을 마치면 오른쪽 위 "수정요청 보내기"를 눌러 주세요.</span></div>';
@@ -364,9 +367,10 @@ export async function renderClient(app, params) {
       body: `<ol class="steps"><li><b>찾기</b>재생하다가 고칠 장면에서 멈춰요. <kbd>,</kbd> <kbd>.</kbd>로 한 프레임씩 맞출 수 있어요.</li>
       <li><b>표시</b>핀(P)으로 누르거나 펜(D)으로 그려요. 시간 주소가 오른쪽에 붙고, 장면 사진은 보낼 때 한 번에 만들어져요.</li>
       <li><b>적기</b>붙은 카드에 바로 내용을 적어요. 펜으로 이어 그린 획은 같은 카드에 합쳐져요.</li>
+      <li><b>조작</b>손(H) 도구를 고르면 유튜브·비메오 플레이어를 직접 눌러 화질·자막·볼륨을 바꿀 수 있어요. 핀·펜으로 돌아오면 깨끗한 화면이 돼요.</li>
       <li><b>보내기</b>오른쪽 위 "수정요청 보내기". 안 되면 옆 화살표에서 메시지·HTML·PDF로 보내요.</li>
       <li><b>회신</b>디렉터가 단 댓글과 반영 상태는 "보낸 요청"에서 볼 수 있어요.</li></ol>
-      <div class="keys-grid"><kbd>Space</kbd><span>재생/정지</span><kbd>, .</kbd><span>1프레임</span><kbd>← →</kbd><span>1초 (Shift 5초)</span><kbd>J L</kbd><span>5초</span><kbd>P D M</kbd><span>핀 · 펜 · 메모만</span><kbd>Esc</kbd><span>입력 끝내기</span></div>
+      <div class="keys-grid"><kbd>Space</kbd><span>재생/정지</span><kbd>, .</kbd><span>1프레임</span><kbd>← →</kbd><span>1초 (Shift 5초)</span><kbd>J L</kbd><span>5초</span><kbd>P D H M</kbd><span>핀 · 펜 · 손 · 메모만</span><kbd>Esc</kbd><span>입력 끝내기</span></div>
       <p class="note dim">시간 주소는 시:분:초:프레임이에요. 프레임 수(${esc(P.fps ? fpsLabel(P.fps) : '재생하면 자동 측정')})는 영상에 맞춰 자동으로 정해져요.</p>`,
       actions: [{ label: '닫기', kind: 'primary' }],
     });

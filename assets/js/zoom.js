@@ -2,6 +2,7 @@
    확대(휠·두 번 누르기·두 손가락)·이동(끌기)·앞뒤 넘기기(화살표·스와이프)·옆에서 바로 편집 */
 import { $, ic, esc, tc, clamp } from './util.js';
 import { strokesSVG, pinHTML } from './viewer.js';
+import { splitter } from './layout.js';
 
 /**
  * openZoom({ items, index, ar, poster, fps, numOf, from, detail, wire, onSeek, onClose, emptyText })
@@ -35,11 +36,13 @@ export function openZoom(o) {
           <button class="btn small" data-z="fit" title="화면에 맞추기 (0)">맞추기</button>
         </div>
       </div>
+      <div class="splitter col" aria-label="수정사항 칸 너비 조정"></div>
       <aside class="zoom-side" data-side></aside>
     </div>`;
   document.body.appendChild(wrap);
   document.body.classList.add('zoom-open');
   const view = $('[data-view]', wrap), inner = $('[data-inner]', wrap), side = $('[data-side]', wrap);
+  splitter($('.splitter', wrap), { container: $('.zoom-body', wrap), cssVar: '--zside', key: 'zoom-side', axis: 'x', after: true, def: 380, min: 280, max: () => innerWidth - 360 });
   const items = () => o.items();
   const cur = () => items()[i];
 
@@ -155,7 +158,7 @@ export function openZoom(o) {
   const onKey = e => {
     if (document.querySelector('.modal.open')) return;
     if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); if (e.target.closest && e.target.closest('textarea,input')) { e.target.blur(); return; } close(); return; }
-    if (e.target.closest && e.target.closest('textarea,input,select')) return;
+    if (e.target.closest && e.target.closest('textarea,input,select,.splitter')) return;
     e.stopPropagation();
     if (e.key === 'ArrowLeft') { e.preventDefault(); go(-1); }
     else if (e.key === 'ArrowRight') { e.preventDefault(); go(1); }

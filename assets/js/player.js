@@ -113,7 +113,7 @@ function estimate(intervals) {
  * createPlayer(stage, src, hooks)
  * hooks: onReady({title,duration}), onState(playing), onMeta({ar,fps,fpsHow,title,poster}), onError(msg), onTime(t)
  */
-export function createPlayer(stage, src, hooks = {}) {
+export function createPlayer(stage, src, hooks = {}, startNative = false) {
   stage.innerHTML = '<div class="media"></div><img class="freeze" alt="" hidden><div class="overlay"></div>';
   const media = stage.querySelector('.media'), freeze = stage.querySelector('.freeze'), overlay = stage.querySelector('.overlay');
   const P = {
@@ -121,6 +121,7 @@ export function createPlayer(stage, src, hooks = {}) {
     // 준비 전 기본 동작
     time: () => 0, duration: () => 0, paused: () => true, play() {}, pause() {}, seek() {}, rate: () => 1, setRate() {}, setVolume() {},
     async snapshot() { return { t: 0, img: '' }; }, async grabAt() { return ''; }, live: () => false, destroy() { P.destroyed = true; },
+    native: () => false, async setNative() {},
     ready() { return this._ready; },
     contentRect() { return overlay.getBoundingClientRect(); },
     setMeta(m) {
@@ -140,7 +141,7 @@ export function createPlayer(stage, src, hooks = {}) {
       // 유튜브·비메오 플레이어는 영상 크기에 딱 맞춰 둔다(플레이어 자체 여백·흰 띠가 생기지 않게)
       if (this.kind === 'yt' || this.kind === 'vimeo') Object.assign(media.style, css, { right: 'auto', bottom: 'auto' });
     },
-    showFreeze(img, t) { freeze.src = img; freeze.dataset.t = t; freeze.hidden = false; },
+    showFreeze(img, t) { if (this.native()) return; freeze.src = img; freeze.dataset.t = t; freeze.hidden = false; },
     hideFreeze() { freeze.hidden = true; },
     effFps() { return this.fps || 30; },
     step(n) { this.pause(); this.seek(this.time() + n / this.effFps() + (n > 0 ? 0.0005 : -0.0005)); },
@@ -150,6 +151,7 @@ export function createPlayer(stage, src, hooks = {}) {
   P.layout();
   probe(src).then(m => { if (!P.destroyed) P.setMeta({ ar: src.k === 'yt' || src.k === 'vimeo' ? m.ar : null, fps: m.fps, how: m.fps ? 'title' : '', title: m.title, poster: m.poster }); });
 
+  P._startNative = startNative;
   if (src.k === 'url') initVideo(P, media, src.url, hooks);
   else if (src.k === 'file') initFile(P, media, src, hooks);
   else if (src.k === 'vimeo') initVimeo(P, media, src, hooks);
@@ -184,7 +186,7 @@ async function initFile(P, media, src, hooks) {
 function initVideo(P, media, url, hooks) {
   media.innerHTML = '';
   const v = document.createElement('video');
-  v.playsInline = true; v.preload = 'auto'; if (!url.startsWith('blob:')) v.crossOrigin = 'anonymous'; v.src = url;
+  v.playsInline = true; v.preload = 'auto'; v.controls = !!P._startNative; if (!url.startsWith('blob:')) v.crossOrigin = 'anonymous'; v.src = url;
   media.appendChild(v);
   let retried = false;
   v.addEventListener('error', () => {
@@ -224,6 +226,8 @@ function initVideo(P, media, url, hooks) {
     seek(t) { v.currentTime = Math.max(0, Math.min(v.duration || t, t)); },
     rate: () => v.playbackRate, setRate(r) { v.playbackRate = r; },
     setVolume(x) { v.volume = x; },
+    native: () => v.controls,
+    async setNative(on) { v.controls = !!on; },
     live: () => true, // 화면 공유 없이 바로 장면 사진을 찍을 수 있다
     async snapshot() { if (!v.paused) v.pause(); return { t: v.currentTime, img: draw() }; },
     async grabAt(t) { v.pause(); await seekTo(t); return draw(); },
@@ -233,7 +237,7 @@ function initVideo(P, media, url, hooks) {
 
 /* ---------- 유튜브 ---------- */
 function initYouTube(P, media, src, hooks) {
-  let player = null, state = -1, dur = 0, wantPaused = false;
+  let player = null, state = -1, dur = 0, wantPaused = false, native = !!P._startNative, gen = 0;
   const playing = () => state === 1 || state === 3;
   const run = f => { try { return f(); } catch { return undefined; } };
   const waitState = async (ok, ms = 4000) => { for (let i = 0; i < ms / 40 && !ok(); i++) await sleep(40); return ok(); };
@@ -259,37 +263,85 @@ function initYouTube(P, media, src, hooks) {
       wantPaused = true; run(() => { player.pauseVideo(); player.setPlaybackRate(1); if (!muted) player.unMute(); });
       return img;
     },
+    /** 손 도구: 유튜브 자체 컨트롤(화질·자막·볼륨)을 켠 플레이어로 바꾼다. 위치·재생 상태·속도·자막을 이어받는다 */
+    native: () => native,
+    async setNative(on) {
+      if (on === native || !player) return;
+      const keep = {
+        t: P.time(), paused: P.paused(), rate: P.rate(), muted: run(() => player.isMuted()), vol: run(() => player.getVolume()),
+        quality: run(() => player.getPlaybackQuality()),
+        cc: run(() => { const tr = player.getOption('captions', 'track'); return tr && tr.languageCode ? tr : null; }),
+      };
+      native = on;
+      P.stage.classList.add('switching');
+      await build(keep);
+      P.stage.classList.remove('switching');
+    },
     destroy() { P.destroyed = true; run(() => player.destroy()); },
   });
-  loadYt().then(() => {
-    if (P.destroyed) return;
-    media.innerHTML = '<div class="ytframe"></div>';
-    player = new YT.Player(media.firstChild, {
-      width: '100%', height: '100%', videoId: src.id,
-      playerVars: { enablejsapi: 1, controls: 0, rel: 0, modestbranding: 1, playsinline: 1, disablekb: 1, fs: 0, iv_load_policy: 3, origin: location.origin },
-      events: {
-        onReady: e => { P._ready = true; dur = e.target.getDuration() || 0; const title = run(() => e.target.getVideoData().title) || ''; P.setMeta({ title }); hooks.onReady && hooks.onReady({ title, duration: dur }); },
-        onStateChange: e => { state = e.data; if (state === 1 && !P.stage.classList.contains('capturing')) P.hideFreeze(); if (!P.stage.classList.contains('capturing')) hooks.onState && hooks.onState(playing() && !wantPaused); },
-        onError: e => {
-          const c = e.data;
-          hooks.onError && hooks.onError(c === 100 ? '영상을 찾을 수 없어요. 삭제되거나 비공개로 바뀌었는지 확인해 주세요.'
-            : (c === 101 || c === 150) ? '이 영상은 다른 사이트에서 재생(퍼가기)이 막혀 있어요. 유튜브 스튜디오에서 "퍼가기 허용"을 켜 주세요.'
-              : c === 2 ? '링크 형식을 알아볼 수 없어요.' : '유튜브 재생 오류 (' + c + ')');
+  function build(keep) {
+    const my = ++gen;
+    return new Promise(resolve => {
+      run(() => player && player.destroy());
+      player = null; state = -1;
+      media.innerHTML = '<div class="ytframe"></div>';
+      const vars = { enablejsapi: 1, controls: native ? 1 : 0, rel: 0, modestbranding: 1, playsinline: 1, disablekb: native ? 0 : 1, fs: 0, iv_load_policy: 3, origin: location.origin };
+      if (keep && keep.cc) { vars.cc_load_policy = 1; vars.cc_lang_pref = keep.cc.languageCode; }
+      if (keep && keep.t > 1) vars.start = Math.floor(keep.t);
+      let restored = !keep;
+      const restore = () => {
+        if (restored) return; restored = true;
+        run(() => { player.seekTo(keep.t, true); player.setPlaybackRate(keep.rate || 1); if (keep.vol != null) player.setVolume(keep.vol); if (keep.quality) player.setPlaybackQuality(keep.quality); });
+        if (keep.cc) run(() => { player.loadModule('captions'); player.setOption('captions', 'track', { languageCode: keep.cc.languageCode }); });
+        if (keep.paused) { wantPaused = true; run(() => { player.pauseVideo(); if (!keep.muted) player.unMute(); }); }
+        else { wantPaused = false; run(() => { if (!keep.muted) player.unMute(); player.playVideo(); }); }
+        resolve();
+      };
+      player = new YT.Player(media.firstChild, {
+        width: '100%', height: '100%', videoId: src.id, playerVars: vars,
+        events: {
+          onReady: e => {
+            if (my !== gen) return;
+            P._ready = true; dur = e.target.getDuration() || 0;
+            if (keep) {
+              // 정지 상태였다면 그 장면이 화면에 나오도록 소리 없이 잠깐 재생한 뒤 멈춘다
+              if (keep.paused) { run(() => { player.mute(); player.seekTo(keep.t, true); player.playVideo(); }); setTimeout(restore, 2500); }
+              else restore();
+              return resolve && null;
+            }
+            const title = run(() => e.target.getVideoData().title) || '';
+            P.setMeta({ title }); hooks.onReady && hooks.onReady({ title, duration: dur }); resolve();
+          },
+          onStateChange: e => {
+            if (my !== gen) return;
+            state = e.data;
+            if (keep && !restored && keep.paused && state === 1) restore();
+            // 손 도구로 유튜브 버튼을 직접 눌러도 재생 상태를 따라간다
+            if (restored && !P.stage.classList.contains('capturing')) { if (state === 1) wantPaused = false; else if (state === 2 || state === 0) wantPaused = true; }
+            if (state === 1 && !P.stage.classList.contains('capturing')) P.hideFreeze();
+            if (!P.stage.classList.contains('capturing') && restored) hooks.onState && hooks.onState(playing() && !wantPaused);
+          },
+          onError: e => {
+            const c = e.data;
+            hooks.onError && hooks.onError(c === 100 ? '영상을 찾을 수 없어요. 삭제되거나 비공개로 바뀌었는지 확인해 주세요.'
+              : (c === 101 || c === 150) ? '이 영상은 다른 사이트에서 재생(퍼가기)이 막혀 있어요. 유튜브 스튜디오에서 "퍼가기 허용"을 켜 주세요.'
+                : c === 2 ? '링크 형식을 알아볼 수 없어요.' : '유튜브 재생 오류 (' + c + ')');
+            resolve();
+          },
         },
-      },
+      });
+      setTimeout(resolve, 8000);
     });
-  }).catch(() => hooks.onError && hooks.onError('유튜브 플레이어를 불러오지 못했어요. 인터넷 연결을 확인해 주세요.'));
+  }
+  loadYt().then(() => { if (!P.destroyed) build(null); })
+    .catch(() => hooks.onError && hooks.onError('유튜브 플레이어를 불러오지 못했어요. 인터넷 연결을 확인해 주세요.'));
   const tick = () => { if (P.destroyed) return; if (P._ready && hooks.onTime) hooks.onTime(P.time()); setTimeout(tick, 120); };
   tick();
 }
 
 /* ---------- 비메오 ---------- */
 function initVimeo(P, media, src, hooks) {
-  let player = null, cur = 0, dur = 0, isPaused = true, rate = 1;
-  const q = new URLSearchParams({ controls: '0', title: '0', byline: '0', portrait: '0', dnt: '1', playsinline: '1', autopause: '0', keyboard: '0', pip: '0' });
-  if (src.h) q.set('h', src.h);
-  media.innerHTML = `<iframe src="https://player.vimeo.com/video/${encodeURIComponent(src.id)}?${q}" allow="autoplay; fullscreen; picture-in-picture" title="Vimeo 영상"></iframe>`;
-  const iframe = media.firstChild;
+  let player = null, cur = 0, dur = 0, isPaused = true, rate = 1, native = !!P._startNative, gen = 0;
   const safe = p => p && p.catch ? p.catch(() => {}) : p;
   Object.assign(P, {
     time: () => cur, duration: () => dur, paused: () => isPaused,
@@ -312,19 +364,44 @@ function initVimeo(P, media, src, hooks) {
       isPaused = true;
       return img;
     },
+    native: () => native,
+    /** 손 도구: 비메오 자체 컨트롤(화질·자막)을 켠 플레이어로 바꾼다 */
+    async setNative(on) {
+      if (on === native || !player) return;
+      const keep = { t: cur, paused: isPaused, rate, vol: await player.getVolume().catch(() => 1), quality: await player.getQuality().catch(() => ''),
+        track: await player.getTextTracks().then(ts => (ts.find(x => x.mode === 'showing') || null)).catch(() => null) };
+      native = on;
+      P.stage.classList.add('switching');
+      await build(keep);
+      P.stage.classList.remove('switching');
+    },
     destroy() { P.destroyed = true; safe(player && player.destroy()); },
   });
-  loadVimeo().then(async () => {
-    if (P.destroyed) return;
-    player = new Vimeo.Player(iframe);
-    player.on('timeupdate', d => { cur = d.seconds; hooks.onTime && hooks.onTime(cur); });
-    player.on('seeked', d => { cur = d.seconds; hooks.onTime && hooks.onTime(cur); });
-    player.on('play', () => { isPaused = false; if (!P.stage.classList.contains('capturing')) hooks.onState && hooks.onState(true); });
-    player.on('pause', () => { isPaused = true; if (!P.stage.classList.contains('capturing')) hooks.onState && hooks.onState(false); });
-    player.on('error', e => hooks.onError && hooks.onError('비메오 재생 오류: ' + (e && e.message || '알 수 없음')));
+  async function build(keep) {
+    const my = ++gen;
+    if (player) { const old = player; player = null; await old.destroy().catch(() => {}); }
+    const q = new URLSearchParams({ controls: native ? '1' : '0', title: '0', byline: '0', portrait: '0', dnt: '1', playsinline: '1', autopause: '0', keyboard: native ? '1' : '0', pip: '0' });
+    if (src.h) q.set('h', src.h);
+    media.innerHTML = `<iframe src="https://player.vimeo.com/video/${encodeURIComponent(src.id)}?${q}" allow="autoplay; fullscreen; picture-in-picture" title="Vimeo 영상"></iframe>`;
+    const pl = new Vimeo.Player(media.firstChild);
+    player = pl;
+    pl.on('timeupdate', d => { if (my === gen) { cur = d.seconds; hooks.onTime && hooks.onTime(cur); } });
+    pl.on('seeked', d => { if (my === gen) { cur = d.seconds; hooks.onTime && hooks.onTime(cur); } });
+    pl.on('play', () => { if (my !== gen) return; isPaused = false; if (!P.stage.classList.contains('capturing')) hooks.onState && hooks.onState(true); });
+    pl.on('pause', () => { if (my !== gen) return; isPaused = true; if (!P.stage.classList.contains('capturing')) hooks.onState && hooks.onState(false); });
+    pl.on('error', e => hooks.onError && hooks.onError('비메오 재생 오류: ' + (e && e.message || '알 수 없음')));
     try {
-      await player.ready();
-      const [d, w, h, title] = await Promise.all([player.getDuration(), player.getVideoWidth(), player.getVideoHeight(), player.getVideoTitle().catch(() => '')]);
+      await pl.ready();
+      if (keep) {
+        await pl.setCurrentTime(keep.t).catch(() => {});
+        if (keep.rate && keep.rate !== 1) await pl.setPlaybackRate(keep.rate).catch(() => {});
+        await pl.setVolume(keep.vol).catch(() => {});
+        if (keep.quality) await pl.setQuality(keep.quality).catch(() => {});
+        if (keep.track) await pl.enableTextTrack(keep.track.language, keep.track.kind).catch(() => {});
+        if (!keep.paused) await pl.play().catch(() => {});
+        return;
+      }
+      const [d, w, h, title] = await Promise.all([pl.getDuration(), pl.getVideoWidth(), pl.getVideoHeight(), pl.getVideoTitle().catch(() => '')]);
       dur = d; P._ready = true;
       if (w && h) P.setMeta({ ar: [w, h] });
       P.setMeta({ title });
@@ -332,5 +409,7 @@ function initVimeo(P, media, src, hooks) {
     } catch (e) {
       hooks.onError && hooks.onError('비메오 영상을 열 수 없어요. 비공개 영상이면 공유 링크 전체(뒤의 해시 포함)를 넣고, 퍼가기 설정에서 이 사이트를 허용해 주세요.');
     }
-  }).catch(() => hooks.onError && hooks.onError('비메오 플레이어를 불러오지 못했어요. 인터넷 연결을 확인해 주세요.'));
+  }
+  loadVimeo().then(() => { if (!P.destroyed) build(null); })
+    .catch(() => hooks.onError && hooks.onError('비메오 플레이어를 불러오지 못했어요. 인터넷 연결을 확인해 주세요.'));
 }

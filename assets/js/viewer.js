@@ -16,10 +16,12 @@ export const pinHTML = (it, n, extra = '') => it.x == null ? '' : `<span class="
 /** 대표 이미지(장면 사진이 없을 때 흐리게 깔아 둔다) */
 export const posterOf = (src, given = '') => given || (src && src.k === 'yt' ? `https://i.ytimg.com/vi/${src.id}/hqdefault.jpg` : '');
 /** 카드용 스냅샷: 이미지 위에 핀·그림을 다시 얹는다 */
-export function snapHTML(it, n, ar = [16, 9], poster = '', emptyText = '장면 사진 없음') {
+export function snapHTML(it, n, ar = [16, 9], poster = '', emptyText = '장면 사진 없음', o = {}) {
   const img = it.th ? `<img src="${esc(it.th)}" alt="${n}번 장면" loading="lazy">`
     : (poster ? `<img src="${esc(poster)}" alt="" class="fallback" loading="lazy">` : '') + `<span class="nosnap">${esc(emptyText)}</span>`;
-  return `<div class="snap" style="aspect-ratio:${ar[0]}/${ar[1]}" title="크게 보기">${img}${strokesSVG(it.s, it.by === 'd' ? 'd' : '')}${pinHTML(it, n)}<span class="snap-zoom" aria-hidden="true">${ic('expand', 14)}</span></div>`;
+  return `<div class="snap" style="aspect-ratio:${ar[0]}/${ar[1]}" title="${o.full ? '누르면 이 장면으로 이동' : '크게 보기'}">${img}${strokesSVG(it.s, it.by === 'd' ? 'd' : '')}${pinHTML(it, n)}${o.full
+    ? `<button type="button" class="snap-full" data-full aria-label="${n} 전체화면으로 보기" title="전체화면으로 장면·수정사항 보기">${ic('expand', 15)}</button>`
+    : `<span class="snap-zoom" aria-hidden="true">${ic('expand', 14)}</span>`}</div>`;
 }
 
 /**
@@ -36,6 +38,7 @@ export function mountViewer(root, src, opts = {}) {
       <div class="seg tools" role="group" aria-label="주석 도구">
         <button class="btn on" data-tool="pin" title="핀 (P)">${ic('pin')}핀</button>
         <button class="btn" data-tool="pen" title="펜 (D)">${ic('pen')}펜<i class="swatch" aria-hidden="true"></i></button>
+        <button class="btn" data-tool="hand" title="손 (H) — 영상 플레이어를 직접 조작: 화질·자막·볼륨">${ic('hand')}손</button>
       </div>
       <button class="btn ghost" data-act="memo" title="핀 없이 지금 시점에 메모 (M)">${ic('note')}메모만</button>
       <span class="tool-hint" data-hint>화면을 누르면 영상이 멈추고 그 시점이 오른쪽에 붙어요</span>
@@ -62,7 +65,7 @@ export function mountViewer(root, src, opts = {}) {
     onMeta: m => { updateFps(); opts.onMeta && opts.onMeta(m); render(); },
     onError: msg => { stage.insertAdjacentHTML('beforeend', `<div class="stage-err"><b>영상을 열 수 없어요</b><span>${esc(msg)}</span></div>`); opts.onError && opts.onError(msg); },
     onTime: t => { lastT = t; updateTime(t); },
-  });
+  }, !opts.tools); // 주석 도구가 없는 미리보기는 처음부터 플레이어 자체 컨트롤을 켠다
   V.P = P;
   const overlay = P.overlay;
 
@@ -104,12 +107,21 @@ export function mountViewer(root, src, opts = {}) {
   }
   V.render = render; V.renderMarks = renderMarks;
 
-  function setTool(t) {
+  async function setTool(t) {
+    const was = tool;
     tool = t;
     root.querySelectorAll('[data-tool]').forEach(b => b.classList.toggle('on', b.dataset.tool === t));
     overlay.dataset.tool = t;
     const h = $('[data-hint]', root);
-    if (h) h.textContent = t === 'pen' ? '화면에 그리면 영상이 멈추고, 이어 그린 획은 같은 메모에 붙어요' : '화면을 누르면 영상이 멈추고 그 시점이 오른쪽에 붙어요';
+    if (h) h.textContent = t === 'pen' ? '화면에 그리면 영상이 멈추고, 이어 그린 획은 같은 메모에 붙어요'
+      : t === 'hand' ? (P.kind === 'yt' ? '유튜브 화면을 직접 눌러 조작해요 — 화질·자막은 오른쪽 아래 톱니바퀴에서' : P.kind === 'vimeo' ? '비메오 화면을 직접 조작해요 — 화질·자막은 플레이어 메뉴에서' : '플레이어를 직접 조작해요 — 자막·전체 화면은 플레이어 메뉴에서')
+      : '화면을 누르면 영상이 멈추고 그 시점이 오른쪽에 붙어요';
+    // 손 도구일 때만 플레이어 자체 컨트롤을 켠다 (핀·펜일 때는 깨끗한 화면)
+    if (opts.tools && (t === 'hand') !== (was === 'hand')) {
+      root.classList.add('switching-tool');
+      await P.setNative(t === 'hand');
+      root.classList.remove('switching-tool');
+    }
   }
   setTool(opts.tools ? 'pin' : 'none');
 
@@ -149,6 +161,7 @@ export function mountViewer(root, src, opts = {}) {
   V.makeThumbs = async (items, onProgress = () => {}) => {
     const need = items.filter(it => !it.th);
     if (!need.length) return { made: 0, need: 0 };
+    if (tool === 'hand') await setTool('pin'); // 장면 사진에 플레이어 메뉴가 찍히지 않게
     const live = P.live();
     const t0 = P.time(); P.pause();
     // 핀·그림 층을 먼저 숨긴 뒤 화면 공유를 시작한다 → 첫 프레임부터 깨끗한 장면
@@ -186,6 +199,7 @@ export function mountViewer(root, src, opts = {}) {
     if (opts.tools && (k === 'p' || k === 'P')) { setTool('pin'); return true; }
     if (opts.tools && (k === 'd' || k === 'D')) { setTool('pen'); return true; }
     if (opts.tools && (k === 'm' || k === 'M')) { opts.onMemo && opts.onMemo(); return true; }
+    if (opts.tools && (k === 'h' || k === 'H')) { setTool(tool === 'hand' ? 'pin' : 'hand'); return true; }
     return false;
   };
   /** 수정 포인트 앞뒤로 반복 재생 */
