@@ -26,6 +26,8 @@ const P = {
   print: '<path d="M7 9V3h10v6M7 17H4v-7h16v7h-3M7 14h10v7H7z"/>',
   plus: '<path d="M12 5v14M5 12h14"/>',
   minus: '<path d="M5 12h14"/>',
+  image: '<rect x="3.5" y="5" width="17" height="14" rx="2"/><circle cx="9" cy="10" r="1.6"/><path d="M20.5 16l-5-5-8 8"/>',
+  list: '<path d="M8 7h12M8 12h12M8 17h12M4 7h.01M4 12h.01M4 17h.01"/>',
   chevL: '<path d="M15 5l-7 7 7 7"/>',
   chevR: '<path d="M9 5l7 7-7 7"/>',
   expand: '<path d="M14 4h6v6M10 20H4v-6M20 4l-7 7M4 20l7-7"/>',
@@ -203,3 +205,21 @@ export function logoMark(cls = 'mark') {
 export const brandHTML = (tag = 'span', attrs = '') => `<${tag} class="wordmark" ${attrs}>${logoMark()}<span class="bn"><b>${t('쎈스 디렉터')}</b><small>${lang === 'ko' ? 'Sense Director' : 'by WesNS'}</small></span></${tag}>`;
 /** 밝은 화면 / 다크 모드 (WesNS 사이트와 같은 설정을 쓴다) */
 export const themeBtnHTML = () => `<button class="btn icon ghost theme-btn" data-theme-toggle aria-label="${t('다크 모드 전환')}" title="${t('밝은 화면 / 다크 모드')}">${ic('sun', 17).replace('class="ic"', 'class="ic sun"')}${ic('moon', 17).replace('class="ic"', 'class="ic moon"')}</button>`;
+
+/* ---------- 오른쪽 목록 보기: 장면 사진 + 내용 / 내용만 ---------- */
+const TEXT_KEY = 'sd:textonly';
+const textOnly = () => { try { return localStorage.getItem(TEXT_KEY) === '1'; } catch { return false; } };
+document.documentElement.classList.toggle('text-only', textOnly());
+export const listViewHTML = () => {
+  const on = textOnly();
+  return `<div class="list-view"><span class="lv-label">${t('보기')}</span><div class="seg small" role="group" aria-label="${t('목록 보기')}">
+    <button type="button" class="btn${on ? '' : ' on'}" data-listview="full" aria-pressed="${!on}" title="${t('장면 사진과 수정 내용을 함께')}">${ic('image', 14)}${t('사진 + 내용')}</button>
+    <button type="button" class="btn${on ? ' on' : ''}" data-listview="text" aria-pressed="${on}" title="${t('장면 사진 없이 수정 내용만 촘촘하게 (V)')}">${ic('list', 14)}${t('내용만')}</button></div></div>`;
+};
+export function setListView(text) {
+  try { localStorage.setItem(TEXT_KEY, text ? '1' : '0'); } catch {}
+  document.documentElement.classList.toggle('text-only', text);
+  document.querySelectorAll('[data-listview]').forEach(b => { const on = (b.dataset.listview === 'text') === text; b.classList.toggle('on', on); b.setAttribute('aria-pressed', on); });
+}
+export const toggleListView = () => setListView(!textOnly());
+addEventListener('click', e => { const b = e.target.closest('[data-listview]'); if (b) setListView(b.dataset.listview === 'text'); });

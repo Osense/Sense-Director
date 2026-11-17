@@ -496,6 +496,29 @@ const pointer = (sel, pts) => ev(`(async()=>{const el=document.querySelector(${J
   ok(await ev("document.documentElement.scrollWidth<=innerWidth+1"), 'phone: document view has no horizontal scroll');
   await shot('24-doc-phone');
   await call('Emulation.clearDeviceMetricsOverride');
+
+  /* 11c. 새 프로젝트 팝업 · 목록 '내용만' 보기 */
+  const nProj = async () => ev(`(async()=>{const {Store}=await import('/assets/js/store.js');return Store.projects().length})()`);
+  const n0 = await nProj();
+  await click('[data-act=new]'); await until("document.querySelector('.modal.new-dlg .hero-form input')", 3000, 'new dialog');
+  ok(await nProj() === n0 && await ev("!!document.querySelector('.modal.new-dlg [data-drop] input[type=file][multiple]')"), 'new project: popup with link box and file upload, nothing created yet');
+  await shot('25-new-dialog');
+  await ev(`document.querySelector('.new-dlg .hero-form input').value=${JSON.stringify(VIDEO)};document.querySelector('.new-dlg .hero-form .btn').click()`);
+  await until("!document.querySelector('.modal.new-dlg') && location.hash.includes('tab=setup') && document.querySelector('.stage video')", 10000, 'project from popup');
+  ok(await nProj() === n0 + 1, 'new project: created from the popup link');
+  await ev("document.querySelector('[data-tab=inbox]').click()"); await until("document.querySelector('.toolbar [data-tool=pin]') && document.querySelector('.stage video').readyState>=2", 10000);
+  await pointer('.overlay', [[0.4, 0.4], [0.4, 0.4]]); await until("document.querySelector('.list .item .snap')", 5000, 'note card');
+  ok(await ev("getComputedStyle(document.querySelector('.list .item .snap')).display!=='none' && getComputedStyle(document.querySelector('.list .item .tonly')).display==='none'"), 'list view: images shown by default');
+  await click('[data-listview=text]'); await delay(100);
+  ok(await ev("getComputedStyle(document.querySelector('.list .item .snap')).display==='none' && getComputedStyle(document.querySelector('.list .item .tonly')).display!=='none' && document.querySelector('[data-listview=text]').classList.contains('on')"), 'list view: notes only hides scene images');
+  await shot('26-text-only');
+  await ev("document.querySelector('.list .item .tonly').click()"); await until("document.querySelector('.zoom.on')", 3000, 'zoom from text-only');
+  ok(true, 'list view: notes-only card still opens the enlarged scene');
+  await ev("document.querySelector('[data-z=close]').click()"); await delay(300);
+  const hNow = await ev("location.hash"); await go(BASE + '?tv' + hNow); await until("document.querySelector('.list .item')", 8000);
+  ok(await ev("document.documentElement.classList.contains('text-only') && getComputedStyle(document.querySelector('.list .item .snap')).display==='none'"), 'list view: choice is remembered');
+  await ev("document.dispatchEvent(new KeyboardEvent('keydown',{key:'v',bubbles:true}))"); await delay(100);
+  ok(await ev("!document.documentElement.classList.contains('text-only')"), 'list view: V key toggles');
   /* 12. WesNS 로그인 (목업) */
   const HANGUL = "(()=>{const w=document.createTreeWalker(document.body,NodeFilter.SHOW_TEXT);const bad=[];let n;while(n=w.nextNode()){if(n.parentElement.closest('[data-user],textarea,input,noscript,script,style'))continue;if(/[가-힣]/.test(n.textContent))bad.push(n.textContent.trim().slice(0,40))}document.querySelectorAll('[title],[aria-label],[placeholder]').forEach(e=>['title','aria-label','placeholder'].forEach(a=>{const v=e.getAttribute(a);if(v&&/[가-힣]/.test(v)&&!/한국어/.test(v))bad.push(a+':'+v.slice(0,40))}));return bad.filter(x=>x!=='한국어')})()";
   await ev("localStorage.clear();sessionStorage.setItem('t:nouser','1');localStorage.setItem('wesns.lang','ko')");

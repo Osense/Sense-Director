@@ -1,5 +1,5 @@
 /* 클라이언트 화면 — 핀 번호로 들어와 핀·펜으로 수정요청을 남기고 디렉터에게 보낸다 */
-import { $, $$, ic, esc, uid, tc, sha, unpack, modal, toast, dueLabel, fmtDate, copyText, shareOrCopy, safeName, fpsLabel, brandHTML, themeBtnHTML } from './util.js';
+import { $, $$, ic, esc, uid, tc, sha, unpack, modal, toast, dueLabel, fmtDate, copyText, shareOrCopy, safeName, fpsLabel, brandHTML, themeBtnHTML, listViewHTML, toggleListView } from './util.js';
 import { Store, MODE } from './store.js';
 import { mountViewer, snapHTML, posterOf } from './viewer.js';
 import { openZoom } from './zoom.js';
@@ -54,6 +54,7 @@ export async function renderClient(app, params) {
         <button role="tab" class="on" data-tab="draft">${t('작성 중')} <b data-n="draft">0</b></button>
         <button role="tab" data-tab="sent">${t('보낸 요청')} <b data-n="sent">0</b></button>
       </div>
+      ${listViewHTML()}
       <div class="thumb-progress" data-tp hidden><i></i><span></span></div>
       <div class="list" data-list></div>
     </aside>
@@ -117,7 +118,7 @@ export async function renderClient(app, params) {
       <div class="item-head">
         <span class="no">${String(n).padStart(2, '0')}</span>
         <button class="tcbtn" data-seek title="${t('이 시점으로 이동')}">${tc(it.t, P.effFps())}</button>
-        <span class="kind">${kind}</span>
+        <span class="kind">${kind}</span><button class="icon-x tonly" data-zoom aria-label="${t('크게 보기')}" title="${t('장면과 함께 크게 보기')}">${ic('expand', 14)}</button>
         ${sent ? `<span class="tag st-${st}">${STATUS[st]}</span>` : `<button class="icon-x" data-del aria-label="${t('삭제')}" title="${t('삭제')}">${ic('trash', 15)}</button>`}
       </div>
       <div data-zoom role="button" tabindex="0" aria-label="${n}${t('번 크게 보기')}">${snapHTML(it, n, P.ar, posterOf(p.src, P.poster || p.pv), sent ? t('장면 사진 없음') : t('장면 사진은 보낼 때 자동으로 붙어요'))}</div>
@@ -135,7 +136,7 @@ export async function renderClient(app, params) {
   function noteCard(it) {
     const n = labelOf(it), kind = it.x != null ? (it.s && it.s.length ? t('핀 + 그림') : t('핀')) : it.s && it.s.length ? t('그림') : t('메모');
     return `<article class="item note${it.id === selected ? ' sel' : ''}" data-id="${it.id}" data-note>
-      <div class="item-head"><span class="no d">${n}</span><button class="tcbtn" data-seek title="${t('이 시점으로 이동')}">${tc(it.t, P.effFps())}</button><span class="kind">${kind}</span><span class="tag d">${t('디렉터 안내')}</span></div>
+      <div class="item-head"><span class="no d">${n}</span><button class="tcbtn" data-seek title="${t('이 시점으로 이동')}">${tc(it.t, P.effFps())}</button><span class="kind">${kind}</span><button class="icon-x tonly" data-zoom aria-label="${t('크게 보기')}" title="${t('장면과 함께 크게 보기')}">${ic('expand', 14)}</button><span class="tag d">${t('디렉터 안내')}</span></div>
       <div data-zoom role="button" tabindex="0" aria-label="${n} ${t('크게 보기')}">${snapHTML(it, n, P.ar, posterOf(p.src, P.poster || p.pv))}</div>
       <p class="tx">${esc(it.tx || t('(내용 없음)'))}</p>
       ${noteThread(it)}
@@ -392,6 +393,7 @@ export async function renderClient(app, params) {
     if (document.querySelector('.modal.open')) return;
     if (e.target.closest && e.target.closest('textarea,input,select')) { if (e.key === 'Escape') e.target.blur(); return; }
     if (e.key === '?') { help(); return; }
+    if (!e.ctrlKey && !e.metaKey && !e.altKey && (e.key === 'v' || e.key === 'V')) { toggleListView(); return; }
     if (e.ctrlKey || e.metaKey || e.altKey) return;
     V.key(e);
   };

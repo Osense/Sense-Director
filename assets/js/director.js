@@ -1,5 +1,5 @@
 /* 디렉터 콘솔 — 영상 임베드, 프로젝트·안내사항·핀 설정, 링크 공유, 받은 수정요청에 댓글로 환류 */
-import { $, $$, ic, esc, uid, tc, sha, modal, toast, dueLabel, fmtDate, copyText, shareOrCopy, parseSource, safeName, fpsLabel, unpack, srcText, srcKind, STD_FPS, brandHTML, themeBtnHTML } from './util.js';
+import { $, $$, ic, esc, uid, tc, sha, modal, toast, dueLabel, fmtDate, copyText, shareOrCopy, parseSource, safeName, fpsLabel, unpack, srcText, srcKind, STD_FPS, brandHTML, themeBtnHTML, listViewHTML, toggleListView } from './util.js';
 import { Store, MODE } from './store.js';
 import { mountViewer, snapHTML, posterOf } from './viewer.js';
 import { openZoom } from './zoom.js';
@@ -67,7 +67,7 @@ export async function renderDirector(app, params) {
     <section class="pmain" data-main></section>
   </div>`;
   splitter($('.plist-split', app), { container: $('.console', app), cssVar: '--plist', key: 'plist', axis: 'x', after: false, def: 230, min: 150, max: 420 });
-  $('[data-act=new]', app).addEventListener('click', () => startNew());
+  $('[data-act=new]', app).addEventListener('click', () => newDialog());
   $('[data-act=import]', app).addEventListener('click', () => importDialog());
   const main = $('[data-main]', app);
   if (!cur) return renderHome(main, projects);
@@ -88,12 +88,37 @@ function renderHome(main) {
       <li><b>05</b><span>${t('댓글로 환류')}</span><small>${t('반영 상태와 답을 돌려보내요')}</small></li>
     </ol>
   </div>`;
-  $('[data-hero]', main).addEventListener('submit', e => { e.preventDefault(); startNew($('input', main).value); });
-  const drop = $('[data-drop]', main);
-  $('input', drop).addEventListener('change', async e => { if (e.target.files.length) { const src = await uploadFile(e.target.files); if (src) startNew('', src); } });
+  wireSourcePicker(main);
+}
+
+/** 링크 붙여 넣기 · 파일 올리기 — 첫 화면과 '새 프로젝트' 팝업이 함께 쓴다 */
+function wireSourcePicker(root, before = () => {}) {
+  $('[data-hero]', root).addEventListener('submit', e => {
+    e.preventDefault();
+    const v = $('[data-hero] input', root).value.trim();
+    if (!v) { toast(t('링크를 붙여 넣거나 파일을 올려 주세요')); return; }
+    if (!parseSource(v)) { toast(t('유튜브·비메오 링크나 영상 주소를 알아볼 수 없어요')); return; }
+    before(); startNew(v);
+  });
+  const drop = $('[data-drop]', root);
+  const take = async files => { if (!files.length) return; before(); const src = await uploadFile(files); if (src) startNew('', src); };
+  $('input', drop).addEventListener('change', e => take([...e.target.files]));
   drop.addEventListener('dragover', e => { e.preventDefault(); e.stopPropagation(); drop.classList.add('over'); });
   drop.addEventListener('dragleave', () => drop.classList.remove('over'));
-  drop.addEventListener('drop', async e => { e.preventDefault(); e.stopPropagation(); drop.classList.remove('over'); if (e.dataTransfer.files.length) { const src = await uploadFile(e.dataTransfer.files); if (src) startNew('', src); } });
+  drop.addEventListener('drop', e => { e.preventDefault(); e.stopPropagation(); drop.classList.remove('over'); take([...e.dataTransfer.files]); });
+}
+
+/** 새 프로젝트 — 첫 화면처럼 팝업에서 영상·문서를 바로 넣는다 */
+function newDialog() {
+  if (document.querySelector('.modal.new-dlg')) return;
+  modal({
+    title: t('새 프로젝트'),
+    body: `<p class="note dim new-lead">${t('영상 링크를 붙여 넣거나 파일을 올리면 검수 링크가 바로 만들어져요.')}</p>
+      <form class="hero-form" data-hero><input placeholder="${t('유튜브 · 비메오 링크, 영상 · PDF · 사진 주소')}" aria-label="${t('영상 링크')}" autofocus><button class="btn brand">${ic('plus')}${t('만들기')}</button></form>
+      <label class="drop-file" data-drop>${ic('import', 18)}<span><b>${t('파일 올리기')}</b><small>${t('영상 · PDF · PPT(.pptx) · 사진 — 끌어 놓거나 눌러서 고르기')}</small></span><input type="file" accept="${ACC}" multiple hidden></label>`,
+    actions: [{ label: t('나중에 넣기'), kind: 'ghost', value: 'later' }, { label: t('닫기'), value: null }],
+    onOpen: (w, close) => { w.classList.add('new-dlg'); wireSourcePicker(w, () => close('go')); },
+  }).then(v => { if (v === 'later') startNew(); });
 }
 
 /** 영상·문서 올리기 — 시험 버전: 서버 대신 이 브라우저에 저장. 사진은 여러 장을 한 세트로 */
@@ -124,6 +149,7 @@ async function uploadFile(input) {
   } catch { setP && setP(0, true); await done; toast(t('영상을 저장하지 못했어요. 브라우저 저장 공간을 확인해 주세요')); return null; }
 }
 
+const ACC = 'video/*,.mp4,.mov,.m4v,.webm,.mkv,application/pdf,.pdf,.pptx,image/*';
 async function startNew(url = '', given = null) {
   const src = given || parseSource(url);
   if (url && !src) { toast(t('유튜브·비메오 링크나 영상 주소를 알아볼 수 없어요')); return; }
@@ -227,6 +253,7 @@ function renderProject(main, p, tab) {
     if (document.querySelector('.modal.open')) return;
     if (e.target.closest && e.target.closest('textarea,input,select')) { if (e.key === 'Escape') e.target.blur(); return; }
     if (e.ctrlKey || e.metaKey || e.altKey) return;
+    if (e.key === 'v' || e.key === 'V') { toggleListView(); return; }
     V && V.key(e);
   };
 
@@ -391,6 +418,7 @@ function renderInbox(side, p, getSel, setSel, hooks, initialPane) {
         <button role="tab" class="${pane === 'req' ? 'on' : ''}" data-pane="req">${t('받은 요청')} <b>${all.length}</b></button>
         <button role="tab" class="${pane === 'notes' ? 'on' : ''}" data-pane="notes">${t('내 안내')} <b class="d">${ns.length}</b></button>
       </div>
+      ${listViewHTML()}
       <div class="inbox-head">
         ${pane === 'req' ? `
         <div class="progress" title="${t('반영')} ${done} / ${all.length}"><i style="width:${all.length ? done / all.length * 100 : 0}%"></i></div>
@@ -433,7 +461,7 @@ function renderInbox(side, p, getSel, setSel, hooks, initialPane) {
     const st = it.st || 'open', sel = getSel() === it.id;
     return `<article class="item${sel ? ' sel' : ''} st-${st}" data-id="${it.id}" data-rid="${r.rid}">
       <div class="item-head"><span class="no">${n}</span><button class="tcbtn" data-seek title="${t('이 시점으로')}">${tc(it.t, fps)}</button>
-        <button class="icon-x" data-loop title="${t('앞뒤 2초 반복 재생')}" aria-label="${t('앞뒤 재생')}">${ic('loop', 15)}</button></div>
+        <button class="icon-x tonly" data-full aria-label="${t('크게 보기')}" title="${t('장면과 함께 크게 보기')}">${ic('expand', 14)}</button><button class="icon-x" data-loop title="${t('앞뒤 2초 반복 재생')}" aria-label="${t('앞뒤 재생')}">${ic('loop', 15)}</button></div>
       <div data-snapseek role="button" tabindex="0" aria-label="${n}${t('번 장면으로 이동')}">${snapHTML(it, n, p.ar || [16, 9], poster, undefined, { full: true })}</div>
       <p class="tx">${esc(it.tx || t('(내용 없음)'))}</p>
       ${statusSeg(st)}
@@ -444,7 +472,7 @@ function renderInbox(side, p, getSel, setSel, hooks, initialPane) {
     const n = label(it), sel = getSel() === it.id;
     const kind = it.x != null ? (it.s && it.s.length ? t('핀 + 그림') : t('핀')) : it.s && it.s.length ? t('그림') : t('메모');
     return `<article class="item note${sel ? ' sel' : ''}" data-id="${it.id}" data-note>
-      <div class="item-head"><span class="no d">${n}</span><button class="tcbtn" data-seek title="${t('이 시점으로')}">${tc(it.t, fps)}</button><span class="kind">${kind}</span>
+      <div class="item-head"><span class="no d">${n}</span><button class="tcbtn" data-seek title="${t('이 시점으로')}">${tc(it.t, fps)}</button><span class="kind">${kind}</span><button class="icon-x tonly" data-full aria-label="${t('크게 보기')}" title="${t('장면과 함께 크게 보기')}">${ic('expand', 14)}</button>
         <button class="icon-x" data-ndel aria-label="${t('안내 삭제')}" title="${t('삭제')}">${ic('trash', 15)}</button></div>
       <div data-snapseek role="button" tabindex="0" aria-label="${n} ${t('장면으로 이동')}">${snapHTML(it, n, p.ar || [16, 9], poster, V && V.needsShare() ? t('장면 사진 없음 — 위 버튼으로 만들 수 있어요') : t('장면 사진 없음'), { full: true })}</div>
       <textarea rows="2" placeholder="${t('클라이언트에게 남길 안내를 적어 주세요')}" data-ntx>${esc(it.tx || '')}</textarea>
