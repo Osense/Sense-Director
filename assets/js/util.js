@@ -187,10 +187,10 @@ export function srcText(src) {
   if (src.k === 'yt') return 'https://youtu.be/' + src.id;
   if (src.k === 'vimeo') return 'https://vimeo.com/' + src.id + (src.h ? '/' + src.h : '');
   if (src.k === 'file') return src.name || t('영상 파일');
-  if (src.k === 'doc') return src.url || src.name || '';
+  if (src.k === 'doc') return src.orig || src.url || (src.urls ? src.urls.join(' ') : '') || src.name || '';
   return src.url;
 }
-export const srcKind = src => !src ? '' : src.k === 'doc' ? ({ pdf: 'PDF', pptx: 'PowerPoint', img: t('사진') })[src.dt] : ({ yt: 'YouTube', vimeo: 'Vimeo', file: t('영상 파일'), url: t('영상 주소') })[src.k];
+export const srcKind = src => !src ? '' : src.k === 'doc' ? ({ pdf: 'PDF', pptx: 'PowerPoint', img: t('사진'), canva: 'Canva' })[src.dt] : ({ yt: 'YouTube', vimeo: 'Vimeo', file: t('영상 파일'), url: t('영상 주소') })[src.k];
 
 /* ---------- WesNS 로고 마크: 하나로 이어진 선이 W(Wes)를 그리고 N(Osense)으로 이어진다 ---------- */
 /* ---------- WSNS studio 로고 (2×2 정사각형) ---------- */

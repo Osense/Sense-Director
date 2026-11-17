@@ -1,12 +1,13 @@
 /* 문서 검수 — PDF·PPT(.pptx)·사진을 '페이지가 시간인 플레이어'로 다룬다.
    P.time() = 지금 페이지(0부터), P.duration() = 마지막 페이지 번호.
    그래서 핀·그림·카드·보내기·받은함·보고서는 영상과 똑같이 돌아간다. */
-import { esc, sleep } from './util.js';
+import { esc, sleep, parseSource } from './util.js';
+import { Cap } from './player.js';
 import { getMedia, putMedia, fmtSize } from './media.js';
 import { t } from './i18n.js';
 
 /** 문서 종류별 프레임 자리 표시값 — tc()가 이 값을 보고 '3쪽'·'슬라이드 3'·'사진 3'으로 적는다 */
-export const DOC_FPS = { pdf: -1, pptx: -2, img: -3 };
+export const DOC_FPS = { pdf: -1, pptx: -2, img: -3, canva: -2 };
 export const isDoc = src => !!src && src.k === 'doc';
 
 const IMG_RE = /\.(jpe?g|png|webp|gif|avif|bmp)(\?|#|$)/i;
@@ -26,6 +27,54 @@ export function docFromUrl(url) {
   if (path.endsWith('.pptx')) return { k: 'doc', dt: 'pptx', url };
   if (IMG_RE.test(path)) return { k: 'doc', dt: 'img', url };
   return null;
+}
+/* ---------- 링크 알아보기: 유튜브·비메오·캔바·사진·영상·PDF ---------- */
+/** 구글 드라이브·드롭박스 공유 링크 → 바로 열리는 주소 */
+export function directLink(u) {
+  let m = u.match(/drive\.google\.com\/(?:file\/d\/|open\?id=|uc\?(?:[^#]*&)?id=)([\w-]{20,})/);
+  if (m) return `https://lh3.googleusercontent.com/d/${m[1]}`;
+  if (/^https?:\/\/(www\.)?dropbox\.com\//.test(u)) return u.replace(/([?&])dl=0/, '$1raw=1') + (/[?&](raw|dl)=1/.test(u) ? '' : (u.includes('?') ? '&raw=1' : '?raw=1'));
+  return u;
+}
+/** 캔바 디자인 링크 → 임베드 주소 (공개 보기 링크·임베드를 켠 디자인) */
+export function canvaFrom(u) {
+  if (/^https?:\/\/(www\.)?canva\.link\//i.test(u)) return { error: 'canva-short' };
+  const m = u.match(/canva\.(?:com|cn)\/design\/([\w-]+)(?:\/([\w-]+))?\/(?:view|edit|watch)/i);
+  if (!m) return null;
+  return { k: 'doc', dt: 'canva', id: m[1], tk: m[2] || '', url: `https://www.canva.com/design/${m[1]}${m[2] ? '/' + m[2] : ''}/view?embed`, orig: u, n: 10, ar: [16, 9] };
+}
+/** 정말 사진으로 열리는가 (확장자가 없는 인터넷 사진 주소가 많다) */
+export const isImageUrl = (u, ms = 8000) => new Promise(res => {
+  const im = new Image(); let done = false;
+  const end = v => { if (!done) { done = true; res(v); } };
+  im.onload = () => end(im.naturalWidth > 0); im.onerror = () => end(false);
+  setTimeout(() => end(false), ms); im.src = u;
+});
+/** 정말 영상으로 열리는가 */
+export const isVideoUrl = (u, ms = 8000) => new Promise(res => {
+  const v = document.createElement('video'); let done = false;
+  const end = x => { if (!done) { done = true; v.removeAttribute('src'); v.load(); res(x); } };
+  v.preload = 'metadata'; v.muted = true;
+  v.onloadedmetadata = () => end(true); v.onerror = () => end(false);
+  setTimeout(() => end(false), ms); v.src = u;
+});
+/** 붙여 넣은 글 → 소스. 사진 주소는 여러 개를 한 세트로 받을 수 있다 */
+export async function resolveSource(text) {
+  const urls = String(text || '').split(/\s+/).filter(u => /^https?:\/\//i.test(u));
+  if (!urls.length) return parseSource(String(text || '').trim());
+  if (urls.length === 1) {
+    const u = urls[0], cv = canvaFrom(u);
+    if (cv) return cv;
+    const base = parseSource(directLink(u));
+    if (base && base.k !== 'url') return base; // 유튜브·비메오·확장자로 알 수 있는 문서
+    const d = directLink(u);
+    if (/\.(mp4|m4v|mov|webm|ogv|m3u8)(\?|#|$)/i.test(d.split('#')[0])) return base; // 확장자로 영상이 분명하면 그대로
+    if (await isImageUrl(d)) return { k: 'doc', dt: 'img', url: d };
+    if (await isVideoUrl(d)) return base;
+    return null; // 사진도 영상도 아니다
+  }
+  const list = urls.map(directLink), ok = await Promise.all(list.map(u => isImageUrl(u)));
+  return ok.every(Boolean) ? { k: 'doc', dt: 'img', urls: list, n: list.length } : { error: 'mixed' };
 }
 export const docAccept = dt => dt === 'pdf' ? 'application/pdf,.pdf' : dt === 'pptx' ? '.pptx' : 'image/*';
 
@@ -110,7 +159,9 @@ async function imgRenderer(urls) {
     async show(i) { const im = el.firstChild; if (im.src !== imgs[i].src) im.src = imgs[i].src; },
     async snap(i, W = 1600) {
       const im = imgs[i], w = Math.min(W, im.naturalWidth), h = Math.round(w * im.naturalHeight / im.naturalWidth);
-      const c = canvasOf(w, h); c.getContext('2d').drawImage(im, 0, 0, w, h); return jpeg(c);
+      const c = canvasOf(w, h); c.getContext('2d').drawImage(im, 0, 0, w, h);
+      // 다른 사이트 사진이라 그림으로 뽑을 수 없으면 원래 사진 주소를 그대로 쓴다
+      return jpeg(c) || (/^https?:/.test(im.src) ? im.src : '');
     },
   };
 }
@@ -161,16 +212,40 @@ async function pptxRenderer(data) {
   };
 }
 
+/* 캔바: 공개 보기·임베드 링크를 페이지 번호(#3)로 연다. 다른 회사 화면이라 그림·페이지 수는 읽을 수 없다
+   → 페이지 수·화면비는 디렉터가 정하고, 장면 사진은 보낼 때 화면 공유로 찍는다 */
+function canvaRenderer(src) {
+  let iframe, cur = -1, loadedAt = 0, waiters = [];
+  const n = Math.max(1, Math.min(300, +src.n || 10)), ar = src.ar || [16, 9];
+  return {
+    count: n, size: () => ar, live: false,
+    mount(el) {
+      el.innerHTML = `<iframe class="canva-frame" title="Canva" allow="fullscreen; clipboard-write" allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe>`;
+      iframe = el.firstChild;
+      iframe.addEventListener('load', () => { loadedAt = Date.now(); waiters.splice(0).forEach(f => f()); });
+    },
+    async show(i) {
+      if (cur === i) return; cur = i; loadedAt = 0;
+      iframe.src = `${src.url}&sdpage=${i + 1}#${i + 1}`; // 매번 새로 열어 그 페이지가 확실히 나오게
+    },
+    loaded: () => new Promise(res => { const go = () => setTimeout(res, 1400); loadedAt ? go() : (waiters.push(go), setTimeout(res, 6000)); }),
+    async snap() { return ''; },
+  };
+}
+
 /* ---------- 플레이어 ---------- */
 export async function initDoc(P, media, src, hooks) {
+  await null; // 화면을 다 만든 뒤에 이어서 (캔바처럼 내려받을 것이 없으면 바로 끝나므로)
   P.doc = true; P.fps = DOC_FPS[src.dt] || -1; P.fpsHow = 'doc';
   P.stage.classList.add('doc-stage');
   media.innerHTML = `<div class="doc-loading"><span class="spin"></span>${t('문서를 여는 중')}</div>`;
   let data;
   try {
-    if (src.url) {
+    if (src.dt === 'canva') data = null; // 캔바는 그쪽 화면을 그대로 띄운다
+    else if (src.dt === 'img' && (src.url || src.urls)) data = src.urls || [src.url]; // 인터넷 사진은 내려받지 않고 바로 띄운다
+    else if (src.url) {
       const r = await fetch(src.url); if (!r.ok) throw new Error('http');
-      data = src.dt === 'img' ? [URL.createObjectURL(await r.blob())] : await r.arrayBuffer();
+      data = await r.arrayBuffer();
     } else {
       const blobs = await blobsOf(src);
       if (P.destroyed) return;
@@ -179,7 +254,7 @@ export async function initDoc(P, media, src, hooks) {
     }
   } catch { return hooks.onError && hooks.onError(t('문서를 불러오지 못했어요. 주소가 파일로 바로 열리는지(다른 사이트는 막혀 있을 수 있어요) 확인해 주세요.')); }
   let R;
-  try { R = src.dt === 'pdf' ? await pdfRenderer(data) : src.dt === 'pptx' ? await pptxRenderer(data) : await imgRenderer(data); }
+  try { R = src.dt === 'canva' ? canvaRenderer(src) : src.dt === 'pdf' ? await pdfRenderer(data) : src.dt === 'pptx' ? await pptxRenderer(data) : await imgRenderer(data); }
   catch (e) { console.warn(e); return hooks.onError && hooks.onError(src.dt === 'pptx' ? t('PPT 파일을 열지 못했어요. PowerPoint에서 PDF로 저장해 올리면 정확하게 보여요.') : t('문서를 열지 못했어요. 파일이 손상되었는지 확인해 주세요.')); }
   if (P.destroyed) { R.destroy && R.destroy(); return; }
   R.mount(media);
@@ -202,15 +277,21 @@ export async function initDoc(P, media, src, hooks) {
     seek: x => setPage(x), step: n => setPage(page + n),
     pageAr: i => R.size(i ?? page).map(x => Math.round(x)),
     setZoom(z) { if (z !== zoom) { zoom = z; redrawSoon(); } },
-    live: () => true, native: () => false, async setNative() {},
+    live: () => R.live !== false, native: () => false, async setNative() {},
     async snapshot() { return { t: page, img: await R.snap(page), ar: P.pageAr(page) }; },
-    async grabAt(x) { return R.snap(Math.round(x)); },
+    async grabAt(x) {
+      if (R.live !== false) return R.snap(Math.round(x));
+      // 캔바: 그 페이지를 열고 화면 공유 장면에서 찍는다 (보낼 때 한 번)
+      if (!Cap.active) return '';
+      setPage(x); await R.loaded(); await Cap.fresh(3, 900);
+      return Cap.grab(P.contentRect(), 1280);
+    },
     thumb: (i, w = 240) => R.snap(i, w),
     destroy() { P.destroyed = true; R.destroy && R.destroy(); },
   });
   P._ready = true;
   setPage(0, true);
-  P.setMeta({ ar: R.size(0), title: (src.name || decodeURIComponent((src.url || '').split(/[?#]/)[0].split('/').pop() || '')).replace(/\.[^.]+$/, '') });
+  P.setMeta({ ar: R.size(0), title: src.dt === 'canva' ? t('캔바 디자인') : (src.name || decodeURIComponent((src.url || (src.urls || [])[0] || '').split(/[?#]/)[0].split('/').pop() || '')).replace(/\.[^.]+$/, '') });
   hooks.onReady && hooks.onReady({ title: P.title, duration: R.count - 1, pages: R.count });
 }
 

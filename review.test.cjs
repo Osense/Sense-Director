@@ -570,6 +570,48 @@ const pointer = (sel, pts) => ev(`(async()=>{const el=document.querySelector(${J
   ok(await ev("document.querySelector('[data-vzpct]').textContent==='150%'"), 'video: + key zooms in');
   await ev("document.querySelector('[data-vz=fit]').click()"); await delay(100);
   ok(await ev("!document.querySelector('.stage').classList.contains('zoomed')"), 'video: fit button');
+
+  /* 11f. 인터넷 사진 링크 · 캔바 링크 */
+  const nproj = () => ev(`(async()=>{const {Store}=await import('/assets/js/store.js');return Store.projects().length})()`);
+  ok(await ev(`(async()=>{const {directLink}=await import('/assets/js/doc.js');return directLink('https://drive.google.com/file/d/1AbCdEfGhIjKlMnOpQrStUvWxYz12345/view?usp=sharing')==='https://lh3.googleusercontent.com/d/1AbCdEfGhIjKlMnOpQrStUvWxYz12345' && directLink('https://www.dropbox.com/s/abc/p.png?dl=0').endsWith('raw=1')})()`), 'links: Google Drive / Dropbox share links become direct image links');
+  await ev(CLEAR); await go(BASE); await until("document.querySelector('.hero-form input')");
+  await ev("document.querySelector('.hero-form input').value=location.origin+'/noext/photo1';document.querySelector('.hero-form .btn').click()");
+  await until("document.querySelector('.doc-img') && document.querySelector('.doc-img').naturalWidth>0", 12000, 'image link without extension');
+  ok(await ev("document.querySelector('[data-meta]').textContent.includes('사진')"), 'image link without a file extension opens as a photo');
+  // 다른 사이트 사진 (CORS 없음) — localhost는 127.0.0.1과 다른 출처
+  await ev(CLEAR); await go(BASE); await until("document.querySelector('.hero-form input')");
+  await ev("document.querySelector('.hero-form input').value='http://localhost:8765/noext/photo2x';document.querySelector('.hero-form .btn').click()"); await delay(1500);
+  ok(await nproj() === 0, 'a link that is not a photo or video is refused with a message');
+  await ev("document.querySelector('.hero-form input').value='http://localhost:8765/noext/photo1';document.querySelector('.hero-form .btn').click()");
+  await until("document.querySelector('.doc-img') && document.querySelector('.doc-img').naturalWidth>0", 12000, 'cross-site photo');
+  const xPid = await ev("location.hash.match(/p=(\\w+)/)[1]");
+  await ev("document.querySelector('[data-tab=inbox]').click()"); await until("document.querySelector('.doc-bar [data-tool=pin]') && document.querySelector('.doc-img') && document.querySelector('.doc-img').naturalWidth>0", 8000);
+  await pointer('.overlay', [[0.5, 0.5], [0.5, 0.5]]); await delay(800);
+  const xn = await ev(`(async()=>{const {Store}=await import('/assets/js/store.js');return Store.getProject('${xPid}').notes||[]})()`);
+  ok(xn.length === 1 && (xn[0].th === 'http://localhost:8765/noext/photo1' || (xn[0].th || '').startsWith('data:image')), 'photo from another site: card uses the photo itself as its scene image');
+  ok(await ev("!!document.querySelector('.list .item .snap img')"), 'photo from another site: card shows the image');
+  // 사진 링크 여러 개 → 한 세트
+  await ev(CLEAR); await go(BASE); await until("document.querySelector('.hero-form input')");
+  await ev("document.querySelector('.hero-form input').value=location.origin+'/noext/photo1 '+location.origin+'/test-media/photo2.png';document.querySelector('.hero-form .btn').click()");
+  await until("document.querySelector('.doc-img') && document.querySelector('[data-dur]') && document.querySelector('[data-dur]').textContent==='2'", 12000, 'two image links');
+  ok(true, 'several photo links become one set (2 pages)');
+  // 캔바
+  await ev(CLEAR); await go(BASE); await until("document.querySelector('.hero-form input')");
+  await ev("document.querySelector('.hero-form input').value='https://canva.link/abc123';document.querySelector('.hero-form .btn').click()"); await delay(600);
+  ok(await nproj() === 0 && await ev("document.body.innerText.includes('canva.link')"), 'Canva short link: explains to use the full public view link');
+  await ev("document.querySelector('.hero-form input').value='https://www.canva.com/design/DAGi7rMbwQI/DL_b2qdGHZhErapcUnzRlQ/view?utm_content=x';document.querySelector('.hero-form .btn').click()");
+  await until("document.querySelector('.canva-frame') && document.querySelector('.canva-frame').src.includes('#1')", 8000, 'canva frame');
+  await until("document.querySelector('[data-meta]') && document.querySelector('[data-meta]').textContent.includes('Canva')", 6000, 'canva meta');
+  ok(await ev("document.querySelector('.canva-frame').src.startsWith('https://www.canva.com/design/DAGi7rMbwQI/DL_b2qdGHZhErapcUnzRlQ/view?embed') && document.querySelector('[data-meta]').textContent.includes('Canva') && !!document.querySelector('[data-canva=n]')"), 'Canva: public view link opens as an embed, with page count and ratio settings');
+  await ev("const n=document.querySelector('[data-canva=n]');n.value='4';n.dispatchEvent(new Event('change',{bubbles:true}))");
+  await until("document.querySelector('[data-dur]') && document.querySelector('[data-dur]').textContent==='4'", 6000, 'canva pages');
+  ok(await ev("document.querySelectorAll('[data-pages] [data-page]').length===4"), 'Canva: page count drives the page list');
+  await ev("document.querySelector('[data-tab=inbox]').click()"); await until("document.querySelector('.doc-bar [data-tool=pin]') && document.querySelector('.canva-frame')", 8000);
+  await ev("document.querySelector('[data-act=pnext]').click()"); await delay(300);
+  ok(await ev("document.querySelector('.canva-frame').src.endsWith('#2') && document.querySelector('[data-tc]').textContent==='2'"), 'Canva: next page opens page 2 of the design');
+  await pointer('.overlay', [[0.4, 0.4], [0.4, 0.4]]); await delay(600);
+  ok(await ev("(()=>{const c=document.querySelector('.list .item .tcbtn');return c && c.textContent==='슬라이드 2'})()"), 'Canva: pin card shows the slide');
+  await shot('33-canva');
   /* 11d. 사용 안내 (애니메이션) */
   await ev(CLEAR + "sessionStorage.setItem('t:tour','1');localStorage.removeItem('sd:tour:off')");
   await go(BASE + '?tour'); await until("document.querySelector('.hero-form input')");

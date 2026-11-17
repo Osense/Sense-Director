@@ -47,7 +47,7 @@ export async function probe(src) {
     } catch {}
     return out;
   }
-  if (src.k === 'doc') return { title: (src.name || decodeURIComponent((src.url || '').split(/[?#]/)[0].split('/').pop() || '')).replace(/\.[^.]+$/, ''), ar: null, fps: DOC_FPS[src.dt] || -1, poster: '' };
+  if (src.k === 'doc') return { title: src.dt === 'canva' ? t('캔바 디자인') : (src.name || decodeURIComponent((src.url || (src.urls || [])[0] || '').split(/[?#]/)[0].split('/').pop() || '')).replace(/\.[^.]+$/, ''), ar: src.ar || null, fps: DOC_FPS[src.dt] || -1, poster: '' };
   if (src.k === 'file') return { title: (src.name || '').replace(/\.[^.]+$/, ''), ar: [16, 9], fps: 0, poster: '' };
   return { title: decodeURIComponent((src.url.split('/').pop() || '').split('?')[0]).replace(/\.[^.]+$/, ''), ar: [16, 9], fps: 0, poster: '' };
 }

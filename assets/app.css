@@ -1046,3 +1046,9 @@ html.dark .logo-stacked .on-dark { display: block; }
 @media (max-width: 520px) { .topbar .lang-btn .ll { display: none; } .topbar .lang-btn .ls { display: inline; } }
 @media (max-width: 520px) { .topbar .wordmark .bn b { font-size: 12px; letter-spacing: -.035em; white-space: nowrap; } .topbar .wordmark .bn { max-width: 92px; } }
 @media (max-width: 430px) { html[lang=en] .topbar .wordmark .bn b { display: none; } }
+
+/* ---------- 캔바 ---------- */
+.canva-frame { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; background: #fff; }
+.canva-set { display: grid; grid-template-columns: 120px 1fr; gap: 10px; margin-top: 10px; align-items: end; }
+.canva-set label { display: grid; gap: 4px; font-size: 12px; font-weight: 600; color: var(--muted); }
+.canva-set .note { grid-column: 1 / -1; margin: 0; font-size: 12px; line-height: 1.55; }

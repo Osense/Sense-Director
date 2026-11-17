@@ -14,6 +14,11 @@ const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; ch
 const root = path.resolve(__dirname);
 const server = http.createServer((req, res) => {
   const pathname = decodeURIComponent(new URL(req.url, url).pathname);
+  // 시험용: 확장자 없는 인터넷 사진 주소 흉내 (/noext/photo1 → test-media/photo1.jpg)
+  if (pathname.startsWith('/noext/')) {
+    const f = path.join(root, 'test-media', path.basename(pathname) + '.jpg');
+    if (fs.existsSync(f)) { res.writeHead(200, { 'content-type': 'image/jpeg' }); return fs.createReadStream(f).pipe(res); }
+  }
   if (pathname === '/health') {
     res.writeHead(200, { 'Content-Type': 'text/plain' });
     return res.end('sense-director-v2');

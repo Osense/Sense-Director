@@ -6,7 +6,7 @@ import { openZoom } from './zoom.js';
 import { splitter, workspaceSplitters } from './layout.js';
 import { probe } from './player.js';
 import { putMedia, fmtSize } from './media.js';
-import { putDoc, docType, isDoc } from './doc.js';
+import { putDoc, docType, isDoc, resolveSource } from './doc.js';
 import { showTour, maybeShowTour } from './tour.js';
 import { clientLink, feedbackMessage, reportHTML, printHTML, shareFile, parseIncoming, STATUS, noteLabel } from './exports.js';
 import { accountBtnHTML } from './auth.js';
@@ -81,7 +81,7 @@ function renderHome(main) {
   main.innerHTML = `<div class="hero">
     <div class="eyebrow">${t('새 검수')}</div>
     <h2>${t('영상 링크나 문서를 넣으면')}<br><span class="text-gradient">${t('검수 링크')}</span>${t('가 바로 만들어져요')}</h2>
-    <form class="hero-form" data-hero><input placeholder="${t('유튜브 · 비메오 링크, 영상 · PDF · 사진 주소')}" aria-label="${t('영상 링크')}" autofocus><button class="btn brand">${ic('plus')}${t('만들기')}</button></form>
+    <form class="hero-form" data-hero><input placeholder="${t('유튜브 · 비메오 · 캔바 링크, 영상 · PDF · 사진 주소')}" aria-label="${t('영상 링크')}" autofocus><button class="btn brand">${ic('plus')}${t('만들기')}</button></form>
     <label class="drop-file" data-drop>${ic('import', 18)}<span><b>${t('파일 올리기')}</b><small>${t('영상 · PDF · PPT(.pptx) · 사진 — 끌어 놓거나 눌러서 고르기')}</small></span><input type="file" accept="video/*,.mp4,.mov,.m4v,.webm,.mkv,application/pdf,.pdf,.pptx,image/*" multiple hidden></label>
     <ol class="flow">
       <li><b>01</b><span>${t('영상 임베드')}</span><small>${t('화면비·프레임 수는 알아서 맞춰요')}</small></li>
@@ -100,8 +100,8 @@ function wireSourcePicker(root, before = () => {}) {
     e.preventDefault();
     const v = $('[data-hero] input', root).value.trim();
     if (!v) { toast(t('링크를 붙여 넣거나 파일을 올려 주세요')); return; }
-    if (!parseSource(v)) { toast(t('유튜브·비메오 링크나 영상 주소를 알아볼 수 없어요')); return; }
-    before(); startNew(v);
+    const btn = $('[data-hero] .btn', root); btn.disabled = true;
+    checkSource(v).then(src => { btn.disabled = false; if (src) { before(); startNew('', src); } });
   });
   const drop = $('[data-drop]', root);
   const take = async files => { if (!files.length) return; before(); const src = await uploadFile(files); if (src) startNew('', src); };
@@ -117,7 +117,7 @@ function newDialog() {
   modal({
     title: t('새 프로젝트'),
     body: `<p class="note dim new-lead">${t('영상 링크를 붙여 넣거나 파일을 올리면 검수 링크가 바로 만들어져요.')}</p>
-      <form class="hero-form" data-hero><input placeholder="${t('유튜브 · 비메오 링크, 영상 · PDF · 사진 주소')}" aria-label="${t('영상 링크')}" autofocus><button class="btn brand">${ic('plus')}${t('만들기')}</button></form>
+      <form class="hero-form" data-hero><input placeholder="${t('유튜브 · 비메오 · 캔바 링크, 영상 · PDF · 사진 주소')}" aria-label="${t('영상 링크')}" autofocus><button class="btn brand">${ic('plus')}${t('만들기')}</button></form>
       <label class="drop-file" data-drop>${ic('import', 18)}<span><b>${t('파일 올리기')}</b><small>${t('영상 · PDF · PPT(.pptx) · 사진 — 끌어 놓거나 눌러서 고르기')}</small></span><input type="file" accept="${ACC}" multiple hidden></label>`,
     actions: [{ label: t('나중에 넣기'), kind: 'ghost', value: 'later' }, { label: t('닫기'), value: null }],
     onOpen: (w, close) => { w.classList.add('new-dlg'); wireSourcePicker(w, () => close('go')); },
@@ -153,9 +153,21 @@ async function uploadFile(input) {
 }
 
 const ACC = 'video/*,.mp4,.mov,.m4v,.webm,.mkv,application/pdf,.pdf,.pptx,image/*';
+/** 붙여 넣은 링크 확인 — 알아볼 수 없으면 안내하고 false */
+async function checkSource(v) {
+  v = (v || '').trim(); if (!v) return null;
+  const slow = setTimeout(() => toast(t('링크를 확인하는 중…'), 2500), 500);
+  const src = await resolveSource(v); clearTimeout(slow);
+  if (src && src.error === 'canva-short') { toast(t('canva.link 짧은 주소는 열 수 없어요. 캔바 공유 → 공개 보기 링크의 전체 주소(canva.com/design/…)를 넣어 주세요'), 5200); return false; }
+  if (src && src.error === 'mixed') { toast(t('여러 링크는 사진 주소만 한 세트로 넣을 수 있어요'), 4200); return false; }
+  if (!src) { toast(t('알아볼 수 없는 링크예요. 유튜브·비메오·캔바 링크나 영상·PDF·사진 주소인지 확인해 주세요'), 4600); return false; }
+  return src;
+}
+
 async function startNew(url = '', given = null) {
-  const src = given || parseSource(url);
-  if (url && !src) { toast(t('유튜브·비메오 링크나 영상 주소를 알아볼 수 없어요')); return; }
+  const src = given || (url ? await checkSource(url) : null);
+  if (src === false) return;
+  if (url && !src) return;
   const p = await newProject({ src });
   if (src) { const m = await probe(src); Object.assign(p, { title: p.title || m.title, ar: m.ar || p.ar, fps: m.fps || 0, fpsHow: m.fps ? 'title' : '', poster: m.poster || '' }); Store.saveProject(p); }
   location.hash = '#p=' + p.id + '&tab=setup';
@@ -264,7 +276,7 @@ function renderProject(main, p, tab) {
   function renderMeta() {
     const el = $('[data-meta]', main); if (!el || !V) return;
     const P = V.P;
-    if (P.doc) { el.innerHTML = `<span class="chip">${srcKind(p.src)}</span>${P.ready() ? `<span class="chip">${t(p.src.dt === 'pptx' ? '슬라이드 {n}장' : p.src.dt === 'img' ? '사진 {n}장' : '총 {n}쪽', { n: P.duration() + 1 })}</span>` : ''}`; return; }
+    if (P.doc) { el.innerHTML = `<span class="chip">${srcKind(p.src)}</span>${P.ready() ? `<span class="chip">${t(p.src.dt === 'pptx' || p.src.dt === 'canva' ? '슬라이드 {n}장' : p.src.dt === 'img' ? '사진 {n}장' : '총 {n}쪽', { n: P.duration() + 1 })}</span>` : ''}`; return; }
     const how = P.fpsHow === 'measured' ? t('측정됨') : P.fpsHow === 'title' ? t('영상 정보') : P.fpsHow === 'set' ? t('직접 지정') : P.live() ? t('재생하면 측정') : t('기본값');
     el.innerHTML = `<span class="chip">${srcKind(p.src)}</span><span class="chip">${P.ar[0]}:${P.ar[1]}${P.ar[0] < P.ar[1] ? t(' 세로') : ''}</span>
       <label class="chip fps-pick ${P.fpsHow === 'measured' ? 'measured' : ''}" title="${t('프레임 수 — 시간 주소의 프레임 번호 기준')}">
@@ -289,9 +301,13 @@ function renderSetup(side, p, main) {
   side.innerHTML = `
     <div class="card">
       <div class="card-title">${isDoc(p.src) ? t('검수 문서') : t('영상')}</div>
-      <div class="linkbox"><input class="field-in" data-f="src" value="${esc(isFile ? '' : srcText(p.src))}" placeholder="${isFile ? esc(p.src.name + ' · ' + fmtSize(p.src.size || 0)) : t('유튜브 · 비메오 링크 또는 mp4 영상 주소')}" aria-label="${t('영상 링크')}" spellcheck="false">
+      <div class="linkbox"><input class="field-in" data-f="src" value="${esc(isFile ? '' : srcText(p.src))}" placeholder="${isFile ? esc(p.src.name + ' · ' + fmtSize(p.src.size || 0)) : t('유튜브 · 비메오 · 캔바 링크, 영상 · PDF · 사진 주소')}" aria-label="${t('영상 링크')}" spellcheck="false">
         <label class="btn" title="${t('영상·문서 파일 올리기')}">${ic('import')}${t('파일')}<input type="file" data-upload accept="video/*,.mp4,.mov,.m4v,.webm,.mkv,application/pdf,.pdf,.pptx,image/*" multiple hidden></label></div>
       <div class="meta-row" data-meta></div>
+      ${p.src && p.src.dt === 'canva' ? `<div class="canva-set">
+        <label><span>${t('페이지 수')}</span><input class="field-in" type="number" min="1" max="300" data-canva="n" value="${p.src.n || 10}"></label>
+        <label><span>${t('화면비')}</span><select class="field-in" data-canva="ar">${[['16:9', '16 : 9'], ['4:3', '4 : 3'], ['1:1', '1 : 1'], ['9:16', '9 : 16'], ['210:297', t('A4 세로')], ['297:210', t('A4 가로')]].map(([v, l]) => `<option value="${v}" ${(p.src.ar || [16, 9]).join(':') === v ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
+        <p class="note dim">${t('캔바는 페이지 수와 화면비를 알려 주지 않아서 직접 맞춰 주세요. 화면이 안 보이면 캔바에서 공유 → 공개 보기 링크(또는 임베드)를 켜 주세요. 장면 사진은 보낼 때 화면 공유로 한 번에 찍어요.')}</p></div>` : ''}
     </div>
     <div class="card">
       <div class="card-title">${t('클라이언트 안내사항')}</div>
@@ -342,11 +358,16 @@ function renderSetup(side, p, main) {
     if (Store.inbox(p.id).length) toast(t('영상을 바꿨어요. 이미 받은 요청은 이전 영상 기준 시간이에요'), 4200);
     const h = '#p=' + p.id + '&tab=setup'; if (location.hash === h) dispatchEvent(new HashChangeEvent('hashchange')); else location.hash = h;
   };
-  f('src').addEventListener('change', e => {
-    const src = parseSource(e.target.value);
-    if (e.target.value && !src) { toast(t('유튜브·비메오 링크나 영상 주소를 알아볼 수 없어요')); return; }
+  f('src').addEventListener('change', async e => {
+    const src = await checkSource(e.target.value);
+    if (src === false) return;
     changeSrc(src);
   });
+  side.querySelectorAll('[data-canva]').forEach(el => el.addEventListener('change', () => {
+    const n = Math.max(1, Math.min(300, parseInt($('[data-canva=n]', side).value) || 1)), ar = $('[data-canva=ar]', side).value.split(':').map(Number);
+    p.src = { ...p.src, n, ar }; p.ar = ar; Store.saveProject(p);
+    const h = '#p=' + p.id + '&tab=setup'; if (location.hash === h) dispatchEvent(new HashChangeEvent('hashchange')); else location.hash = h;
+  }));
   $('[data-upload]', side).addEventListener('change', async e => { if (!e.target.files.length) return; const src = await uploadFile(e.target.files); if (src) changeSrc(src); });
   const bind = (k, ev = 'input') => f(k).addEventListener(ev, e => { p[k] = e.target.value; if (k === 'by') localStorage.setItem('sd:director', p.by); Store.saveProject(p); main._queueLink(); });
   bind('notice'); bind('due', 'change'); bind('by');

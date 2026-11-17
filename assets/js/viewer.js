@@ -241,7 +241,7 @@ export function mountViewer(root, src, opts = {}) {
    ============================================================ */
 const ZMIN = 1, ZMAX = 8;
 function mountDoc(root, src, opts) {
-  const unit = src.dt === 'pptx' ? t('슬라이드') : src.dt === 'img' ? t('사진') : t('쪽');
+  const unit = src.dt === 'pptx' || src.dt === 'canva' ? t('슬라이드') : src.dt === 'img' ? t('사진') : t('쪽');
   root.innerHTML = `
   <div class="viewer doc">
     <div class="docbody">
@@ -476,11 +476,24 @@ function mountDoc(root, src, opts) {
   $('[data-act=zfit]', root).addEventListener('click', () => resetZoom());
 
   V.destroy = () => P.destroy();
-  V.needsShare = () => false; V.canShare = () => true;
+  // 캔바처럼 그림을 직접 읽을 수 없는 문서는 보낼 때 화면 공유로 찍는다
+  V.needsShare = () => P.ready() && !P.live(); V.canShare = () => P.live() || Cap.supported();
   V.makeThumbs = async (items, onProgress = () => {}) => {
     const need = items.filter(it => !it.th);
-    for (let i = 0; i < need.length; i++) { onProgress(i, need.length); need[i].th = await P.grabAt(need[i].t); if (!need[i].ar) need[i].ar = P.pageAr(Math.round(need[i].t)); }
-    onProgress(need.length, need.length);
+    if (!need.length) return { made: 0, need: 0 };
+    const live = P.live(), page0 = P.time();
+    if (!live) {
+      resetZoom(); stage.classList.add('capturing'); root.classList.add('thumbing');
+      const fail = reason => { stage.classList.remove('capturing'); root.classList.remove('thumbing'); return { made: 0, need: need.length, reason }; };
+      if (!Cap.supported()) return fail('unsupported');
+      if (!await Cap.start(stage)) return fail(Cap.err === 'NotAllowedError' ? 'denied' : 'error');
+    }
+    try {
+      for (let i = 0; i < need.length; i++) { onProgress(i, need.length); need[i].th = await P.grabAt(need[i].t); if (!need[i].ar) need[i].ar = P.pageAr(Math.round(need[i].t)); }
+      onProgress(need.length, need.length);
+    } finally {
+      if (!live) { stage.classList.remove('capturing'); root.classList.remove('thumbing'); Cap.stop(); P.seek(page0); }
+    }
     return { made: need.filter(x => x.th).length, need: need.length };
   };
   V.key = e => {
