@@ -48,10 +48,10 @@ export async function renderDirector(app, params) {
     <div class="ptitle"><div class="eyebrow">${t('디렉터 콘솔')}</div></div>
     <div class="grow"></div>
     ${MODE === 'mock' ? t('<span class="chip mock" title="서버 없이 이 브라우저와 링크로 주고받는 시험 버전">시험 버전 · 서버 없음</span>') : ''}
-    <button class="btn ghost" data-act="import" title="${t('수정요청 링크·HTML 가져오기')}">${ic('import')}${t('가져오기')}</button>
+    <button class="btn ghost" data-act="import" title="${t('수정요청 링크·HTML 가져오기')}">${ic('import')}<span class="bl">${t('가져오기')}</span></button>
     ${langBtnHTML()}${themeBtnHTML()}
     <button class="btn ghost icon" data-act="tour" aria-label="${t('사용 안내')}" title="${t('사용 안내 다시 보기')}">${ic('help')}</button>
-    <button class="btn brand" data-act="new">${ic('plus')}${t('새 프로젝트')}</button>
+    <button class="btn brand" data-act="new" aria-label="${t('새 프로젝트')}">${ic('plus')}<span class="bl">${t('새 프로젝트')}</span></button>
     ${accountBtnHTML()}
   </header>
   <div class="console">

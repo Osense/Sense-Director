@@ -47,4 +47,7 @@ addEventListener('click', e => {
   if (!e.target.closest('[data-theme-toggle]')) return;
   const dark = document.documentElement.classList.toggle('dark');
   try { localStorage.setItem('wesns.theme', dark ? 'dark' : 'light'); } catch {}
+  const cs = document.querySelector('meta[name=color-scheme]'), tc = document.querySelector('meta[name=theme-color]');
+  if (cs) cs.content = dark ? 'dark' : 'only light';
+  if (tc) tc.content = dark ? '#16161c' : '#fbfbfd';
 });

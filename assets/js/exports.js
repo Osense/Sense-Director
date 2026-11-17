@@ -85,12 +85,12 @@ export function reportHTML({ p, reqs, role = 'client', link = '' }) {
     </div>
   </article>`).join('');
   const title = esc(p.t || p.title || t('수정요청'));
-  return `<!doctype html><html lang="${lang}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  return `<!doctype html><html lang="${lang}"><head><meta charset="utf-8"><meta name="color-scheme" content="only light"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>${title} · ${role === 'director' ? t('수정요청 회신') : t('수정요청')}</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@500;600;700&display=swap">
 <style>
-:root{color-scheme:light;--bg:oklch(.985 .002 270);--panel:#fff;--raised:oklch(.975 .003 270);--line:oklch(.9 .006 270);--div:oklch(.93 .005 270);--text:oklch(.16 .01 270);--muted:oklch(.46 .015 270);--dim:oklch(.56 .015 270);--brand:oklch(.58 .2 285);--brand-2:oklch(.72 .14 210);--director:oklch(.6 .19 262);--ok:oklch(.6 .15 160);--warn:oklch(.66 .15 62);--mc:#ec4a24;--md:#2f6bff;--mono:'JetBrains Mono',ui-monospace,monospace}
+:root{color-scheme:only light;--bg:oklch(.985 .002 270);--panel:#fff;--raised:oklch(.975 .003 270);--line:oklch(.9 .006 270);--div:oklch(.93 .005 270);--text:oklch(.16 .01 270);--muted:oklch(.46 .015 270);--dim:oklch(.56 .015 270);--brand:oklch(.58 .2 285);--brand-2:oklch(.72 .14 210);--director:oklch(.6 .19 262);--ok:oklch(.6 .15 160);--warn:oklch(.66 .15 62);--mc:#ec4a24;--md:#2f6bff;--mono:'JetBrains Mono',ui-monospace,monospace}
 *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:15px/1.6 'Pretendard Variable',Pretendard,-apple-system,system-ui,'Apple SD Gothic Neo','Malgun Gothic',sans-serif;word-break:keep-all;-webkit-font-smoothing:antialiased}
 header{padding:28px clamp(16px,4vw,48px) 22px;border-bottom:1px solid var(--div);background:#fff;display:flex;flex-wrap:wrap;gap:14px 24px;align-items:flex-end}
 .wm{display:inline-flex;align-items:center;gap:9px}.wm svg{width:34px;height:34px}.wm b{display:block;font-size:15px;font-weight:700;letter-spacing:-.03em;line-height:1.1}.wm small{display:block;font-size:11px;font-weight:600;color:var(--director)}

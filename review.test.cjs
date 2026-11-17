@@ -631,6 +631,19 @@ const pointer = (sel, pts) => ev(`(async()=>{const el=document.querySelector(${J
   bad = await ev(HANGUL); ok(!bad.length, 'English: no Korean in help ' + JSON.stringify(bad));
   await shot('18-en-help');
   ok((await ev("window.__i18nMissing||[]")).length === 0, 'English: every UI string has a translation ' + JSON.stringify(await ev("window.__i18nMissing||[]")));
+
+  if (process.env.THEME !== 'dark') {
+  /* 14. 휴대폰 다크 모드여도 밝은 화면 */
+  await call('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-color-scheme', value: 'dark' }] });
+  await call('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 2, mobile: true });
+  await ev("localStorage.removeItem('wesns.theme')"); await go(BASE + '?dk'); await until("document.querySelector('.topbar')", 6000);
+  ok(await ev("!document.documentElement.classList.contains('dark') && document.querySelector('meta[name=color-scheme]').content==='only light' && getComputedStyle(document.documentElement).colorScheme.includes('only')"), 'phone in dark mode: still the light theme, forced darkening opted out');
+  ok(await ev("(()=>{const t=document.querySelector('.topbar');return t.offsetHeight<70 && document.documentElement.scrollWidth<=innerWidth+1})()"), 'phone: director top bar fits on one line');
+  await ev("document.querySelector('[data-theme-toggle]').click()"); await delay(100);
+  ok(await ev("document.documentElement.classList.contains('dark') && document.querySelector('meta[name=color-scheme]').content==='dark'"), 'dark mode still available when chosen');
+  await ev("document.querySelector('[data-theme-toggle]').click()");
+  await call('Emulation.setEmulatedMedia', { features: [] }); await call('Emulation.clearDeviceMetricsOverride');
+  }
   console.log('PASS ' + pass.length + ':\n- ' + pass.join('\n- '));
   browser.kill(); process.exit(0);
 })().catch(e => { console.error(e.message || e); console.log('passed before failure: ' + pass.join(', ')); browser.kill(); process.exit(1); });

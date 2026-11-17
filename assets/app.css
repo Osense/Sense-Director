@@ -2,7 +2,7 @@
    Pretendard · 밝은 화면 기본(다크 모드) · 차가운 중성 회색 · WesNS 브랜드(바이올렛→시안) · 제품색 파랑
    주석 색은 테마와 관계없이 고정: 클라이언트 = 버밀리온, 디렉터 = 파랑. 모두 흰 테두리 투톤(쎈스 초크 투톤 펜 방식). */
 :root {
-  color-scheme: light;
+  color-scheme: only light;
   --bg: oklch(0.985 0.002 270);
   --panel: oklch(1 0 0);
   --raised: oklch(0.975 0.003 270);
@@ -945,3 +945,49 @@ html.dark { --paper-bg: oklch(0.2 0.008 270); }
 .s-keys .m-krow { display: flex; align-items: center; gap: 10px; font-size: 12px; color: var(--muted); animation: kIn var(--T) infinite both; animation-delay: calc(var(--n) * .12s); }
 .s-keys .m-krow .m-kbd { min-width: 34px; }
 @keyframes kIn { 0%, 2% { opacity: 0; transform: translateY(5px); } 10%, 94% { opacity: 1; transform: none; } 100% { opacity: 0; } }
+
+/* ---------- 휴대폰 레이아웃 정리 ---------- */
+.hero { grid-template-columns: minmax(0, 1fr); }
+.hero > * { min-width: 0; }
+.flow li { min-width: 0; }
+@media (max-width: 860px) {
+  .hero { padding: 28px 16px 36px; margin: 0 auto; }
+  .hero-form .btn { padding: 0 14px; }
+}
+@media (max-width: 520px) {
+  /* 위 줄은 한 줄로: 글자 대신 아이콘 */
+  .topbar { flex-wrap: wrap; gap: 6px; padding: 8px 10px; }
+  .topbar .bl, .topbar .lang-btn .ic { display: none; }
+  .topbar .wordmark .bn { display: none; }
+  .topbar .btn.icon, .topbar .btn[data-act=import], .topbar .btn[data-act=new], .topbar .btn[data-act=notice] { width: 38px; min-width: 38px; height: 38px; min-height: 38px; padding: 0; justify-content: center; }
+  .topbar .lang-btn { padding: 0 8px; min-height: 38px; }
+  .topbar .grow { flex: 1; }
+  .topbar .acct .avatar { width: 30px; height: 30px; }
+  /* 디렉터: '디렉터 콘솔' 글자는 숨긴다 */
+  body[data-view=director] .topbar .ptitle { display: none; }
+  /* 클라이언트: 로고 옆에 제목, 아래 줄에 보내기 버튼을 넓게 */
+  body[data-view=client] .topbar .ptitle { order: 0; flex: 1 1 0; min-width: 0; flex-basis: auto; padding-left: 8px; border-left: 1px solid var(--div); }
+  body[data-view=client] .topbar .ptitle h1 { max-width: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 15px; }
+  body[data-view=client] .topbar .ptitle .eyebrow { font-size: 11px; }
+  body[data-view=client] .topbar .grow { display: none; }
+  body[data-view=client] .topbar .chip.due { display: none; }
+  body[data-view=client] .topbar .split { order: 10; flex: 1 0 100%; display: flex; }
+  body[data-view=client] .topbar .split > .btn:first-child { flex: 1; justify-content: center; min-height: 42px; }
+  body[data-view=client] .topbar .split .menu { right: 0; left: auto; }
+  /* 첫 화면 */
+  .hero h2 { font-size: 27px; }
+  .hero-form input { font-size: 14px; padding: 10px 8px; }
+  .drop-file { padding: 12px; }
+  .drop-file small { display: block; line-height: 1.4; }
+  .flow { grid-template-columns: 1fr; gap: 6px; }
+  .flow li { grid-template-columns: auto 1fr; column-gap: 10px; padding: 10px 12px; }
+  .flow li b { grid-row: span 2; align-self: center; }
+  /* 사용 안내 그림: 키보드 그림은 위쪽으로 (영상 아래 숫자를 가리지 않게) */
+  .tv .m-keys { top: 8%; bottom: auto; right: 4%; }
+  .tour .tour-box { padding: 14px 14px 12px; gap: 10px; }
+  .tour-foot .btn { min-height: 40px; }
+}
+@media (max-width: 860px) and (min-width: 521px) {
+  .topbar .chip.mock, .topbar [data-act=import] .bl { display: none; }
+  .topbar [data-act=import] { width: 38px; padding: 0; justify-content: center; }
+}

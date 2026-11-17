@@ -32,7 +32,7 @@ export async function renderClient(app, params) {
     <div class="ptitle"><div class="eyebrow">${t('수정요청')}${p.by ? ' · ' + esc(p.by) : ''}</div><h1>${esc(p.t || t('제목 없는 프로젝트'))}</h1></div>
     ${p.d ? `<span class="chip due" title="${t('피드백 마감')}">${ic('clock', 13)}${esc(dueLabel(p.d))}</span>` : ''}
     <div class="grow"></div>
-    ${p.n ? `<button class="btn ghost" data-act="notice">${ic('note')}${t('안내사항')}</button>` : ''}
+    ${p.n ? `<button class="btn ghost" data-act="notice" aria-label="${t('안내사항')}">${ic('note')}<span class="bl">${t('안내사항')}</span></button>` : ''}
     ${langBtnHTML()}${themeBtnHTML()}
     <button class="btn ghost icon" data-act="help" aria-label="${t('사용법')}" title="${t('사용법·단축키 (?)')}">${ic('help', 17)}</button>
     <div class="split" data-menu-root>
