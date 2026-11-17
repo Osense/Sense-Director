@@ -193,16 +193,22 @@ export function srcText(src) {
 export const srcKind = src => !src ? '' : src.k === 'doc' ? ({ pdf: 'PDF', pptx: 'PowerPoint', img: t('사진') })[src.dt] : ({ yt: 'YouTube', vimeo: 'Vimeo', file: t('영상 파일'), url: t('영상 주소') })[src.k];
 
 /* ---------- WesNS 로고 마크: 하나로 이어진 선이 W(Wes)를 그리고 N(Osense)으로 이어진다 ---------- */
-let markN = 0;
-export function logoMark(cls = 'mark') {
-  const id = 'wsns-g' + (markN++);
-  return `<svg class="${cls}" viewBox="0 0 40 40" aria-hidden="true"><defs><linearGradient id="${id}" x1="0" y1="0" x2="40" y2="40" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#7c5cf0"/><stop offset="1" stop-color="#38bcd8"/></linearGradient></defs>
-    <rect width="40" height="40" rx="11" fill="url(#${id})"/><rect x=".5" y=".5" width="39" height="39" rx="10.5" fill="none" stroke="#fff" stroke-opacity=".18"/>
-    <polyline points="5.5,12.5 9.5,27.5 13.5,18 17.5,27.5 21.5,12.5 30.5,27.5 30.5,12.5" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
-    <line x1="21.5" y1="12.5" x2="21.5" y2="27.5" stroke="#fff" stroke-opacity=".55" stroke-width="3" stroke-linecap="round"/><circle cx="21.5" cy="12.5" r="2.1" fill="#fff"/><circle cx="34.6" cy="30.6" r="1.3" fill="#fff" fill-opacity=".7"/></svg>`;
-}
-/** 제품 로고: WSNS 마크 + 쎈스 디렉터 / Sense Director */
-export const brandHTML = (tag = 'span', attrs = '') => `<${tag} class="wordmark" ${attrs}>${logoMark()}<span class="bn"><b>${t('쎈스 디렉터')}</b><small>${lang === 'ko' ? 'Sense Director' : 'by WesNS'}</small></span></${tag}>`;
+/* ---------- WSNS studio 로고 (2×2 정사각형) ---------- */
+const BRAND = new URL('../brand/', import.meta.url).href;
+export const WSNS_HOME = () => 'https://osense.github.io/WesNS' + (lang === 'en' ? '/en/' : '/');
+let markText = '';
+// 보고서(HTML 파일)에 그대로 넣을 수 있게 마크 SVG를 미리 읽어 둔다
+fetch(BRAND + 'wsns-mark.svg').then(r => r.ok ? r.text() : '').then(x => { markText = x; }).catch(() => {});
+/** 2×2 WSNS 마크 (위쪽 줄처럼 작은 자리) */
+export function logoMark(cls = 'mark') { return `<img class="${cls}" src="${BRAND}wsns-mark.svg" alt="" width="166" height="212" draggable="false">`; }
+/** 2×2 WSNS studio 로고 (studio 포함 — 로그인·핀 입력처럼 크게 보이는 자리) */
+export const logoStacked = (cls = 'logo-stacked') => `<span class="${cls}"><img class="on-light" src="${BRAND}wsns-studio-stacked.svg" alt="WSNS studio" width="169" height="242" draggable="false"><img class="on-dark" src="${BRAND}wsns-studio-stacked-on-dark.svg" alt="WSNS studio" width="169" height="242" draggable="false"></span>`;
+/** 파일로 내보낼 때: 마크를 그림 데이터로 넣는다 */
+export const logoMarkInline = (cls = '') => markText ? `<img class="${cls}" alt="WSNS studio" src="data:image/svg+xml;base64,${btoa(unescape(encodeURIComponent(markText)))}">` : `<img class="${cls}" alt="WSNS studio" src="${BRAND}wsns-mark.svg">`;
+/** 발음: WSNS studio [웨스엔에스 스튜디오] */
+export const pronHTML = () => `<span class="pron"><span class="pn-en">WSNS studio</span> <span class="pn-k">[${lang === 'ko' ? '웨스엔에스 스튜디오' : 'wes-en-es studio'}]</span></span>`;
+/** 제품 로고: 2×2 WSNS 마크 + 쎈스 디렉터 + WSNS studio [웨스엔에스 스튜디오] — 누르면 WSNS 홈페이지(새 탭) */
+export const brandHTML = (tag = 'a', attrs = '') => `<a class="wordmark" href="${WSNS_HOME()}" target="_blank" rel="noopener" title="${t('WSNS studio 홈페이지')}" aria-label="${t('쎈스 디렉터')} — ${t('WSNS studio 홈페이지')}" ${attrs.replace(/(href|aria-label)="[^"]*"/g, '')}>${logoMark()}<span class="bn"><b>${t('쎈스 디렉터')}</b><small>${pronHTML()}</small></span></a>`;
 /** 밝은 화면 / 다크 모드 (WesNS 사이트와 같은 설정을 쓴다) */
 export const themeBtnHTML = () => `<button class="btn icon ghost theme-btn" data-theme-toggle aria-label="${t('다크 모드 전환')}" title="${t('밝은 화면 / 다크 모드')}">${ic('sun', 17).replace('class="ic"', 'class="ic sun"')}${ic('moon', 17).replace('class="ic"', 'class="ic moon"')}</button>`;
 

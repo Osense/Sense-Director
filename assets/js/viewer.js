@@ -73,6 +73,9 @@ export function mountViewer(root, src, opts = {}) {
   }, !opts.tools); // 주석 도구가 없는 미리보기는 처음부터 플레이어 자체 컨트롤을 켠다
   V.P = P;
   const overlay = P.overlay;
+  const ZM = videoZoom(root, stage, P, () => tool); // Ctrl + 휠 · 두 손가락 확대
+  V.zoomAt = ZM.zoomAt; V.resetZoom = ZM.reset; V.zoom = ZM.z;
+  stage.addEventListener('zoomgesture', () => { if (live) { live = null; render(); } });
 
   function updateFps() {
     const el = $('[data-fps]', root);
@@ -93,11 +96,12 @@ export function mountViewer(root, src, opts = {}) {
     marks.innerHTML = opts.items().map((it, i) => `<i class="st-${it.by === 'd' ? 'd' : it.st || 'open'}" style="left:${clamp(it.t / d * 100, 0, 100)}%" title="${opts.label ? opts.label(it, i) : i + 1} · ${tc(it.t, P.effFps())}"></i>`).join('');
   }
   /** 지금 시점에 해당하는 핀·그림만 다시 그린다 */
+  let lastHtml = null; // 마지막으로 그린 표시
   function render() {
     if (!opts.items) return;
     const t = P.time(), f = P.effFps(), paused = P.paused(), items = opts.items();
     V._drawnAt = t;
-    const win = paused ? 0.5 / f + 0.02 : 1.2;
+    const win = paused ? 0.5 / f + 0.02 : 0.8; // 재생 중에는 그 장면을 지난 뒤 잠깐만 보인다
     const sel = opts.selected && opts.selected();
     let html = '';
     items.forEach((it, i) => {
@@ -107,7 +111,8 @@ export function mountViewer(root, src, opts = {}) {
       html += strokesSVG(it.s, (it.id === sel ? 'sel ' : '') + (it.by === 'd' ? 'd' : '')) + pinHTML(it, opts.label ? opts.label(it, i) : i + 1, it.id === sel ? ' sel' : '');
     });
     if (live) html += strokesSVG([live], 'live' + (opts.mine === 'd' ? ' d' : ''));
-    overlay.innerHTML = html;
+    // 바뀐 것이 있을 때만 다시 그린다 — 재생 중 매 프레임 다시 그리면 핀 등장 애니메이션이 계속 되풀이되어 깜빡인다
+    if (html !== lastHtml) { overlay.innerHTML = html; lastHtml = html; }
     renderMarks();
   }
   V.render = render; V.renderMarks = renderMarks;
@@ -121,7 +126,8 @@ export function mountViewer(root, src, opts = {}) {
     if (h) h.textContent = name === 'pen' ? t('화면에 그리면 영상이 멈추고, 이어 그린 획은 같은 메모에 붙어요')
       : name === 'hand' ? (P.kind === 'yt' ? t('유튜브 화면을 직접 눌러 조작해요 — 화질·자막은 오른쪽 아래 톱니바퀴에서') : P.kind === 'vimeo' ? t('비메오 화면을 직접 조작해요 — 화질·자막은 플레이어 메뉴에서') : t('플레이어를 직접 조작해요 — 자막·전체 화면은 플레이어 메뉴에서'))
       : t('화면을 누르면 영상이 멈추고 그 시점이 오른쪽에 붙어요');
-    // 손 도구일 때만 플레이어 자체 컨트롤을 켠다 (핀·펜일 때는 깨끗한 화면)
+    // 손 도구일 때만 플레이어 자체 컨트롤을 켠다 (핀·펜일 때는 깨끗한 화면) — 플레이어 메뉴가 잘리지 않게 확대는 풀어 둔다
+    if (name === 'hand') ZM.reset();
     if (opts.tools && (name === 'hand') !== (was === 'hand')) {
       root.classList.add('switching-tool');
       await P.setNative(name === 'hand');
@@ -130,19 +136,27 @@ export function mountViewer(root, src, opts = {}) {
   }
   setTool(opts.tools ? 'pin' : 'none');
 
-  const pos = e => { const r = overlay.getBoundingClientRect(); return [r1(clamp((e.clientX - r.left) / r.width * 100, 0, 100)), r1(clamp((e.clientY - r.top) / r.height * 100, 0, 100))]; };
+  // 확대했을 때는 더 촘촘하게 기록한다
+  const pos = e => { const r = overlay.getBoundingClientRect(), k = ZM.z() > 1.5 ? 100 : 10, rr = n => Math.round(n * k) / k; return [rr(clamp((e.clientX - r.left) / r.width * 100, 0, 100)), rr(clamp((e.clientY - r.top) / r.height * 100, 0, 100))]; };
   if (opts.tools) {
     overlay.addEventListener('pointerdown', e => {
-      if (e.button !== 0 || !P.ready()) return;
+      if (e.button !== 0 || !P.ready() || ZM.gesturing()) return;
       e.preventDefault();
-      if (tool === 'pin') { const [x, y] = pos(e); opts.onPin && opts.onPin({ x, y }); return; }
+      if (tool === 'pin') {
+        // 터치는 손을 뗄 때 찍는다 — 두 번째 손가락이 오면 확대로
+        if (e.pointerType === 'touch') { overlay._pin = { id: e.pointerId, at: pos(e) }; return; }
+        const [x, y] = pos(e); opts.onPin && opts.onPin({ x, y }); return;
+      }
       if (tool === 'pen') {
         if (!P.paused()) P.pause();
         overlay.setPointerCapture(e.pointerId); live = pos(e); render();
       }
     });
-    overlay.addEventListener('pointermove', e => { if (!live) return; const [x, y] = pos(e); const n = live.length; if (Math.hypot(x - live[n - 2], y - live[n - 1]) > 0.35) { live.push(x, y); render(); } });
-    const end = () => { if (!live) return; const s = live; live = null; if (s.length < 4) s.push(s[0] + 0.1, s[1] + 0.1); opts.onStroke && opts.onStroke(s); render(); };
+    overlay.addEventListener('pointermove', e => { if (!live || ZM.gesturing()) return; const [x, y] = pos(e); const n = live.length; if (Math.hypot(x - live[n - 2], y - live[n - 1]) > 0.35 / ZM.z()) { live.push(x, y); render(); } });
+    const end = e => {
+      if (overlay._pin && e && overlay._pin.id === e.pointerId) { const p = overlay._pin; overlay._pin = null; if (!ZM.gesturing() && e.type === 'pointerup') { const [x, y] = p.at; opts.onPin && opts.onPin({ x, y }); } return; }
+      if (!live) return; const s = live; live = null; if (s.length < 4) s.push(s[0] + 0.1 / ZM.z(), s[1] + 0.1 / ZM.z()); opts.onStroke && opts.onStroke(s); render();
+    };
     overlay.addEventListener('pointerup', end); overlay.addEventListener('pointercancel', end);
     root.querySelectorAll('[data-tool]').forEach(b => b.addEventListener('click', () => setTool(b.dataset.tool)));
     $('[data-act=memo]', root).addEventListener('click', () => opts.onMemo && opts.onMemo());
@@ -169,10 +183,11 @@ export function mountViewer(root, src, opts = {}) {
     if (tool === 'hand') await setTool('pin'); // 장면 사진에 플레이어 메뉴가 찍히지 않게
     const live = P.live();
     const t0 = P.time(); P.pause();
+    const z0 = ZM.save(); ZM.reset(); // 화면에서 찍는 장면 사진은 원래 크기로
     // 핀·그림 층을 먼저 숨긴 뒤 화면 공유를 시작한다 → 첫 프레임부터 깨끗한 장면
     stage.classList.add('capturing'); root.classList.add('thumbing'); P.hideFreeze();
     if (!live) {
-      const fail = reason => { stage.classList.remove('capturing'); root.classList.remove('thumbing'); return { made: 0, need: need.length, reason }; };
+      const fail = reason => { stage.classList.remove('capturing'); root.classList.remove('thumbing'); ZM.restore(z0); return { made: 0, need: need.length, reason }; };
       if (!Cap.supported()) return fail('unsupported');
       if (!await Cap.start(stage)) return fail(Cap.err === 'NotAllowedError' ? 'denied' : 'error');
     }
@@ -187,7 +202,7 @@ export function mountViewer(root, src, opts = {}) {
     } finally {
       stage.classList.remove('capturing'); root.classList.remove('thumbing');
       if (!live) Cap.stop();
-      P.seek(t0); P.pause(); render();
+      P.seek(t0); P.pause(); ZM.restore(z0); render();
     }
     return { made, need: need.length };
   };
@@ -202,6 +217,9 @@ export function mountViewer(root, src, opts = {}) {
     if (k === 'ArrowRight') { e.preventDefault(); e.shiftKey ? P.seek(P.time() + 1) : P.step(1); return true; }
     if (k === 'j' || k === 'J') { P.seek(P.time() - 5); return true; }
     if (k === 'l' || k === 'L') { P.seek(P.time() + 5); return true; }
+    if (k === '+' || k === '=') { ZM.zoomAt(ZM.z() * 1.5); return true; }
+    if (k === '-' || k === '_') { ZM.zoomAt(ZM.z() / 1.5); return true; }
+    if (k === '0') { ZM.reset(); return true; }
     if (opts.tools && (k === 'p' || k === 'P')) { setTool('pin'); return true; }
     if (opts.tools && (k === 'd' || k === 'D')) { setTool('pen'); return true; }
     if (opts.tools && (k === 'm' || k === 'M')) { opts.onMemo && opts.onMemo(); return true; }
@@ -301,6 +319,7 @@ function mountDoc(root, src, opts) {
   rail.addEventListener('click', e => { const b = e.target.closest('[data-page]'); if (b) P.seek(+b.dataset.page); });
 
   /* ---------- 핀·그림 ---------- */
+  let lastDocHtml = null;
   function render() {
     if (!opts.items) return;
     const pg = P.time(), items = opts.items(), sel = opts.selected && opts.selected();
@@ -310,7 +329,7 @@ function mountDoc(root, src, opts) {
       html += strokesSVG(it.s, (it.id === sel ? 'sel ' : '') + (it.by === 'd' ? 'd' : '')) + pinHTML(it, opts.label ? opts.label(it, i) : i + 1, it.id === sel ? ' sel' : '');
     });
     if (live) html += strokesSVG([live], 'live' + (opts.mine === 'd' ? ' d' : ''));
-    overlay.innerHTML = html;
+    if (html !== lastDocHtml) { overlay.innerHTML = html; lastDocHtml = html; }
     railCounts();
   }
   V.render = render; V.renderMarks = railCounts;
@@ -482,4 +501,96 @@ function mountDoc(root, src, opts) {
   V.loopAround = x => P.seek(x); // 문서는 그 쪽으로 이동만
   apply();
   return V;
+}
+
+/* ============================================================
+   영상 확대 — Ctrl(⌘) + 휠, 트랙패드 집기, 두 손가락, + − 0 키.
+   확대 중에는 휠·가운데 버튼 끌기·미니맵으로 옮긴다. 핀·그림 좌표는 그대로 맞는다.
+   ============================================================ */
+function videoZoom(root, stage, P, getTool) {
+  const pan = $('.pan', stage), overlay = P.overlay;
+  let z = 1, tx = 0, ty = 0, gesture = null, drag = null;
+  stage.insertAdjacentHTML('beforeend', `
+    <div class="vzoom" data-vzoom hidden>
+      <button type="button" class="btn icon ghost" data-vz="out" aria-label="${t('축소')}" title="${t('축소 (-)')}">${ic('minus', 14)}</button>
+      <b data-vzpct>100%</b>
+      <button type="button" class="btn icon ghost" data-vz="in" aria-label="${t('확대')}" title="${t('확대 (+)')}">${ic('plus', 14)}</button>
+      <button type="button" class="btn ghost small" data-vz="fit" title="${t('화면에 맞추기 (0)')}">${t('맞춤')}</button>
+    </div>
+    <div class="navmap vnav" data-vnav hidden><canvas></canvas><i class="navrect"></i></div>`);
+  const bar = $('[data-vzoom]', stage), nav = $('[data-vnav]', stage), navRect = $('.navrect', nav), navCv = $('canvas', nav);
+  const box = () => { const s = overlay.style; return { x: parseFloat(s.left) || 0, y: parseFloat(s.top) || 0, w: parseFloat(s.width) || stage.clientWidth, h: parseFloat(s.height) || stage.clientHeight }; };
+  function clampPan() {
+    const b = box(), cw = stage.clientWidth, ch = stage.clientHeight;
+    const fit = (lo, size, view, cur) => size * z <= view ? view / 2 - z * (lo + size / 2) : Math.min(-z * lo, Math.max(view - z * (lo + size), cur));
+    tx = fit(b.x, b.w, cw, tx); ty = fit(b.y, b.h, ch, ty);
+  }
+  function apply() {
+    if (z <= 1.001) { z = 1; tx = 0; ty = 0; } else clampPan();
+    pan.style.transform = z === 1 ? '' : `translate(${tx}px, ${ty}px) scale(${z})`;
+    pan.style.setProperty('--z', z);
+    stage.classList.toggle('zoomed', z > 1);
+    bar.hidden = z === 1; nav.hidden = z === 1;
+    $('[data-vzpct]', bar).textContent = Math.round(z * 100) + '%';
+    if (z > 1) updateNav();
+  }
+  function updateNav() {
+    const b = box(), cw = stage.clientWidth, ch = stage.clientHeight;
+    nav.style.aspectRatio = `${b.w} / ${b.h}`;
+    const fx = v => clamp(((v - tx) / z - b.x) / b.w, 0, 1), fy = v => clamp(((v - ty) / z - b.y) / b.h, 0, 1);
+    const l = fx(0), r = fx(cw), tp = fy(0), bt = fy(ch);
+    Object.assign(navRect.style, { left: l * 100 + '%', top: tp * 100 + '%', width: (r - l) * 100 + '%', height: (bt - tp) * 100 + '%' });
+    // 영상 파일은 지금 장면을 작게 그려 둔다 (유튜브·비메오는 틀만)
+    const v = stage.querySelector('.media video');
+    if (v && v.readyState >= 2) { try { navCv.width = 160; navCv.height = Math.round(160 * b.h / b.w); navCv.getContext('2d').drawImage(v, 0, 0, navCv.width, navCv.height); } catch {} }
+  }
+  function zoomAt(nz, cx = stage.clientWidth / 2, cy = stage.clientHeight / 2) {
+    nz = clamp(nz, 1, 8);
+    tx = cx - (cx - tx) * nz / z; ty = cy - (cy - ty) * nz / z; z = nz; apply();
+  }
+  const reset = () => { z = 1; apply(); };
+  // 휠: Ctrl·⌘(트랙패드 집기 포함) = 확대 / 확대 중 휠 = 이동 / 그 밖에는 페이지 스크롤 그대로
+  stage.addEventListener('wheel', e => {
+    if (!P.ready() || getTool() === 'hand') return;
+    const r = stage.getBoundingClientRect();
+    if (e.ctrlKey || e.metaKey) { e.preventDefault(); zoomAt(z * Math.exp(-e.deltaY * (e.deltaMode ? 0.05 : 0.0025) * (e.ctrlKey && Math.abs(e.deltaY) < 50 ? 4 : 1)), e.clientX - r.left, e.clientY - r.top); return; }
+    if (z > 1) { e.preventDefault(); tx -= e.deltaX; ty -= e.deltaY; apply(); }
+  }, { passive: false });
+  // 두 손가락 = 확대·이동, 가운데 버튼 끌기 = 이동
+  const touches = new Map();
+  stage.addEventListener('pointerdown', e => {
+    if (e.target.closest('.vzoom, .vnav') || getTool() === 'hand') return;
+    if (e.pointerType === 'touch') {
+      touches.set(e.pointerId, [e.clientX, e.clientY]);
+      if (touches.size === 2) {
+        const [a, b] = [...touches.values()];
+        gesture = { d: Math.hypot(a[0] - b[0], a[1] - b[1]), z, mx: (a[0] + b[0]) / 2, my: (a[1] + b[1]) / 2, tx, ty };
+        overlay._pin = null; stage.dispatchEvent(new CustomEvent('zoomgesture'));
+        e.stopPropagation(); e.preventDefault(); return;
+      }
+    }
+    if (e.button === 1 && z > 1) { e.preventDefault(); try { stage.setPointerCapture(e.pointerId); } catch {} drag = { x: e.clientX, y: e.clientY, tx, ty }; stage.classList.add('panning'); }
+  }, true);
+  stage.addEventListener('pointermove', e => {
+    if (touches.has(e.pointerId)) touches.set(e.pointerId, [e.clientX, e.clientY]);
+    if (gesture && touches.size >= 2) {
+      e.stopPropagation();
+      const [a, b] = [...touches.values()], r = stage.getBoundingClientRect();
+      const d = Math.hypot(a[0] - b[0], a[1] - b[1]), mx = (a[0] + b[0]) / 2, my = (a[1] + b[1]) / 2;
+      const nz = clamp(gesture.z * d / (gesture.d || 1), 1, 8), ox = gesture.mx - r.left, oy = gesture.my - r.top;
+      tx = ox - (ox - gesture.tx) * nz / gesture.z + (mx - gesture.mx); ty = oy - (oy - gesture.ty) * nz / gesture.z + (my - gesture.my); z = nz; apply(); return;
+    }
+    if (drag) { tx = drag.tx + e.clientX - drag.x; ty = drag.ty + e.clientY - drag.y; apply(); }
+  }, true);
+  const up = e => { touches.delete(e.pointerId); if (gesture && touches.size < 2) { gesture = null; e.stopPropagation(); } if (drag) { drag = null; stage.classList.remove('panning'); } };
+  stage.addEventListener('pointerup', up, true); stage.addEventListener('pointercancel', up, true);
+  bar.addEventListener('click', e => { const b = e.target.closest('[data-vz]'); if (!b) return; e.stopPropagation(); b.dataset.vz === 'in' ? zoomAt(z * 1.5) : b.dataset.vz === 'out' ? zoomAt(z / 1.5) : reset(); });
+  const navTo = e => { const r = nav.getBoundingClientRect(), b = box(); tx = stage.clientWidth / 2 - z * (b.x + clamp((e.clientX - r.left) / r.width, 0, 1) * b.w); ty = stage.clientHeight / 2 - z * (b.y + clamp((e.clientY - r.top) / r.height, 0, 1) * b.h); apply(); };
+  nav.addEventListener('pointerdown', e => { e.stopPropagation(); e.preventDefault(); try { nav.setPointerCapture(e.pointerId); } catch {} nav._drag = true; navTo(e); });
+  nav.addEventListener('pointermove', e => { if (nav._drag) navTo(e); });
+  nav.addEventListener('pointerup', () => { nav._drag = false; });
+  new ResizeObserver(() => { if (z > 1) apply(); }).observe(stage);
+  // 재생 중 미니맵 장면 갱신
+  const tick = setInterval(() => { if (!stage.isConnected) return clearInterval(tick); if (z > 1 && !P.paused()) updateNav(); }, 300);
+  return { zoomAt, reset, z: () => z, gesturing: () => !!gesture, save: () => ({ z, tx, ty }), restore: s => { if (s) { z = s.z; tx = s.tx; ty = s.ty; apply(); } }, update: () => { if (z > 1) updateNav(); } };
 }

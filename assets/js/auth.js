@@ -1,6 +1,6 @@
 /* WesNS 로그인 (목업) — WesNS 사이트와 같은 저장 키(wesns.mock.user)를 쓴다.
    osense.github.io 아래에서 같은 저장소를 쓰므로 WesNS 사이트에서 로그인했다면 여기서는 건너뛴다. */
-import { $, esc, ic, brandHTML, themeBtnHTML } from './util.js';
+import { $, esc, ic, brandHTML, themeBtnHTML, logoStacked, pronHTML, WSNS_HOME } from './util.js';
 import { t, lang, langBtnHTML } from './i18n.js';
 
 const KEY = 'wesns.mock.user';
@@ -45,6 +45,8 @@ function mount(app) {
     <div class="auth-top">${brandHTML('span')}<div class="grow"></div>${langBtnHTML()}${themeBtnHTML()}</div>
     <form class="auth-card" novalidate>
       <div class="auth-head">
+        <a class="auth-logo" href="${WSNS_HOME()}" target="_blank" rel="noopener" title="${t('WSNS studio 홈페이지')}">${logoStacked()}</a>
+        <div class="gate-pron">${pronHTML()}</div>
         <div class="eyebrow">WesNS ${t('계정')}</div>
         <h1>${t('로그인')}</h1>
         <p>${t('WesNS 계정으로 로그인하고 쎈스 디렉터를 시작하세요.')}</p>

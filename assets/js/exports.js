@@ -1,5 +1,5 @@
 /* 링크·메시지·HTML·PDF 만들기 */
-import { pack, appBase, tc, esc, fmtDate, dueLabel, logoMark } from './util.js';
+import { pack, appBase, tc, esc, fmtDate, dueLabel, logoMarkInline } from './util.js';
 import { snapHTML, posterOf } from './viewer.js';
 import { t, tn, lang, fmtDateL, fmtMD } from './i18n.js';
 
@@ -93,7 +93,7 @@ export function reportHTML({ p, reqs, role = 'client', link = '' }) {
 :root{color-scheme:only light;--bg:oklch(.985 .002 270);--panel:#fff;--raised:oklch(.975 .003 270);--line:oklch(.9 .006 270);--div:oklch(.93 .005 270);--text:oklch(.16 .01 270);--muted:oklch(.46 .015 270);--dim:oklch(.56 .015 270);--brand:oklch(.58 .2 285);--brand-2:oklch(.72 .14 210);--director:oklch(.6 .19 262);--ok:oklch(.6 .15 160);--warn:oklch(.66 .15 62);--mc:#ec4a24;--md:#2f6bff;--mono:'JetBrains Mono',ui-monospace,monospace}
 *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:15px/1.6 'Pretendard Variable',Pretendard,-apple-system,system-ui,'Apple SD Gothic Neo','Malgun Gothic',sans-serif;word-break:keep-all;-webkit-font-smoothing:antialiased}
 header{padding:28px clamp(16px,4vw,48px) 22px;border-bottom:1px solid var(--div);background:#fff;display:flex;flex-wrap:wrap;gap:14px 24px;align-items:flex-end}
-.wm{display:inline-flex;align-items:center;gap:9px}.wm svg{width:34px;height:34px}.wm b{display:block;font-size:15px;font-weight:700;letter-spacing:-.03em;line-height:1.1}.wm small{display:block;font-size:11px;font-weight:600;color:var(--director)}
+.wm{display:inline-flex;align-items:center;gap:10px;color:inherit;text-decoration:none}.wm .mk{height:38px;width:auto}.wm em{font-style:normal;font-weight:700;background:linear-gradient(90deg,#7c5cf0,#38bcd8);-webkit-background-clip:text;background-clip:text;color:transparent}.wm b{display:block;font-size:15px;font-weight:700;letter-spacing:-.03em;line-height:1.1}.wm small{display:block;font-size:11px;font-weight:600;color:var(--director)}
 .eb{font-size:12.5px;font-weight:600;color:var(--dim)}h1{margin:2px 0 0;font-size:26px;font-weight:800;letter-spacing:-.04em}
 .sum{color:var(--muted);font-size:13px}.grow{flex:1}a{color:var(--brand);font-weight:600}
 .notice{margin:20px clamp(16px,4vw,48px) 0;padding:14px 16px;border:1px solid var(--line);border-left:3px solid var(--director);border-radius:10px;background:#fff;white-space:pre-wrap;color:var(--muted)}
@@ -117,7 +117,7 @@ footer{padding:0 clamp(16px,4vw,48px) 40px;color:var(--dim);font-size:12px}
 .lb{position:fixed;inset:0;z-index:9;display:grid;place-items:center;padding:16px;background:#0e0e14f5;cursor:zoom-out}.lb .snap{width:min(100%,calc((100vh - 32px) * var(--ar)));cursor:zoom-out}.lb .snap-zoom{display:none}.lb .pin{transform:scale(1.25)}
 @media print{.snap-zoom,.lb{display:none!important}:root{--bg:#fff}body{font-size:12px}header{padding:0 0 12px}main{padding:12px 0}.card{grid-template-columns:300px 1fr;box-shadow:none}.notice{margin:12px 0 0}.row a{display:none}footer{padding:0}@page{margin:14mm}}
 </style></head><body>
-<header><div class="wm">${logoMark('')}<span><b>${t('쎈스 디렉터')}</b><small>Sense Director</small></span></div><div class="grow"><div class="eb">${role === 'director' ? t('디렉터 회신') : t('수정요청')}</div><h1>${title}</h1>
+<header><a class="wm" href="https://osense.github.io/WesNS/" target="_blank" rel="noopener">${logoMarkInline('mk')}<span><b>${t('쎈스 디렉터')}</b><small>WSNS studio <em>[${t('웨스엔에스 스튜디오')}]</em></small></span></a><div class="grow"><div class="eb">${role === 'director' ? t('디렉터 회신') : t('수정요청')}</div><h1>${title}</h1>
 <div class="sum">${items.length}${t('건 ·')} ${esc(reqs.map(r => r.from).filter(Boolean).join(', ') || t('클라이언트'))} · ${fmtDate(Date.now())}${p.d ? ' · ' + esc(dueLabel(p.d)) : ''}</div></div>
 ${link ? `<a href="${esc(link)}">${role === 'director' ? t('클라이언트 화면에서 열기') : t('디렉터 수신함으로 가져오기')}</a>` : ''}</header>
 ${p.n && role === 'director' ? `<div class="notice">${esc(p.n)}</div>` : ''}

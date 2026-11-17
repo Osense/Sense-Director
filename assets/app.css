@@ -991,3 +991,58 @@ html.dark { --paper-bg: oklch(0.2 0.008 270); }
   .topbar .chip.mock, .topbar [data-act=import] .bl { display: none; }
   .topbar [data-act=import] { width: 38px; padding: 0; justify-content: center; }
 }
+
+/* ---------- 영상 확대 ---------- */
+.stage .pan { position: absolute; inset: 0; transform-origin: 0 0; }
+.stage.zoomed .pan { will-change: transform; }
+.stage.panning, .stage.panning * { cursor: grabbing !important; }
+.vzoom { position: absolute; top: 10px; right: 10px; z-index: 7; display: flex; align-items: center; gap: 2px; padding: 3px; border-radius: 10px; background: color-mix(in oklch, var(--panel) 92%, transparent); border: 1px solid var(--line); box-shadow: var(--shadow-lg); backdrop-filter: blur(8px); }
+.vzoom[hidden] { display: none; }
+.vzoom b { min-width: 46px; text-align: center; font: 600 12px var(--mono); }
+.vzoom .btn { min-height: 30px; }
+.vzoom .btn.icon { width: 30px; height: 30px; }
+.vnav { background: #111; }
+.vnav canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+.stage.capturing .vzoom, .stage.capturing .vnav { display: none !important; }
+
+/* ---------- WSNS studio 로고 (2×2) ---------- */
+.wordmark { gap: 10px; }
+.wordmark .mark { width: auto; height: 34px; transition: transform .35s; }
+.wordmark:hover .mark { transform: rotate(-5deg) scale(1.05); }
+.wordmark .bn b { font-size: 15px; }
+.wordmark .bn small { display: block; margin-top: 2px; font-size: 10.5px; font-weight: 600; color: var(--muted); letter-spacing: -.01em; white-space: nowrap; }
+.pron .pn-k { font-weight: 700; background: linear-gradient(90deg, #7c5cf0, #38bcd8); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.logo-stacked { display: inline-block; }
+.logo-stacked img { display: block; height: 100%; width: auto; }
+.logo-stacked .on-dark { display: none; }
+html.dark .logo-stacked .on-light { display: none; }
+html.dark .logo-stacked .on-dark { display: block; }
+.gate-logo, .auth-logo { display: inline-block; justify-self: center; transition: transform .3s; }
+.gate-logo:hover, .auth-logo:hover { transform: scale(1.03); }
+.gate-logo .logo-stacked { height: 92px; }
+.auth-logo .logo-stacked { height: 84px; }
+.gate-pron { justify-self: center; text-align: center; font-size: 12.5px; font-weight: 600; color: var(--muted); margin: 6px 0 14px; }
+.auth-head .gate-pron { margin: 2px 0 8px; }
+@media (max-width: 520px) {
+  /* 휴대폰: 마크 옆에 제품 이름과 발음을 두 줄로 작게 */
+  .topbar .wordmark .bn { display: grid; }
+  .topbar .wordmark .bn b { font-size: 12.5px; }
+  .topbar .wordmark .bn small { font-size: 9px; margin-top: 1px; white-space: normal; max-width: 56px; line-height: 1.25; }
+  .topbar .wordmark .pron .pn-en { display: none; }
+  .topbar .wordmark .mark { height: 30px; }
+  .topbar .wordmark { gap: 7px; }
+  /* 클라이언트는 프로젝트 제목이 있으니 마크 옆에는 발음만 */
+  body[data-view=client] .topbar .wordmark .bn b { display: none; }
+  body[data-view=client] .topbar .wordmark .bn small { white-space: normal; width: 52px; line-height: 1.25; }
+}
+@media (max-width: 380px) { .topbar .wordmark .bn b { display: none; } }
+@media (max-width: 380px) {
+  .topbar { gap: 3px; padding-inline: 8px; }
+  .topbar .btn.icon, .topbar .btn[data-act=import], .topbar .btn[data-act=new], .topbar .btn[data-act=notice] { width: 35px; min-width: 35px; }
+  .topbar .lang-btn { padding: 0 6px; }
+  .topbar .wordmark { margin-right: 2px; }
+}
+.lang-btn .ls { display: none; }
+@media (max-width: 520px) { .topbar .lang-btn .ll { display: none; } .topbar .lang-btn .ls { display: inline; } }
+@media (max-width: 520px) { .topbar .wordmark .bn b { font-size: 12px; letter-spacing: -.035em; white-space: nowrap; } .topbar .wordmark .bn { max-width: 92px; } }
+@media (max-width: 430px) { html[lang=en] .topbar .wordmark .bn b { display: none; } }

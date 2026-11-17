@@ -411,7 +411,15 @@ function renderInbox(side, p, getSel, setSel, hooks, initialPane) {
     addNote({ s: [pts] });
   };
 
+  // 다시 그려도 보던 자리 그대로 — 상태·댓글을 바꿀 때 목록이 맨 위로 튀지 않게
   const draw = () => {
+    const lists = [...side.querySelectorAll('.list')].map(l => l.scrollTop), sideTop = side.scrollTop, winY = scrollY;
+    drawNow();
+    side.querySelectorAll('.list').forEach((l, k) => { if (lists[k] != null) l.scrollTop = lists[k]; });
+    side.scrollTop = sideTop;
+    if (Math.abs(scrollY - winY) > 1) scrollTo({ top: winY, behavior: 'instant' });
+  };
+  const drawNow = () => {
     const inbox = Store.inbox(p.id).sort((a, b) => b.at - a.at), all = inbox.flatMap(r => r.items), ns = notes();
     const cnt = k => all.filter(it => (it.st || 'open') === k).length, done = cnt('done');
     const fps = V ? V.P.effFps() : (p.fps || 30), poster = posterOf(p.src, p.poster);

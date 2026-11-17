@@ -529,6 +529,47 @@ const pointer = (sel, pts) => ev(`(async()=>{const el=document.querySelector(${J
   await ev("document.dispatchEvent(new KeyboardEvent('keydown',{key:'v',bubbles:true}))"); await delay(100);
   ok(await ev("!document.documentElement.classList.contains('text-only')"), 'list view: V key toggles');
 
+
+  /* 11e. 상태 버튼 스크롤 유지 · 재생 중 핀 깜빡임 · 영상 확대 · 로고 */
+  await ev(CLEAR); await go(BASE); await until("document.querySelector('.hero-form input')");
+  ok(await ev("(()=>{const a=document.querySelector('.topbar .wordmark');return a && a.href.startsWith('https://osense.github.io/WesNS') && a.target==='_blank' && a.querySelector('img.mark').src.includes('brand/wsns-mark.svg') && a.textContent.includes('웨스엔에스 스튜디오') && a.textContent.includes('WSNS studio')})()"), 'logo: 2×2 WSNS mark, WSNS studio [웨스엔에스 스튜디오], links to the WSNS homepage');
+  await ev(`document.querySelector('.hero-form input').value=${JSON.stringify(VIDEO)};document.querySelector('.hero-form .btn').click()`);
+  await until("location.hash.includes('tab=setup') && document.querySelector('.stage video') && document.querySelector('.stage video').readyState>=2", 10000);
+  const zPid = await ev("location.hash.match(/p=(\\w+)/)[1]");
+  await ev(`(async()=>{const {Store}=await import('/assets/js/store.js');const items=[];for(let i=0;i<14;i++)items.push({id:'z'+i,t:i*0.5,x:30+i,y:40,s:[],tx:'요청 '+(i+1)+' — 길게 적은 수정 내용입니다. '.repeat(3),st:'open',rp:[],at:Date.now()});Store.saveInbox('${zPid}',[{rid:'r1',from:'고객',at:Date.now(),items}])})()`);
+  await go(BASE + '?z#p=' + zPid + '&tab=inbox'); await until("document.querySelectorAll('.list .item').length===14", 8000, 'inbox with many items');
+  // 목록을 아래로 내린 뒤 상태 버튼
+  await ev("(()=>{const l=document.querySelector('.list');const it=document.querySelectorAll('.list .item')[9];l.scrollTop=it.offsetTop-l.offsetTop-40;scrollTo(0,0)})()"); await delay(150);
+  const sc0 = await ev("document.querySelector('.list').scrollTop");
+  await ev("document.querySelectorAll('.list .item')[9].querySelector('[data-st=done]').click()"); await delay(250);
+  const sc1 = await ev("document.querySelector('.list').scrollTop");
+  ok(sc0 > 200 && Math.abs(sc1 - sc0) < 3, `status button keeps the list where it was (${sc0} → ${sc1})`);
+  await ev("document.querySelectorAll('.list .item')[9].querySelector('[data-st=hold]').click()"); await delay(250);
+  ok(Math.abs(await ev("document.querySelector('.list').scrollTop") - sc0) < 3, 'second status change also keeps the scroll');
+  // 재생 중 핀: 다시 그리는 횟수가 적어야(깜빡임 없음)
+  await ev("document.querySelector('.stage video').currentTime=0.95"); await delay(300);
+  await ev("window.__mut=0;new MutationObserver(m=>{window.__mut+=m.length}).observe(document.querySelector('.overlay'),{childList:true})");
+  await ev("document.querySelector('[data-act=play]').click()"); await delay(1600); await ev("document.querySelector('.stage video').pause()");
+  const muts = await ev("window.__mut");
+  ok(muts < 40, `playing past pins redraws the marks only when they change (${muts} changes in 1.6 s)`);
+  ok(await ev("document.querySelector('.freeze').hidden"), 'scene image cover is hidden once the video plays');
+  // 영상 확대
+  await ev("(()=>{const s=document.querySelector('.stage'),r=s.getBoundingClientRect();s.dispatchEvent(new WheelEvent('wheel',{deltaY:-240,ctrlKey:true,clientX:r.left+r.width/2,clientY:r.top+r.height/2,bubbles:true,cancelable:true}))})()"); await delay(200);
+  ok(await ev("document.querySelector('.stage').classList.contains('zoomed') && !document.querySelector('[data-vzoom]').hidden && parseInt(document.querySelector('[data-vzpct]').textContent)>100 && !document.querySelector('[data-vnav]').hidden"), 'video: Ctrl + wheel zooms, with zoom bar and mini-map');
+  await shot('32-video-zoom');
+  const nBefore = await ev(`(async()=>{const {Store}=await import('/assets/js/store.js');return (Store.getProject('${zPid}').notes||[]).length})()`);
+  await pointer('.overlay', [[0.5, 0.5], [0.5, 0.5]]); await delay(700);
+  const zn = await ev(`(async()=>{const {Store}=await import('/assets/js/store.js');return Store.getProject('${zPid}').notes||[]})()`);
+  ok(zn.length === nBefore + 1 && Math.abs(zn[zn.length - 1].x - 50) < 1 && Math.abs(zn[zn.length - 1].y - 50) < 1, `video: pin while zoomed lands on the right spot (${zn.length && zn[zn.length-1].x}, ${zn.length && zn[zn.length-1].y})`);
+  const tr0 = await ev("document.querySelector('.pan').style.transform");
+  await ev("(()=>{const s=document.querySelector('.stage'),r=s.getBoundingClientRect();s.dispatchEvent(new WheelEvent('wheel',{deltaX:60,deltaY:40,clientX:r.left+10,clientY:r.top+10,bubbles:true,cancelable:true}))})()"); await delay(100);
+  ok(await ev("document.querySelector('.pan').style.transform") !== tr0, 'video: wheel pans while zoomed');
+  await ev("document.dispatchEvent(new KeyboardEvent('keydown',{key:'0',bubbles:true}))"); await delay(100);
+  ok(await ev("!document.querySelector('.stage').classList.contains('zoomed') && document.querySelector('[data-vzoom]').hidden"), 'video: 0 key returns to fit');
+  await ev("document.dispatchEvent(new KeyboardEvent('keydown',{key:'+',bubbles:true}))"); await delay(100);
+  ok(await ev("document.querySelector('[data-vzpct]').textContent==='150%'"), 'video: + key zooms in');
+  await ev("document.querySelector('[data-vz=fit]').click()"); await delay(100);
+  ok(await ev("!document.querySelector('.stage').classList.contains('zoomed')"), 'video: fit button');
   /* 11d. 사용 안내 (애니메이션) */
   await ev(CLEAR + "sessionStorage.setItem('t:tour','1');localStorage.removeItem('sd:tour:off')");
   await go(BASE + '?tour'); await until("document.querySelector('.hero-form input')");

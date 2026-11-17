@@ -43,6 +43,6 @@ export const fmtMD = d => new Intl.DateTimeFormat(lang === 'ko' ? 'ko-KR' : 'en-
 /** 언어 바꾸기 버튼 (한국어 ↔ English) */
 export const langBtnHTML = () => {
   const next = lang === 'ko' ? 'en' : 'ko';
-  return `<button class="btn ghost lang-btn" data-lang-set="${next}" title="${lang === 'ko' ? 'English' : '한국어'}" aria-label="${lang === 'ko' ? 'Switch to English' : '한국어로 보기'}"><svg class="ic" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></svg><span>${lang === 'ko' ? 'EN' : '한국어'}</span></button>`;
+  return `<button class="btn ghost lang-btn" data-lang-set="${next}" title="${lang === 'ko' ? 'English' : '한국어'}" aria-label="${lang === 'ko' ? 'Switch to English' : '한국어로 보기'}"><svg class="ic" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></svg><span class="ll">${lang === 'ko' ? 'EN' : '한국어'}</span><span class="ls">${lang === 'ko' ? 'EN' : 'KO'}</span></button>`;
 };
 addEventListener('click', e => { const b = e.target.closest('[data-lang-set]'); if (b) setLang(b.dataset.langSet); });

@@ -118,8 +118,8 @@ function estimate(intervals) {
  */
 export function createPlayer(stage, src, hooks = {}, startNative = false) {
   const inner = '<div class="media"></div><img class="freeze" alt="" hidden><div class="overlay"></div>';
-  // 문서는 확대·이동할 수 있게 한 겹(.pan)으로 감싼다 — 핀·그림도 함께 따라간다
-  stage.innerHTML = src.k === 'doc' ? `<div class="pan">${inner}</div>` : inner;
+  // 확대·이동할 수 있게 한 겹(.pan)으로 감싼다 — 핀·그림도 함께 따라간다 (영상·문서 모두)
+  stage.innerHTML = `<div class="pan">${inner}</div>`;
   const media = stage.querySelector('.media'), freeze = stage.querySelector('.freeze'), overlay = stage.querySelector('.overlay');
   const P = {
     kind: src.k, src, ar: src.k === 'yt' && src.short ? [9, 16] : [16, 9], fps: 0, fpsHow: '', title: '', poster: '', _ready: false, stage, overlay, destroyed: false,
@@ -206,7 +206,7 @@ function initVideo(P, media, url, hooks) {
     P._ready = true; P.setMeta({ ar: [v.videoWidth || 16, v.videoHeight || 9] });
     hooks.onReady && hooks.onReady({ title: P.title, duration: v.duration });
   });
-  v.addEventListener('play', () => hooks.onState && hooks.onState(true));
+  v.addEventListener('play', () => { P.hideFreeze(); hooks.onState && hooks.onState(true); });
   v.addEventListener('pause', () => hooks.onState && hooks.onState(false));
   v.addEventListener('timeupdate', () => hooks.onTime && hooks.onTime(v.currentTime));
   v.addEventListener('seeked', () => hooks.onTime && hooks.onTime(v.currentTime));
@@ -231,7 +231,7 @@ function initVideo(P, media, url, hooks) {
   Object.assign(P, {
     el: v,
     time: () => v.currentTime || 0, duration: () => v.duration || 0, paused: () => v.paused,
-    play() { v.play().catch(() => {}); }, pause() { v.pause(); },
+    play() { P.hideFreeze(); v.play().catch(() => {}); }, pause() { v.pause(); },
     seek(t) { v.currentTime = Math.max(0, Math.min(v.duration || t, t)); },
     rate: () => v.playbackRate, setRate(r) { v.playbackRate = r; },
     setVolume(x) { v.volume = x; },

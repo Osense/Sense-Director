@@ -1,5 +1,5 @@
 /* 클라이언트 화면 — 핀 번호로 들어와 핀·펜으로 수정요청을 남기고 디렉터에게 보낸다 */
-import { $, $$, ic, esc, uid, tc, sha, unpack, modal, toast, dueLabel, fmtDate, copyText, shareOrCopy, safeName, fpsLabel, brandHTML, themeBtnHTML, listViewHTML, toggleListView } from './util.js';
+import { $, $$, ic, esc, uid, tc, sha, unpack, modal, toast, dueLabel, fmtDate, copyText, shareOrCopy, safeName, fpsLabel, brandHTML, themeBtnHTML, listViewHTML, toggleListView, logoStacked, pronHTML, WSNS_HOME } from './util.js';
 import { Store, MODE } from './store.js';
 import { mountViewer, snapHTML, posterOf } from './viewer.js';
 import { openZoom } from './zoom.js';
@@ -427,14 +427,14 @@ function mergeFeedback(state, reqs) {
 }
 
 function errorScreen(title, msg) {
-  return `<div class="gate">${brandHTML()}<h2>${esc(title)}</h2><p>${esc(msg)}</p></div>`;
+  return `<div class="gate"><a class="gate-logo" href="${WSNS_HOME()}" target="_blank" rel="noopener" title="${t('WSNS studio 홈페이지')}">${logoStacked()}</a><div class="gate-pron">${t('쎈스 디렉터')} · ${pronHTML()}</div><h2>${esc(title)}</h2><p>${esc(msg)}</p></div>`;
 }
 
 /** 핀 번호 4자리 */
 function pinGate(app, p) {
   return new Promise(resolve => {
     app.innerHTML = `<div class="gate">
-      ${brandHTML()}
+      <a class="gate-logo" href="${WSNS_HOME()}" target="_blank" rel="noopener" title="${t('WSNS studio 홈페이지')}">${logoStacked()}</a><div class="gate-pron">${t('쎈스 디렉터')} · ${pronHTML()}</div>
       <div class="eyebrow">${p.by ? esc(p.by) + ' · ' : ''}${t('비공개 검수')}</div>
       <h2>${esc(p.t || t('수정요청'))}</h2>
       <p>${t('디렉터에게 받은 핀 번호 4자리를 입력해 주세요.')}</p>
