@@ -18,7 +18,7 @@ async function until(expr, ms = 10000, label = expr) { const end = Date.now() + 
 async function go(url) { await call('Page.navigate', { url }); await delay(400); await until("document.readyState==='complete'"); if (process.env.THEME === 'dark') await ev("localStorage.setItem('wesns.theme','dark');document.documentElement.classList.add('dark')").catch(() => {}); }
 async function shot(name) { if (!SHOTS) return; const r = await call('Page.captureScreenshot', { format: 'png' }); fs.mkdirSync(SHOTS, { recursive: true }); fs.writeFileSync(path.join(SHOTS, name + '.png'), Buffer.from(r.result.data, 'base64')); }
 async function setFile(sel, file) { const d = await call('DOM.getDocument', { depth: -1, pierce: true }); const q = await call('DOM.querySelector', { nodeId: d.result.root.nodeId, selector: sel }); if (!q.result || !q.result.nodeId) throw Error('no input ' + sel); await call('DOM.setFileInputFiles', { nodeId: q.result.nodeId, files: [].concat(file) }); }
-const SEED = "if(!localStorage.getItem('sd:tour:off')&&!sessionStorage.getItem('t:tour'))localStorage.setItem('sd:tour:off','1');if(!localStorage.getItem('wesns.lang'))localStorage.setItem('wesns.lang','ko');if(!sessionStorage.getItem('t:nouser')&&!localStorage.getItem('wesns.mock.user'))localStorage.setItem('wesns.mock.user',JSON.stringify({id:'t',name:'tester',email:'tester@example.com',provider:'email'}));";
+const SEED = "if(!localStorage.getItem('sd:tour:off')&&!sessionStorage.getItem('t:tour'))localStorage.setItem('sd:tour:off','1');if(!localStorage.getItem('sd:ctour:off')&&!sessionStorage.getItem('t:tour'))localStorage.setItem('sd:ctour:off','1');if(!localStorage.getItem('wesns.lang'))localStorage.setItem('wesns.lang','ko');if(!sessionStorage.getItem('t:nouser')&&!localStorage.getItem('wesns.mock.user'))localStorage.setItem('wesns.mock.user',JSON.stringify({id:'t',name:'tester',email:'tester@example.com',provider:'email'}));";
 const CLEAR = 'localStorage.clear();' + SEED;
 const pass = []; const ok = (c, m) => { if (!c) throw Error('FAIL: ' + m); pass.push(m); };
 const click = sel => ev(`(()=>{const e=document.querySelector(${JSON.stringify(sel)});if(!e)throw Error('no '+${JSON.stringify(sel)});e.click();return true})()`);
@@ -555,6 +555,29 @@ const pointer = (sel, pts) => ev(`(async()=>{const el=document.querySelector(${J
   ok(await ev("document.querySelector('[data-tour=next]').textContent==='시작하기'"), 'guide: last step says 시작하기');
   await ev("document.querySelector('[data-tour=next]').click()"); await delay(150);
   ok(await ev("!document.querySelector('.modal.tour')"), 'guide: 시작하기 closes it');
+  // 클라이언트 화면 사용 안내
+  await ev("localStorage.removeItem('sd:ctour:off')");
+  const tPin = await ev("[...document.querySelectorAll('.pin-show span')].map(s=>s.textContent).join('')");
+  const tLink = await ev("document.querySelector('[data-link]') ? document.querySelector('[data-link]').value : ''") || await (async () => { await ev("document.querySelector('[data-tab=setup]').click()"); await until("document.querySelector('[data-link]') && document.querySelector('[data-link]').value.includes('#c=')", 6000); return ev("document.querySelector('[data-link]').value"); })();
+  const tPin2 = tPin || await ev("[...document.querySelectorAll('.pin-show span')].map(s=>s.textContent).join('')");
+  await go(tLink); await until("document.querySelector('.pin-boxes input')"); await typePin(tPin2);
+  await until("document.querySelector('.modal.tour .tv.s-find')", 8000, 'client guide opens on first visit');
+  ok(await ev("document.querySelector('.modal.tour [data-count]').textContent==='1 / 9' && !!document.querySelector('.tour .m-kbd')"), 'client guide: opens on first visit with step 1 (finding the scene, keys)');
+  await delay(2400); await shot('30-client-tour-1');
+  await ev("document.querySelector('[data-go=\"4\"]').click()"); await delay(1800); await shot('31-client-tour-hand');
+  ok(await ev("!!document.querySelector('.tour .tv.s-hand')"), 'client guide: video projects explain the hand tool');
+  await ev("document.querySelector('[data-go=\"8\"]').click()"); await delay(300);
+  ok(await ev("document.querySelectorAll('.tour .m-krow').length===8"), 'client guide: last step lists shortcuts');
+  await ev("document.querySelector('[data-tour=next]').click()"); await delay(200);
+  ok(await ev("!document.querySelector('.modal.tour')"), 'client guide: closes');
+  await go(tLink.replace('#', '?again#')); await until("document.querySelector('.pin-boxes input') || document.querySelector('.viewer .stage')");
+  if (await ev("!!document.querySelector('.pin-boxes input')")) await typePin(tPin2);
+  await until("document.querySelector('.viewer .stage')", 8000); await delay(900);
+  ok(await ev("!document.querySelector('.modal.tour')"), 'client guide: shown once per project');
+  await click('[data-act=help]'); await until("document.querySelector('.modal.tour .tv.s-find')", 3000);
+  ok(true, 'client guide: ? button reopens it');
+  await ev("document.querySelector('[data-off]').click();document.querySelector('[data-tour=close]').click()"); await delay(150);
+  ok(await ev("localStorage.getItem('sd:ctour:off')==='1'"), 'client guide: 다시 보지 않기 saved');
   await ev("sessionStorage.removeItem('t:tour')");
   /* 12. WesNS 로그인 (목업) */
   const HANGUL = "(()=>{const w=document.createTreeWalker(document.body,NodeFilter.SHOW_TEXT);const bad=[];let n;while(n=w.nextNode()){if(n.parentElement.closest('[data-user],textarea,input,noscript,script,style'))continue;if(/[가-힣]/.test(n.textContent))bad.push(n.textContent.trim().slice(0,40))}document.querySelectorAll('[title],[aria-label],[placeholder]').forEach(e=>['title','aria-label','placeholder'].forEach(a=>{const v=e.getAttribute(a);if(v&&/[가-힣]/.test(v)&&!/한국어/.test(v))bad.push(a+':'+v.slice(0,40))}));return bad.filter(x=>x!=='한국어')})()";

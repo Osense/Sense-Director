@@ -5,6 +5,7 @@ import { mountViewer, snapHTML, posterOf } from './viewer.js';
 import { openZoom } from './zoom.js';
 import { workspaceSplitters } from './layout.js';
 import { replyLink, requestMessage, reportHTML, printHTML, shareFile, STATUS } from './exports.js';
+import { showClientTour, maybeShowClientTour } from './tour.js';
 import { t, tn, lang, fmtDateL, fmtMD, langBtnHTML } from './i18n.js';
 
 export async function renderClient(app, params) {
@@ -265,7 +266,7 @@ export async function renderClient(app, params) {
   document.addEventListener('click', e => { if (!menuRoot.contains(e.target)) menu.hidden = true; });
   $('[data-act=send]', app).addEventListener('click', send);
   $$('[data-send]', app).forEach(b => b.addEventListener('click', () => { menu.hidden = true; fallback(b.dataset.send); }));
-  $('[data-act=help]', app).addEventListener('click', help);
+  $('[data-act=help]', app).addEventListener('click', () => showClientTour(P.doc));
   const nb = $('[data-act=notice]', app); nb && nb.addEventListener('click', showNotice);
 
   function currentRequest() {
@@ -392,7 +393,7 @@ export async function renderClient(app, params) {
   document.onkeydown = e => {
     if (document.querySelector('.modal.open')) return;
     if (e.target.closest && e.target.closest('textarea,input,select')) { if (e.key === 'Escape') e.target.blur(); return; }
-    if (e.key === '?') { help(); return; }
+    if (e.key === '?') { showClientTour(P.doc); return; }
     if (!e.ctrlKey && !e.metaKey && !e.altKey && (e.key === 'v' || e.key === 'V')) { toggleListView(); return; }
     if (e.ctrlKey || e.metaKey || e.altKey) return;
     V.key(e);
@@ -404,7 +405,10 @@ export async function renderClient(app, params) {
   });
 
   renderList();
-  if ((p.n || notes().length) && !sessionStorage.getItem('sd:seen:' + p.id)) { sessionStorage.setItem('sd:seen:' + p.id, '1'); showNotice(); }
+  // 처음 열면: 안내사항 → 사용 안내(애니메이션) 순서로
+  const firstNotice = (p.n || notes().length) && !sessionStorage.getItem('sd:seen:' + p.id);
+  if (firstNotice) sessionStorage.setItem('sd:seen:' + p.id, '1');
+  (firstNotice ? showNotice() : Promise.resolve()).then(() => setTimeout(() => maybeShowClientTour(p.id, P.doc), 250));
 }
 
 function syncFromInbox(state, pid) {

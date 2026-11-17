@@ -836,3 +836,112 @@ html.dark { --paper-bg: oklch(0.2 0.008 270); }
   .tv *, .tv .m-cur { animation: none !important; }
   .tv .m-cur { display: none; }
 }
+
+/* ---------- 사용 안내: 클라이언트 단계 ---------- */
+.tv .m-kbd { display: inline-grid; place-items: center; min-width: 26px; height: 26px; padding: 0 7px; border-radius: 7px; background: var(--panel); border: 1px solid var(--line); border-bottom-width: 3px; font: 700 11px var(--mono); color: var(--text); }
+.tv .m-keys { position: absolute; right: 6%; bottom: 10%; display: flex; gap: 6px; }
+.tv .m-keys .m-kbd { animation: keyHit var(--T) infinite both; }
+.tv .m-keys .m-kbd:nth-child(2) { animation-delay: .9s; } .tv .m-keys .m-kbd:nth-child(3) { animation-delay: 1.4s; }
+@keyframes keyHit { 0%, 30% { transform: none; border-bottom-width: 3px; } 33% { transform: translateY(2px); border-bottom-width: 1px; border-color: var(--brand); } 38%, 100% { transform: none; border-bottom-width: 3px; } }
+.tv .m-kind { margin-left: auto; font-size: 9.5px; color: var(--dim); border: 1px solid var(--line); border-radius: 999px; padding: 0 6px; }
+.tv .m-head em.d { background: var(--mark-d); }
+
+/* 1. 장면 찾기 */
+.s-find .m-stage { left: 6%; top: 10%; width: 66%; height: 78%; }
+.s-find .m-bar { position: absolute; left: 0; right: 0; bottom: 0; z-index: 3; display: flex; align-items: center; gap: 8px; padding: 7px 10px; background: rgb(0 0 0 / .5); color: #fff; font: 600 10px var(--mono); }
+.s-find .m-play { width: 0; height: 0; border: 5px solid transparent; border-left: 8px solid #fff; animation: playPause var(--T) steps(1) infinite both; }
+.s-find .m-track { position: relative; flex: 1; height: 3px; border-radius: 2px; background: rgb(255 255 255 / .3); }
+.s-find .m-head2 { position: absolute; top: -3px; width: 9px; height: 9px; margin-left: -4px; border-radius: 50%; background: var(--mark-c); animation: scrub var(--T) infinite both; }
+.s-find .m-tc::after { content: '00:00:12:08'; animation: tcStep var(--T) infinite both; }
+@keyframes scrub { 0% { left: 5%; } 34% { left: 52%; } 60% { left: 52%; } 64% { left: 53%; } 70% { left: 54%; } 76%, 100% { left: 55%; } }
+@keyframes playPause { 0%, 34% { border-left-width: 8px; } 34.1%, 100% { border-left-width: 8px; } }
+@keyframes tcStep { 0% { content: '00:00:02:00'; } 14% { content: '00:00:06:11'; } 28% { content: '00:00:11:20'; } 34%, 60% { content: '00:00:12:06'; } 64% { content: '00:00:12:07'; } 70%, 100% { content: '00:00:12:08'; } }
+.s-find .m-keys .m-kbd:nth-child(1) { animation: keyHit1 var(--T) infinite both; }
+.s-find .m-keys .m-kbd:nth-child(2), .s-find .m-keys .m-kbd:nth-child(3) { animation: none; }
+.s-find .m-keys .m-kbd:nth-child(3) { animation: keyHit3 var(--T) infinite both; }
+@keyframes keyHit1 { 0%, 32% { transform: none; } 34% { transform: translateY(2px); border-color: var(--brand); } 38%, 100% { transform: none; } }
+@keyframes keyHit3 { 0%, 62% { transform: none; } 64% { transform: translateY(2px); border-color: var(--brand); } 67%, 68% { transform: none; } 70% { transform: translateY(2px); border-color: var(--brand); } 73%, 100% { transform: none; } }
+
+/* 문서 1. 쪽 찾기 */
+.s-cpages .m-rail { position: absolute; left: 5%; top: 9%; display: grid; gap: 6px; }
+.s-cpages .m-rail i { display: block; width: 30px; height: 40px; border-radius: 4px; background: #fff; box-shadow: 0 1px 3px rgb(0 0 0 / .2); border: 2px solid transparent; animation: railOn var(--T) infinite both; }
+.s-cpages .m-rail i:nth-child(1) { animation-name: none; }
+.s-cpages .m-rail i:nth-child(3) { animation-name: railOn3; }
+.s-cpages .m-rail i:nth-child(4) { animation-name: none; }
+@keyframes railOn { 0%, 45% { border-color: var(--brand); } 50%, 100% { border-color: transparent; } }
+@keyframes railOn3 { 0%, 45% { border-color: transparent; } 50%, 100% { border-color: var(--brand); } }
+.s-cpages .m-page { position: absolute; left: 20%; top: 6%; width: 52%; height: 76%; border-radius: 6px; background: var(--paper-bg, #e9eaef); overflow: hidden; }
+.s-cpages .m-sheet { position: absolute; left: 22%; top: 6%; width: 56%; height: 88%; padding: 10px; background: #fff; box-shadow: 0 4px 14px rgb(0 0 0 / .15); animation: pageFlip var(--T) infinite both; }
+.s-cpages .m-sheet .m-line { background: #d6d8e0; }
+.s-cpages .m-block { margin-top: 10px; height: 30%; border-radius: 4px; background: linear-gradient(135deg, #2f6bff55, #22aa6655); }
+@keyframes pageFlip { 0%, 44% { transform: none; opacity: 1; } 48% { transform: translateX(-20px); opacity: 0; } 52% { transform: translateX(20px); opacity: 0; } 58%, 100% { transform: none; opacity: 1; } }
+.s-cpages .m-pager { position: absolute; left: 20%; bottom: 6%; display: flex; gap: 10px; align-items: center; font: 700 12px var(--mono); color: var(--muted); }
+.s-cpages .m-pn::after { content: '2 / 4'; color: var(--text); animation: pn var(--T) infinite both; }
+@keyframes pn { 0%, 48% { content: '2 / 4'; } 50%, 100% { content: '3 / 4'; } }
+.s-cpages .m-keys .m-kbd:nth-child(1) { animation: none; }
+.s-cpages .m-keys .m-kbd:nth-child(2) { animation: keyHitP var(--T) infinite both; }
+@keyframes keyHitP { 0%, 44% { transform: none; } 46% { transform: translateY(2px); border-color: var(--brand); } 50%, 100% { transform: none; } }
+
+/* 2·3. 핀 · 펜 */
+.s-cpin .p1t { left: 30%; top: 46%; transform: scale(.75); }
+.s-cpen .a1 { animation-name: slideIn2; }
+.s-cpen .m-stroke path { stroke-dasharray: 160; animation-name: penDraw; }
+.s-cpen .c8 { animation-name: penCur; }
+@keyframes penDraw { 0%, 10% { stroke-dashoffset: 160; } 58%, 92% { stroke-dashoffset: 0; opacity: 1; } 100% { opacity: 0; } }
+@keyframes penCur { 0% { left: 70%; top: 85%; } 10% { left: 39%; top: 36%; } 22% { left: 27%; top: 52%; } 34% { left: 33%; top: 70%; } 46% { left: 48%; top: 62%; } 58% { left: 40%; top: 36%; } 74%, 100% { left: 70%; top: 85%; } }
+
+/* 4. 적기 */
+.s-type .card { position: absolute; left: 50%; top: 8%; width: 46%; transform: translateX(-50%); padding: 9px 10px; }
+.s-type .m-thumb { height: 92px; }
+.s-type .p0 { left: 42%; top: 46%; }
+.s-type .m-ta { display: flex; align-items: center; margin-top: 7px; min-height: 30px; padding: 6px 8px; border: 1.5px solid var(--brand); border-radius: 7px; font-size: 11.5px; }
+.s-type .m-typed { display: inline-block; overflow: hidden; white-space: nowrap; max-width: 100%; animation: typeText var(--T) steps(16) infinite both; }
+.s-type .m-caret { width: 1.5px; height: 14px; background: var(--brand); animation: blink .8s steps(2) infinite; }
+@keyframes typeText { 0%, 8% { max-width: 0; } 60%, 92% { max-width: 100%; } 100% { max-width: 0; } }
+
+/* 5. 손 도구 */
+.s-hand .m-stage { left: 6%; top: 8%; width: 64%; height: 74%; }
+.s-hand .m-ytbar { position: absolute; left: 0; right: 0; bottom: 0; z-index: 3; display: flex; align-items: center; gap: 8px; padding: 8px 10px; background: linear-gradient(transparent, rgb(0 0 0 / .65)); animation: fadeIn var(--T) infinite both; }
+.s-hand .m-ytbar i { width: 10px; height: 10px; border-radius: 2px; background: #fff; opacity: .85; }
+.s-hand .m-gear { margin-left: auto; width: 12px; height: 12px; border-radius: 50%; border: 3px dotted #fff; }
+.s-hand .m-ytmenu { position: absolute; right: 8px; bottom: 34px; z-index: 4; display: grid; gap: 2px; min-width: 120px; padding: 6px; border-radius: 8px; background: rgb(28 28 28 / .92); color: #fff; font-size: 10.5px; animation: menuIn var(--T) infinite both; }
+.s-hand .m-ytmenu div { display: flex; justify-content: space-between; gap: 10px; padding: 5px 7px; border-radius: 5px; }
+.s-hand .m-ytmenu div:last-child { animation: rowHi var(--T) infinite both; }
+.s-hand .m-ytmenu b { font-weight: 600; opacity: .8; }
+.s-hand .m-tools { position: absolute; left: 6%; bottom: 4%; display: flex; gap: 2px; padding: 3px; border-radius: 8px; background: var(--panel); border: 1px solid var(--line); font-weight: 600; }
+.s-hand .m-tools span { padding: 3px 10px; border-radius: 6px; color: var(--muted); }
+.s-hand .m-tools .on { background: var(--raised); color: var(--brand); animation: toolOn var(--T) infinite both; }
+.s-hand .c9 { animation-name: handCur; }
+@keyframes fadeIn { 0%, 16% { opacity: 0; } 22%, 92% { opacity: 1; } 100% { opacity: 0; } }
+@keyframes menuIn { 0%, 40% { opacity: 0; transform: translateY(6px); } 46%, 88% { opacity: 1; transform: none; } 94%, 100% { opacity: 0; } }
+@keyframes rowHi { 0%, 60% { background: transparent; } 64%, 88% { background: rgb(255 255 255 / .16); } }
+@keyframes toolOn { 0%, 12% { background: transparent; color: var(--muted); } 16%, 100% { background: var(--raised); color: var(--brand); } }
+@keyframes handCur { 0% { left: 30%; top: 95%; } 12%, 16% { left: 31%; top: 86%; } 38%, 42% { left: 64%; top: 72%; } 60%, 66% { left: 60%; top: 60%; } 84%, 100% { left: 30%; top: 95%; } }
+
+/* 6. 보내기 + 다른 방법 */
+.s-csend .m-caretbtn { width: 18px; height: 22px; border-radius: 6px; background: var(--brand-2); }
+.s-csend .m-menu { position: absolute; right: 10px; top: 42px; z-index: 3; display: grid; gap: 2px; padding: 5px; border-radius: 8px; background: var(--panel); border: 1px solid var(--line); box-shadow: var(--shadow-lg); font-size: 10px; animation: menuLate var(--T) infinite both; }
+.s-csend .m-menu div { display: flex; align-items: center; gap: 5px; padding: 4px 6px; border-radius: 5px; }
+@keyframes menuLate { 0%, 70% { opacity: 0; transform: translateY(-4px); } 76%, 92% { opacity: 1; transform: none; } 100% { opacity: 0; } }
+
+/* 7. 디렉터 안내 · 답글 */
+.s-cnotes .m-stage { left: 5%; top: 10%; width: 54%; height: 80%; }
+.s-cnotes .m-side { position: absolute; left: 62%; right: 4%; top: 10%; }
+.s-cnotes .m-comment.c { display: flex; gap: 6px; margin-top: 8px; padding: 6px 8px; border-radius: 8px; background: color-mix(in oklch, var(--mark-c) 10%, var(--panel)); border: 1px solid color-mix(in oklch, var(--mark-c) 30%, transparent); animation: slideIn2 var(--T) infinite both; }
+.s-cnotes .m-comment.c b { color: var(--mark-c); }
+
+/* 8. 회신 확인 */
+.s-creply .m-item.big { left: 22%; top: 7%; width: 56%; }
+.s-creply .m-item.b2 { top: 58%; }
+.s-creply .m-st { margin-left: auto; padding: 1px 8px; border-radius: 999px; font-size: 9.5px; font-weight: 700; }
+.s-creply .m-st { animation: stBg var(--T) infinite both; }
+.s-creply .m-st.s2 { animation-name: stBg2; }
+@keyframes stBg { 0%, 30% { background: transparent; color: transparent; } 34%, 100% { background: color-mix(in oklch, var(--ok) 15%, transparent); color: var(--ok); } }
+@keyframes stBg2 { 0%, 46% { background: transparent; color: transparent; } 50%, 100% { background: color-mix(in oklch, var(--warn) 18%, transparent); color: var(--warn); } }
+.s-creply .m-comment { animation-delay: -1.2s; }
+
+/* 9. 단축키 */
+.s-keys .m-kgrid { position: absolute; inset: 10% 8%; display: grid; grid-template-columns: 1fr 1fr; gap: 8px 22px; align-content: center; }
+.s-keys .m-krow { display: flex; align-items: center; gap: 10px; font-size: 12px; color: var(--muted); animation: kIn var(--T) infinite both; animation-delay: calc(var(--n) * .12s); }
+.s-keys .m-krow .m-kbd { min-width: 34px; }
+@keyframes kIn { 0%, 2% { opacity: 0; transform: translateY(5px); } 10%, 94% { opacity: 1; transform: none; } 100% { opacity: 0; } }

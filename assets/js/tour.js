@@ -3,8 +3,8 @@
 import { $, ic, esc } from './util.js';
 import { t } from './i18n.js';
 
-const OFF = 'sd:tour:off';
-const isOff = () => { try { return localStorage.getItem(OFF) === '1'; } catch { return false; } };
+const OFF = 'sd:tour:off', COFF = 'sd:ctour:off';
+const isOff = (k = OFF) => { try { return localStorage.getItem(k) === '1'; } catch { return false; } };
 
 const cur = cls => `<svg class="m-cur ${cls}" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3l14 8-6.2 1.6L10 19z" fill="#17171f" stroke="#fff" stroke-width="1.6" stroke-linejoin="round"/></svg>`;
 const pin = (cls, n, d) => `<span class="m-pin ${d ? 'd' : ''} ${cls}"><b>${n}</b></span>`;
@@ -108,19 +108,29 @@ const STEPS = () => [
 let openNow = false;
 /** 프로젝트를 만든 뒤 자동으로 (다시 보지 않기를 골랐으면 건너뛴다) */
 export function maybeShowTour() { if (!isOff()) showTour(); }
+export const showTour = (start = 0) => runTour(STEPS(), OFF, start);
 
-export function showTour(start = 0) {
-  if (document.querySelector('.modal.tour')) return; openNow = true;
-  const steps = STEPS(); let i = Math.max(0, Math.min(steps.length - 1, start));
+/** 클라이언트: 검수 링크를 처음 열 때 (프로젝트마다 한 번, 다시 보지 않기를 골랐으면 건너뛴다) */
+export function maybeShowClientTour(pid, doc) {
+  const seen = 'sd:ctour:seen:' + pid;
+  try { if (isOff(COFF) || localStorage.getItem(seen)) return Promise.resolve(); localStorage.setItem(seen, '1'); } catch {}
+  return showClientTour(doc);
+}
+export const showClientTour = (doc, start = 0) => runTour(CLIENT_STEPS(doc), COFF, start, t('검수 화면 사용 안내'));
+
+function runTour(steps, offKey, start = 0, label = t('쎈스 디렉터 사용 안내')) {
+  if (document.querySelector('.modal.tour')) return Promise.resolve(); openNow = true;
+  let done; const finished = new Promise(r => (done = r));
+  let i = Math.max(0, Math.min(steps.length - 1, start));
   const wrap = document.createElement('div');
   wrap.className = 'modal open tour';
-  wrap.innerHTML = `<div class="box tour-box" role="dialog" aria-modal="true" aria-label="${t('쎈스 디렉터 사용 안내')}">
+  wrap.innerHTML = `<div class="box tour-box" role="dialog" aria-modal="true" aria-label="${esc(label)}">
     <div class="tour-top"><span class="eyebrow">${t('사용 안내')}</span><span class="tour-count" data-count></span><button class="icon-x" data-tour="close" aria-label="${t('닫기')}">${ic('close', 16)}</button></div>
     <div class="tour-stage" data-vis></div>
     <div class="tour-copy" data-copy aria-live="polite"></div>
     <div class="tour-dots" data-dots role="tablist">${steps.map((s, k) => `<button type="button" role="tab" data-go="${k}" aria-label="${esc(s.title)}"></button>`).join('')}</div>
     <div class="tour-foot">
-      <label class="tour-off"><input type="checkbox" data-off ${isOff() ? 'checked' : ''}><span>${t('다시 보지 않기')}</span></label>
+      <label class="tour-off"><input type="checkbox" data-off ${isOff(offKey) ? 'checked' : ''}><span>${t('다시 보지 않기')}</span></label>
       <span class="grow"></span>
       <button class="btn ghost" data-tour="prev">${t('이전')}</button>
       <button class="btn brand" data-tour="next"></button>
@@ -137,8 +147,8 @@ export function showTour(start = 0) {
     wrap.dataset.step = s.k;
   };
   const close = () => {
-    try { localStorage.setItem(OFF, $('[data-off]', wrap).checked ? '1' : '0'); } catch {}
-    wrap.remove(); document.removeEventListener('keydown', onKey, true); openNow = false;
+    try { localStorage.setItem(offKey, $('[data-off]', wrap).checked ? '1' : '0'); } catch {}
+    wrap.remove(); document.removeEventListener('keydown', onKey, true); openNow = false; done();
   };
   const go = k => { i = Math.max(0, Math.min(steps.length - 1, k)); draw(); };
   const onKey = e => {
@@ -162,4 +172,105 @@ export function showTour(start = 0) {
   wrap.addEventListener('touchend', e => { if (sx == null) return; const dx = e.changedTouches[0].clientX - sx; sx = null; if (Math.abs(dx) > 50) go(i + (dx < 0 ? 1 : -1)); });
   draw();
   $('[data-tour=next]', wrap).focus();
+  return finished;
 }
+
+/* ---------------- 클라이언트용 단계 ---------------- */
+const kbd = k => `<kbd class="m-kbd">${k}</kbd>`;
+const CLIENT_STEPS = doc => [
+  doc ? {
+    k: 'cfind', title: t('1. 고칠 쪽을 찾아요'),
+    text: t('왼쪽 쪽 목록을 누르거나 아래 화살표, 키보드 ← →로 쪽을 넘겨요. 쪽마다 붙은 숫자는 그 쪽에 남긴 표시 수예요.'),
+    tips: [t('휠을 내리면 다음 쪽으로 넘어가요')],
+    vis: `<div class="tv s-cpages">
+      <div class="m-rail"><i></i><i class="on"></i><i></i><i></i></div>
+      <div class="m-page"><div class="m-sheet">${lines(5)}<div class="m-block"></div></div></div>
+      <div class="m-pager"><span>‹</span><b class="m-pn"></b><span>›</span></div>
+      <div class="m-keys">${kbd('←')}${kbd('→')}</div></div>`,
+  } : {
+    k: 'cfind', title: t('1. 고칠 장면을 찾아요'),
+    text: t('재생하다가 고칠 장면에서 멈춰요. 멈춘 채로 ← →를 누르면 한 프레임씩, Shift와 함께 누르면 1초씩 움직여요.'),
+    tips: [t('화면 아래 숫자가 시간 주소(시:분:초:프레임)예요'), t('Space로 재생·정지해요')],
+    vis: `<div class="tv s-find">
+      <div class="m-stage film"><div class="m-bar"><i class="m-play"></i><span class="m-track"><i class="m-head2"></i></span><span class="m-tc"></span></div></div>
+      <div class="m-keys">${kbd('Space')}${kbd('←')}${kbd('→')}</div></div>`,
+  },
+  {
+    k: 'cpin', title: t('2. 핀으로 콕 찍어요'),
+    text: doc ? t('고칠 곳을 핀(P)으로 누르면 오른쪽에 그 쪽 사진과 쪽 번호가 붙은 카드가 생겨요.') : t('고칠 곳을 핀(P)으로 누르면 영상이 멈추고, 오른쪽에 장면과 시간 주소가 붙은 카드가 생겨요.'),
+    tips: [t('핀 없이 이 시점에 메모만 남기려면 메모만(M)')],
+    vis: `<div class="tv s-mark s-cpin">
+      <div class="m-stage film"><div class="m-ov">${pin('p1', '01')}</div><div class="m-bar"><i></i><span>${doc ? t('2쪽') : '00:00:12:08'}</span></div></div>
+      <div class="m-side"><div class="m-item a1"><div class="m-head"><em>01</em><code>${doc ? t('2쪽') : '00:00:12:08'}</code></div><div class="m-thumb">${pin('p1t', '01')}</div>${lines(2, 'type')}</div></div>
+      ${cur('c4')}</div>`,
+  },
+  {
+    k: 'cpen', title: t('3. 펜으로 그려요'),
+    text: doc ? t('펜(D)으로 동그라미나 화살표를 그려 정확한 위치를 알려요. Ctrl + 휠이나 두 손가락으로 확대하면 더 세밀하게 그릴 수 있어요.') : t('펜(D)으로 동그라미나 화살표를 그려 정확한 위치를 알려요. 같은 장면에 이어 그린 획은 한 카드로 합쳐져요.'),
+    tips: doc ? [t('확대하면 오른쪽 아래 미니맵으로 보는 자리를 옮겨요')] : [t('그리기 시작하면 영상이 저절로 멈춰요')],
+    vis: `<div class="tv s-mark s-cpen">
+      <div class="m-stage film"><div class="m-ov"><svg class="m-stroke" viewBox="0 0 100 60" preserveAspectRatio="none"><path class="o" d="M40 22 C30 22, 26 34, 34 40 S 56 44, 58 32 S 48 18, 40 22"/><path class="i" d="M40 22 C30 22, 26 34, 34 40 S 56 44, 58 32 S 48 18, 40 22"/></svg></div></div>
+      <div class="m-side"><div class="m-item a1"><div class="m-head"><em>01</em><code>${doc ? t('2쪽') : '00:00:12:08'}</code><span class="m-kind">${t('그림')}</span></div><div class="m-thumb"></div>${lines(1, 'type')}</div></div>
+      ${cur('c8')}</div>`,
+  },
+  {
+    k: 'ctype', title: t('4. 어떻게 고칠지 적어요'),
+    text: t('카드가 생기면 바로 글을 적을 수 있어요. 카드의 장면을 누르면 크게 보면서 고칠 수 있고, 휴지통으로 지워요.'),
+    tips: [t('‘보기’에서 내용만을 고르면 사진 없이 글만 촘촘하게 봐요'), t('적은 내용은 이 브라우저에 저절로 저장돼요')],
+    vis: `<div class="tv s-type">
+      <div class="m-item card"><div class="m-head"><em>01</em><code>${doc ? t('2쪽') : '00:00:12:08'}</code><span class="m-kind">${t('핀')}</span></div><div class="m-thumb">${pin('p0', '01')}</div>
+        <div class="m-ta"><span class="m-typed">${t('로고를 조금 더 크게 해 주세요')}</span><i class="m-caret"></i></div></div></div>`,
+  },
+  doc ? {
+    k: 'czoom', title: t('5. 확대해서 자세히 봐요'),
+    text: t('아래 + − 버튼, Ctrl + 휠, 두 손가락으로 확대해요. 확대하면 오른쪽 아래 미니맵이 나타나고, 이동(H) 도구로 끌어서 옮겨요.'),
+    tips: [t('0을 누르면 화면에 맞춰요')],
+    vis: STEPS().find(x => x.k === 'doc').vis,
+  } : {
+    k: 'chand', title: t('5. 손 도구로 플레이어를 직접 조작해요'),
+    text: t('손(H) 도구를 고르면 유튜브·비메오 플레이어를 직접 눌러 화질·자막·소리를 바꿀 수 있어요. 핀·펜으로 돌아오면 다시 깨끗한 화면이 돼요.'),
+    tips: [t('유튜브 화질·자막은 오른쪽 아래 톱니바퀴에 있어요')],
+    vis: `<div class="tv s-hand">
+      <div class="m-stage film"><div class="m-ytbar"><i></i><i></i><span class="m-gear"></span></div>
+        <div class="m-ytmenu"><div><span>${t('자막')}</span><b>${t('한국어')}</b></div><div><span>${t('화질')}</span><b>1080p</b></div></div></div>
+      <div class="m-tools"><span>${t('핀')}</span><span>${t('펜')}</span><span class="on">${t('손')}</span></div>
+      ${cur('c9')}</div>`,
+  },
+  {
+    k: 'csend', title: t('6. 수정요청을 보내요'),
+    text: t('다 적었으면 오른쪽 위 ‘수정요청 보내기’를 눌러요. 디렉터에게 바로 전달되고, 장면 사진은 이때 한 번에 만들어져요.'),
+    tips: [t('잘 안 될 때는 옆 화살표에서 메시지·HTML·PDF로 보내요'), t('보낸 뒤에도 계속 표시하고 다시 보낼 수 있어요')],
+    vis: `<div class="tv s-send s-csend">
+      <div class="m-win left"><div class="m-wtop"><b class="m-sendbtn">${ic('send', 12)}${t('수정요청 보내기')}<em>2</em></b><span class="m-caretbtn"></span></div>
+        <div class="m-menu"><div>${ic('msg', 12)}${t('메시지로 보내기')}</div><div>${ic('file', 12)}${t('HTML 보내기')}</div><div>${ic('print', 12)}${t('PDF 보내기')}</div></div>${lines(2)}</div>
+      <svg class="m-plane" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11.5 21 4l-6.5 17-3.2-7.3z" fill="currentColor"/></svg>
+      <div class="m-win right"><div class="m-wtop"><span>${t('디렉터')}</span><em class="m-badge">2</em></div><div class="m-inrow r1"></div><div class="m-inrow r2"></div></div>
+      ${cur('c5')}</div>`,
+  },
+  {
+    k: 'cnotes', title: t('7. 디렉터 안내에 답글을 달아요'),
+    text: t('파란 표시(D1, D2…)는 디렉터가 남긴 안내예요. ‘디렉터 안내’ 탭에서 읽고, 궁금한 점은 답글로 남기면 수정요청과 함께 전달돼요.'),
+    tips: [t('클라이언트 표시는 버밀리온, 디렉터 표시는 파란색이에요')],
+    vis: `<div class="tv s-notes s-cnotes">
+      <div class="m-stage film"><div class="m-ov">${pin('p2', 'D1', true)}</div></div>
+      <div class="m-side"><div class="m-item"><div class="m-head"><em class="d">D1</em><code>${doc ? t('2쪽') : '00:00:04:02'}</code></div>${lines(2)}
+        <div class="m-comment c"><b>${t('나')}</b><span>${t('네, 확인했어요')}</span></div></div></div></div>`,
+  },
+  {
+    k: 'creply', title: t('8. 반영 상태와 회신을 확인해요'),
+    text: t('디렉터가 회신하면 ‘보낸 요청’ 탭에서 요청마다 반영·진행 중·보류 상태와 댓글을 볼 수 있어요.'),
+    tips: [t('디렉터가 보낸 회신 링크를 열면 같은 화면에 들어와요')],
+    vis: `<div class="tv s-reply s-creply">
+      <div class="m-item big"><div class="m-head"><em>01</em><code>${doc ? t('2쪽') : '00:00:12:08'}</code><span class="m-st">${t('반영')}</span></div>${lines(1)}
+        <div class="m-comment"><b>${t('디렉터')}</b><span>${t('반영할게요')}</span></div></div>
+      <div class="m-item big b2"><div class="m-head"><em>02</em><code>${doc ? t('3쪽') : '00:00:20:15'}</code><span class="m-st s2">${t('진행 중')}</span></div>${lines(1)}</div></div>`,
+  },
+  {
+    k: 'ckeys', title: t('9. 단축키'),
+    text: t('키보드로 더 빠르게 검수해요. 이 안내는 오른쪽 위 ? 버튼으로 언제든 다시 볼 수 있어요.'),
+    vis: `<div class="tv s-keys"><div class="m-kgrid">${(doc
+      ? [['← →', t('이전 / 다음 쪽')], ['+ −', t('확대 / 축소')], ['0', t('화면에 맞추기')], ['P', t('핀')], ['D', t('펜')], ['H', t('이동')], ['M', t('메모만')], ['V', t('목록 보기 바꾸기')]]
+      : [['Space', t('재생 / 정지')], ['← →', t('1프레임')], ['Shift ← →', t('1초')], ['P', t('핀')], ['D', t('펜')], ['H', t('손')], ['M', t('메모만')], ['V', t('목록 보기 바꾸기')]])
+      .map(([k, d], n) => `<div class="m-krow" style="--n:${n}">${kbd(k)}<span>${esc(d)}</span></div>`).join('')}</div></div>`,
+  },
+];
