@@ -36,3 +36,10 @@ addEventListener('drop', async e => {
   if (!/\.(html?|json)$/i.test(f.name)) { toast('수정요청 HTML이나 JSON 파일을 끌어 놓아 주세요'); return; }
   importDialog(await f.text());
 });
+
+// 밝은 화면 / 다크 모드 — WesNS 사이트와 같은 저장 키
+addEventListener('click', e => {
+  if (!e.target.closest('[data-theme-toggle]')) return;
+  const dark = document.documentElement.classList.toggle('dark');
+  try { localStorage.setItem('wesns.theme', dark ? 'dark' : 'light'); } catch {}
+});

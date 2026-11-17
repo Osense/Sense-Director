@@ -44,6 +44,8 @@ const P = {
   qr: '<path d="M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h2v2h-2zM18 18h2v2h-2zM14 18h2M18 14h2"/>',
   sound: '<path d="M4 9v6h4l5 4V5L8 9zM16 9a4 4 0 0 1 0 6"/>',
   dot: '<circle cx="12" cy="12" r="4" fill="currentColor" stroke="none"/>',
+  sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',
+  moon: '<path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"/>',
 };
 export const ic = (n, s = 16) => `<svg class="ic" width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${P[n] || ''}</svg>`;
 
@@ -176,3 +178,17 @@ export function srcText(src) {
   return src.url;
 }
 export const srcKind = src => !src ? '' : ({ yt: 'YouTube', vimeo: 'Vimeo', file: '영상 파일', url: '영상 주소' })[src.k];
+
+/* ---------- WesNS 로고 마크: 하나로 이어진 선이 W(Wes)를 그리고 N(Osense)으로 이어진다 ---------- */
+let markN = 0;
+export function logoMark(cls = 'mark') {
+  const id = 'wsns-g' + (markN++);
+  return `<svg class="${cls}" viewBox="0 0 40 40" aria-hidden="true"><defs><linearGradient id="${id}" x1="0" y1="0" x2="40" y2="40" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#7c5cf0"/><stop offset="1" stop-color="#38bcd8"/></linearGradient></defs>
+    <rect width="40" height="40" rx="11" fill="url(#${id})"/><rect x=".5" y=".5" width="39" height="39" rx="10.5" fill="none" stroke="#fff" stroke-opacity=".18"/>
+    <polyline points="5.5,12.5 9.5,27.5 13.5,18 17.5,27.5 21.5,12.5 30.5,27.5 30.5,12.5" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+    <line x1="21.5" y1="12.5" x2="21.5" y2="27.5" stroke="#fff" stroke-opacity=".55" stroke-width="3" stroke-linecap="round"/><circle cx="21.5" cy="12.5" r="2.1" fill="#fff"/><circle cx="34.6" cy="30.6" r="1.3" fill="#fff" fill-opacity=".7"/></svg>`;
+}
+/** 제품 로고: WSNS 마크 + 쎈스 디렉터 / Sense Director */
+export const brandHTML = (tag = 'span', attrs = '') => `<${tag} class="wordmark" ${attrs}>${logoMark()}<span class="bn"><b>쎈스 디렉터</b><small>Sense Director</small></span></${tag}>`;
+/** 밝은 화면 / 다크 모드 (WesNS 사이트와 같은 설정을 쓴다) */
+export const themeBtnHTML = () => `<button class="btn icon ghost theme-btn" data-theme-toggle aria-label="다크 모드 전환" title="밝은 화면 / 다크 모드">${ic('sun', 17).replace('class="ic"', 'class="ic sun"')}${ic('moon', 17).replace('class="ic"', 'class="ic moon"')}</button>`;

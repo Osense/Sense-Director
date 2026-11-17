@@ -1,5 +1,5 @@
 /* 디렉터 콘솔 — 영상 임베드, 프로젝트·안내사항·핀 설정, 링크 공유, 받은 수정요청에 댓글로 환류 */
-import { $, $$, ic, esc, uid, tc, sha, modal, toast, dueLabel, fmtDate, copyText, shareOrCopy, parseSource, safeName, fpsLabel, unpack, srcText, srcKind, STD_FPS } from './util.js';
+import { $, $$, ic, esc, uid, tc, sha, modal, toast, dueLabel, fmtDate, copyText, shareOrCopy, parseSource, safeName, fpsLabel, unpack, srcText, srcKind, STD_FPS, brandHTML, themeBtnHTML } from './util.js';
 import { Store, MODE } from './store.js';
 import { mountViewer, snapHTML, posterOf } from './viewer.js';
 import { openZoom } from './zoom.js';
@@ -35,16 +35,17 @@ export async function renderDirector(app, params) {
   const projects = Store.projects();
   const cur = params.p ? Store.getProject(params.p) : null;
   if (V) { V.destroy(); V = null; }
-  document.title = (cur ? (cur.title || '새 프로젝트') + ' · ' : '') + 'Sense Director · 디렉터 콘솔';
+  document.title = (cur ? (cur.title || '새 프로젝트') + ' · ' : '') + '쎈스 디렉터 · 디렉터 콘솔';
 
   app.innerHTML = `
   <header class="topbar">
-    <a class="wordmark" href="#" aria-label="Sense Director 처음으로"><b>SENSE</b><i>director</i></a>
-    <div class="ptitle"><div class="eyebrow">Director console</div></div>
+    ${brandHTML('a', 'href="#" aria-label="쎈스 디렉터 처음으로"')}
+    <div class="ptitle"><div class="eyebrow">디렉터 콘솔</div></div>
     <div class="grow"></div>
     ${MODE === 'mock' ? '<span class="chip mock" title="서버 없이 이 브라우저와 링크로 주고받는 시험 버전">시험 버전 · 서버 없음</span>' : ''}
     <button class="btn ghost" data-act="import" title="수정요청 링크·HTML 가져오기">${ic('import')}가져오기</button>
-    <button class="btn primary" data-act="new">${ic('plus')}새 프로젝트</button>
+    ${themeBtnHTML()}
+    <button class="btn brand" data-act="new">${ic('plus')}새 프로젝트</button>
   </header>
   <div class="console">
     <nav class="plist" aria-label="프로젝트">
@@ -68,9 +69,9 @@ export async function renderDirector(app, params) {
 
 function renderHome(main) {
   main.innerHTML = `<div class="hero">
-    <div class="eyebrow">New review</div>
-    <h2>영상 링크를 붙여 넣으면<br>검수 링크가 바로 만들어져요</h2>
-    <form class="hero-form" data-hero><input placeholder="유튜브 · 비메오 링크 또는 mp4 영상 주소" aria-label="영상 링크" autofocus><button class="btn primary">${ic('plus')}만들기</button></form>
+    <div class="eyebrow">새 검수</div>
+    <h2>영상 링크를 붙여 넣으면<br><span class="text-gradient">검수 링크</span>가 바로 만들어져요</h2>
+    <form class="hero-form" data-hero><input placeholder="유튜브 · 비메오 링크 또는 mp4 영상 주소" aria-label="영상 링크" autofocus><button class="btn brand">${ic('plus')}만들기</button></form>
     <label class="drop-file" data-drop>${ic('import', 18)}<span><b>영상 파일 올리기</b><small>mp4·mov·webm — 끌어 놓거나 눌러서 고르기</small></span><input type="file" accept="video/*,.mp4,.mov,.m4v,.webm,.mkv" hidden></label>
     <ol class="flow">
       <li><b>01</b><span>영상 임베드</span><small>화면비·프레임 수는 알아서 맞춰요</small></li>
@@ -262,7 +263,7 @@ function renderSetup(side, p, main) {
       </div>
       <label class="field"><span>클라이언트 링크</span><div class="linkbox"><input readonly data-link value="만드는 중…" aria-label="클라이언트 링크"><button class="btn icon" data-act="copy-link" title="주소 복사" aria-label="주소 복사">${ic('copy')}</button></div></label>
       <div class="share-btns">
-        <button class="btn primary" data-act="copy-msg">${ic('msg')}카톡·메시지용 복사</button>
+        <button class="btn brand" data-act="copy-msg">${ic('msg')}카톡·메시지용 복사</button>
         <button class="btn" data-act="share">${ic('share')}공유하기</button>
         <button class="btn" data-act="qr">${ic('qr')}QR</button>
         <a class="btn" data-act="preview" target="_blank" rel="noopener">${ic('eye')}클라이언트 화면</a>
@@ -328,7 +329,7 @@ function renderSetup(side, p, main) {
 
 let qrLib = null;
 function drawQR(el, text) {
-  const go = () => { el.innerHTML = ''; try { new window.QRCode(el, { text, width: 176, height: 176, colorDark: '#120e0e', colorLight: '#f4ecea', correctLevel: window.QRCode.CorrectLevel.L }); el.insertAdjacentHTML('beforeend', '<small>휴대폰 카메라로 비추면 바로 열려요</small>'); } catch { el.innerHTML = '<small>링크가 길어 QR로 만들 수 없어요. 안내사항을 줄여 보세요.</small>'; } };
+  const go = () => { el.innerHTML = ''; try { new window.QRCode(el, { text, width: 176, height: 176, colorDark: '#17171f', colorLight: '#ffffff', correctLevel: window.QRCode.CorrectLevel.L }); el.insertAdjacentHTML('beforeend', '<small>휴대폰 카메라로 비추면 바로 열려요</small>'); } catch { el.innerHTML = '<small>링크가 길어 QR로 만들 수 없어요. 안내사항을 줄여 보세요.</small>'; } };
   if (window.QRCode) return go();
   qrLib = qrLib || new Promise((res, rej) => { const s = document.createElement('script'); s.src = 'https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js'; s.onload = res; s.onerror = rej; document.head.appendChild(s); });
   qrLib.then(go).catch(() => { el.innerHTML = '<small>QR 도구를 불러오지 못했어요</small>'; });
@@ -375,14 +376,14 @@ function renderInbox(side, p, getSel, setSel, hooks, initialPane) {
         ${pane === 'req' ? `
         <div class="progress" title="반영 ${done} / ${all.length}"><i style="width:${all.length ? done / all.length * 100 : 0}%"></i></div>
         <div class="inbox-stats"><b>${done}</b><span>/ ${all.length} 반영</span><span class="dim">진행 ${cnt('doing')} · 보류 ${cnt('hold')} · 대기 ${cnt('open')}</span></div>`
-        : `<p class="note-hint">${ic('pin', 14)}<span>영상에 핀·펜으로 표시하면 <b>디렉터 안내</b>가 돼요. 클라이언트 화면에 노란 표시로 보이고, 클라이언트가 답글을 달 수 있어요.</span></p>`}
+        : `<p class="note-hint">${ic('pin', 14)}<span>영상에 핀·펜으로 표시하면 <b>디렉터 안내</b>가 돼요. 클라이언트 화면에 파란 표시로 보이고, 클라이언트가 답글을 달 수 있어요.</span></p>`}
         ${missing && V && V.canShare() ? `<button class="btn small ghost thumbs-btn" data-act="thumbs">${ic('cam', 14)}장면 사진 없는 ${missing}건 만들기</button>` : ''}
         <div class="thumb-progress" data-tp hidden><i></i><span></span></div>
         <div class="inbox-actions">
           ${pane === 'req' ? `<div class="seg small" role="group" aria-label="상태 필터">${['all', 'open', 'doing', 'done', 'hold'].map(k => `<button class="btn${filter === k ? ' on' : ''}" data-filter="${k}">${k === 'all' ? '전체' : STATUS[k]}</button>`).join('')}</div>` : '<span></span>'}
           <div class="split" data-menu-root>
-            <button class="btn primary" data-act="feedback" ${sendable ? '' : 'disabled'} title="상태·댓글·디렉터 안내를 클라이언트에게">${ic('send')}${all.length ? '회신 보내기' : '안내 보내기'}</button>
-            <button class="btn primary caret" data-act="fb-more" aria-label="보내는 방법" ${sendable ? '' : 'disabled'}>${ic('down', 14)}</button>
+            <button class="btn brand" data-act="feedback" ${sendable ? '' : 'disabled'} title="상태·댓글·디렉터 안내를 클라이언트에게">${ic('send')}${all.length ? '회신 보내기' : '안내 보내기'}</button>
+            <button class="btn brand caret" data-act="fb-more" aria-label="보내는 방법" ${sendable ? '' : 'disabled'}>${ic('down', 14)}</button>
             <div class="menu" role="menu" hidden>
               <button data-fb="msg">${ic('msg')}<span><b>메시지로 보내기</b><small>안내·상태·댓글 요약 + 클라이언트 확인 링크</small></span></button>
               <button data-fb="html">${ic('file')}<span><b>HTML 보내기</b><small>장면 사진과 댓글이 담긴 파일</small></span></button>

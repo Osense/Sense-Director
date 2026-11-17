@@ -1,5 +1,5 @@
 /* 클라이언트 화면 — 핀 번호로 들어와 핀·펜으로 수정요청을 남기고 디렉터에게 보낸다 */
-import { $, $$, ic, esc, uid, tc, sha, unpack, modal, toast, dueLabel, fmtDate, copyText, shareOrCopy, safeName, fpsLabel } from './util.js';
+import { $, $$, ic, esc, uid, tc, sha, unpack, modal, toast, dueLabel, fmtDate, copyText, shareOrCopy, safeName, fpsLabel, brandHTML, themeBtnHTML } from './util.js';
 import { Store, MODE } from './store.js';
 import { mountViewer, snapHTML, posterOf } from './viewer.js';
 import { openZoom } from './zoom.js';
@@ -9,7 +9,7 @@ export async function renderClient(app, params) {
   let p;
   try { p = await unpack(params.c); if (!p || !p.id) throw 0; }
   catch { app.innerHTML = errorScreen('링크가 올바르지 않아요', '받은 링크 전체가 복사되었는지 확인해 주세요. 메신저에서 링크 끝이 잘리면 열리지 않을 수 있어요.'); return; }
-  document.title = (p.t || '수정요청') + ' · Sense Director';
+  document.title = (p.t || '수정요청') + ' · 쎈스 디렉터';
 
   const okKey = 'sd:ok:' + p.id;
   if (p.ph && sessionStorage.getItem(okKey) !== p.ph) {
@@ -25,15 +25,16 @@ export async function renderClient(app, params) {
 
   app.innerHTML = `
   <header class="topbar">
-    <span class="wordmark" aria-label="Sense Director"><b>SENSE</b><i>director</i></span>
-    <div class="ptitle"><div class="eyebrow">Revision request${p.by ? ' · ' + esc(p.by) : ''}</div><h1>${esc(p.t || '제목 없는 프로젝트')}</h1></div>
+    ${brandHTML('span', 'aria-label="쎈스 디렉터"')}
+    <div class="ptitle"><div class="eyebrow">수정요청${p.by ? ' · ' + esc(p.by) : ''}</div><h1>${esc(p.t || '제목 없는 프로젝트')}</h1></div>
     ${p.d ? `<span class="chip due" title="피드백 마감">${ic('clock', 13)}${esc(dueLabel(p.d))}</span>` : ''}
     <div class="grow"></div>
     ${p.n ? `<button class="btn ghost" data-act="notice">${ic('note')}안내사항</button>` : ''}
+    ${themeBtnHTML()}
     <button class="btn ghost icon" data-act="help" aria-label="사용법" title="사용법·단축키 (?)">${ic('help', 17)}</button>
     <div class="split" data-menu-root>
-      <button class="btn primary" data-act="send">${ic('send')}수정요청 보내기<span class="count" data-count></span></button>
-      <button class="btn primary caret" data-act="more" aria-label="다른 방법으로 보내기" aria-haspopup="menu">${ic('down', 14)}</button>
+      <button class="btn brand" data-act="send">${ic('send')}수정요청 보내기<span class="count" data-count></span></button>
+      <button class="btn brand caret" data-act="more" aria-label="다른 방법으로 보내기" aria-haspopup="menu">${ic('down', 14)}</button>
       <div class="menu" role="menu" hidden>
         <div class="menu-label">전송이 안 될 때</div>
         <button role="menuitem" data-send="msg">${ic('msg')}<span><b>메시지로 보내기</b><small>카톡·문자에 붙여 넣는 글 + 가져오기 링크</small></span></button>
@@ -163,7 +164,7 @@ export async function renderClient(app, params) {
     $$('[data-tab]', app).forEach(b => b.classList.toggle('on', b.dataset.tab === tab));
     const list = $('[data-list]', app);
     if (tab === 'notes') {
-      list.innerHTML = `<p class="note-hint">${ic('pin', 14)}<span>디렉터가 영상에 남긴 안내예요. 노란 표시가 그 위치예요. 궁금한 점은 답글로 남겨 주세요.</span></p>` + ns.map(noteCard).join('');
+      list.innerHTML = `<p class="note-hint">${ic('pin', 14)}<span>디렉터가 영상에 남긴 안내예요. 파란 표시가 그 위치예요. 궁금한 점은 답글로 남겨 주세요.</span></p>` + ns.map(noteCard).join('');
     } else if (tab === 'draft') {
       const draft = items.filter(it => !it._sent);
       list.innerHTML = draft.length ? draft.map(itemCard).join('') : `<div class="empty">
@@ -353,7 +354,7 @@ export async function renderClient(app, params) {
   function showNotice() {
     return modal({
       title: p.t || '안내사항',
-      body: `${p.by ? `<div class="eyebrow">From ${esc(p.by)}</div>` : ''}${p.n ? `<div class="notice-body">${esc(p.n)}</div>` : ''}${notes().length ? `<p class="note">${ic('pin', 13)} 디렉터가 영상에 남긴 안내 <b>${notes().length}건</b>이 있어요. 영상 위 노란 표시와 "디렉터 안내" 탭에서 볼 수 있어요.</p>` : ''}${p.d ? `<div class="chip due">${ic('clock', 13)}${esc(dueLabel(p.d))}</div>` : ''}`,
+      body: `${p.by ? `<div class="eyebrow">From ${esc(p.by)}</div>` : ''}${p.n ? `<div class="notice-body">${esc(p.n)}</div>` : ''}${notes().length ? `<p class="note">${ic('pin', 13)} 디렉터가 영상에 남긴 안내 <b>${notes().length}건</b>이 있어요. 영상 위 파란 표시와 "디렉터 안내" 탭에서 볼 수 있어요.</p>` : ''}${p.d ? `<div class="chip due">${ic('clock', 13)}${esc(dueLabel(p.d))}</div>` : ''}`,
       actions: [{ label: '확인하고 시작하기', kind: 'primary' }],
     });
   }
@@ -405,15 +406,15 @@ function mergeFeedback(state, reqs) {
 }
 
 function errorScreen(title, msg) {
-  return `<div class="gate"><span class="wordmark"><b>SENSE</b><i>director</i></span><h2>${esc(title)}</h2><p>${esc(msg)}</p></div>`;
+  return `<div class="gate">${brandHTML()}<h2>${esc(title)}</h2><p>${esc(msg)}</p></div>`;
 }
 
 /** 핀 번호 4자리 */
 function pinGate(app, p) {
   return new Promise(resolve => {
     app.innerHTML = `<div class="gate">
-      <span class="wordmark"><b>SENSE</b><i>director</i></span>
-      <div class="eyebrow">${p.by ? esc(p.by) + ' · ' : ''}Private review</div>
+      ${brandHTML()}
+      <div class="eyebrow">${p.by ? esc(p.by) + ' · ' : ''}비공개 검수</div>
       <h2>${esc(p.t || '수정요청')}</h2>
       <p>디렉터에게 받은 핀 번호 4자리를 입력해 주세요.</p>
       <form class="pin-boxes" autocomplete="off">${[0, 1, 2, 3].map(i => `<input inputmode="numeric" pattern="[0-9]*" maxlength="1" aria-label="${i + 1}번째 숫자" ${i === 0 ? 'autofocus' : ''}>`).join('')}</form>

@@ -8,7 +8,8 @@ const r1 = n => Math.round(n * 10) / 10;
 export function strokesSVG(strokes = [], cls = '') {
   if (!strokes.length) return '';
   const lines = strokes.map(s => { const pts = []; for (let i = 0; i < s.length; i += 2) pts.push(s[i] + ',' + s[i + 1]); return `<polyline points="${pts.join(' ')}"/>`; }).join('');
-  return `<svg class="ann ${cls}" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"><g>${lines}</g></svg>`;
+  // 투톤: 흰 테두리(o) 위에 본색(i)을 60% 굵기로 — 밝은 화면에서도 어두운 화면에서도 읽힌다
+  return `<svg class="ann ${cls}" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"><g class="o">${lines}</g><g class="i">${lines}</g></svg>`;
 }
 export const pinHTML = (it, n, extra = '') => it.x == null ? '' : `<span class="pin${it.y < 18 ? ' below' : ''}${it.by === 'd' ? ' d' : ''}${extra}" style="left:${it.x}%;top:${it.y}%"><b>${n}</b></span>`;
 
@@ -34,7 +35,7 @@ export function mountViewer(root, src, opts = {}) {
     ${opts.tools ? `<div class="toolbar">
       <div class="seg tools" role="group" aria-label="주석 도구">
         <button class="btn on" data-tool="pin" title="핀 (P)">${ic('pin')}핀</button>
-        <button class="btn" data-tool="pen" title="펜 (D)">${ic('pen')}펜</button>
+        <button class="btn" data-tool="pen" title="펜 (D)">${ic('pen')}펜<i class="swatch" aria-hidden="true"></i></button>
       </div>
       <button class="btn ghost" data-act="memo" title="핀 없이 지금 시점에 메모 (M)">${ic('note')}메모만</button>
       <span class="tool-hint" data-hint>화면을 누르면 영상이 멈추고 그 시점이 오른쪽에 붙어요</span>
@@ -50,6 +51,7 @@ export function mountViewer(root, src, opts = {}) {
       <span class="chip fps" data-fps title="프레임 수">fps</span>
     </div>
   </div>`;
+  $('.viewer', root).dataset.mine = opts.mine || 'c';
   const stage = $('.stage', root), scrub = $('.scrub input', root), fill = $('.fill', root), marks = $('.marks', root);
   let tool = 'pin', dragging = false, live = null, lastT = 0;
   const V = { tool: () => tool, root, setTool };
