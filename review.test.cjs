@@ -18,7 +18,7 @@ async function until(expr, ms = 10000, label = expr) { const end = Date.now() + 
 async function go(url) { await call('Page.navigate', { url }); await delay(400); await until("document.readyState==='complete'"); if (process.env.THEME === 'dark') await ev("localStorage.setItem('wesns.theme','dark');document.documentElement.classList.add('dark')").catch(() => {}); }
 async function shot(name) { if (!SHOTS) return; const r = await call('Page.captureScreenshot', { format: 'png' }); fs.mkdirSync(SHOTS, { recursive: true }); fs.writeFileSync(path.join(SHOTS, name + '.png'), Buffer.from(r.result.data, 'base64')); }
 async function setFile(sel, file) { const d = await call('DOM.getDocument', { depth: -1, pierce: true }); const q = await call('DOM.querySelector', { nodeId: d.result.root.nodeId, selector: sel }); if (!q.result || !q.result.nodeId) throw Error('no input ' + sel); await call('DOM.setFileInputFiles', { nodeId: q.result.nodeId, files: [].concat(file) }); }
-const SEED = "if(!localStorage.getItem('wesns.lang'))localStorage.setItem('wesns.lang','ko');if(!sessionStorage.getItem('t:nouser')&&!localStorage.getItem('wesns.mock.user'))localStorage.setItem('wesns.mock.user',JSON.stringify({id:'t',name:'tester',email:'tester@example.com',provider:'email'}));";
+const SEED = "if(!localStorage.getItem('sd:tour:off')&&!sessionStorage.getItem('t:tour'))localStorage.setItem('sd:tour:off','1');if(!localStorage.getItem('wesns.lang'))localStorage.setItem('wesns.lang','ko');if(!sessionStorage.getItem('t:nouser')&&!localStorage.getItem('wesns.mock.user'))localStorage.setItem('wesns.mock.user',JSON.stringify({id:'t',name:'tester',email:'tester@example.com',provider:'email'}));";
 const CLEAR = 'localStorage.clear();' + SEED;
 const pass = []; const ok = (c, m) => { if (!c) throw Error('FAIL: ' + m); pass.push(m); };
 const click = sel => ev(`(()=>{const e=document.querySelector(${JSON.stringify(sel)});if(!e)throw Error('no '+${JSON.stringify(sel)});e.click();return true})()`);
@@ -115,6 +115,15 @@ const pointer = (sel, pts) => ev(`(async()=>{const el=document.querySelector(${J
   await ev("document.dispatchEvent(new KeyboardEvent('keydown',{key:'.',bubbles:true}))"); await delay(250);
   const after = await ev("document.querySelector('.stage video').currentTime");
   ok(Math.abs(after - before - 1 / 30) < 0.01, 'frame step key moves exactly one frame');
+  const kd = k => ev(`document.dispatchEvent(new KeyboardEvent('keydown',{key:'${k}',bubbles:true}))`);
+  await kd('ArrowRight'); await delay(200); await kd('ArrowRight'); await delay(200); await kd('ArrowRight'); await delay(250);
+  const a3 = await ev("document.querySelector('.stage video').currentTime");
+  ok(Math.abs(a3 - after - 3 / 30) < 0.01 && await ev("document.querySelector('.stage video').paused"), 'arrow keys step one frame at a time (stays paused)');
+  await kd('ArrowLeft'); await delay(250);
+  ok(Math.abs(await ev("document.querySelector('.stage video').currentTime") - a3 + 1 / 30) < 0.01, 'left arrow steps back one frame');
+  await ev("document.dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowRight',shiftKey:true,bubbles:true}))"); await delay(250);
+  ok(Math.abs(await ev("document.querySelector('.stage video').currentTime") - a3 + 1 / 30 - 1) < 0.02, 'Shift + arrow moves one second');
+  await ev("document.querySelector('.stage video').currentTime=" + after);
   ok(!(await ev("/[\\u{1F300}-\\u{1FAFF}\\u{2600}-\\u{27BF}]/u.test(document.body.innerText)")), 'no emoji in client UI');
   await ev("document.querySelector('.list .item').click()"); await delay(400);
   await shot('05-client-items');
@@ -519,6 +528,34 @@ const pointer = (sel, pts) => ev(`(async()=>{const el=document.querySelector(${J
   ok(await ev("document.documentElement.classList.contains('text-only') && getComputedStyle(document.querySelector('.list .item .snap')).display==='none'"), 'list view: choice is remembered');
   await ev("document.dispatchEvent(new KeyboardEvent('keydown',{key:'v',bubbles:true}))"); await delay(100);
   ok(await ev("!document.documentElement.classList.contains('text-only')"), 'list view: V key toggles');
+
+  /* 11d. 사용 안내 (애니메이션) */
+  await ev(CLEAR + "sessionStorage.setItem('t:tour','1');localStorage.removeItem('sd:tour:off')");
+  await go(BASE + '?tour'); await until("document.querySelector('.hero-form input')");
+  await ev(`document.querySelector('.hero-form input').value=${JSON.stringify(VIDEO)};document.querySelector('.hero-form .btn').click()`);
+  await until("document.querySelector('.modal.tour .tv')", 6000, 'tour opens after creating a project');
+  ok(await ev("document.querySelector('[data-count]').textContent==='1 / 9' && document.querySelector('.tour .tv.s-add') && getComputedStyle(document.querySelector('.tour .m-type')).animationName!=='none'"), 'guide: opens on project creation with animated step 1 of 9');
+  await delay(2200); await shot('27-tour-1');
+  for (let k = 0; k < 3; k++) { await ev("document.querySelector('[data-tour=next]').click()"); await delay(200); }
+  ok(await ev("document.querySelector('.tour .tv.s-mark') && document.querySelector('[data-count]').textContent==='4 / 9'"), 'guide: next moves through steps');
+  await delay(1600); await shot('28-tour-4');
+  await ev("document.dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowLeft',bubbles:true}))"); await delay(150);
+  ok(await ev("document.querySelector('[data-count]').textContent==='3 / 9'"), 'guide: arrow keys navigate');
+  await ev("document.querySelector('[data-go=\"7\"]').click()"); await delay(1500); await shot('29-tour-8');
+  ok(await ev("!!document.querySelector('.tour .tv.s-doc')"), 'guide: dots jump to a step');
+  await ev("document.querySelector('[data-off]').click();document.querySelector('[data-tour=close]').click()"); await delay(200);
+  ok(await ev("!document.querySelector('.modal.tour') && localStorage.getItem('sd:tour:off')==='1'"), 'guide: “다시 보지 않기” is saved on close');
+  await click('[data-act=new]'); await until("document.querySelector('.new-dlg .hero-form input')");
+  await ev(`document.querySelector('.new-dlg .hero-form input').value=${JSON.stringify(VIDEO)};document.querySelector('.new-dlg .hero-form .btn').click()`);
+  await delay(1500);
+  ok(await ev("!document.querySelector('.modal.tour')"), 'guide: not shown again after opting out');
+  await click('[data-act=tour]'); await until("document.querySelector('.modal.tour')", 3000);
+  ok(true, 'guide: help button reopens it anytime');
+  await ev("document.querySelector('[data-go=\"8\"]').click()"); await delay(100);
+  ok(await ev("document.querySelector('[data-tour=next]').textContent==='시작하기'"), 'guide: last step says 시작하기');
+  await ev("document.querySelector('[data-tour=next]').click()"); await delay(150);
+  ok(await ev("!document.querySelector('.modal.tour')"), 'guide: 시작하기 closes it');
+  await ev("sessionStorage.removeItem('t:tour')");
   /* 12. WesNS 로그인 (목업) */
   const HANGUL = "(()=>{const w=document.createTreeWalker(document.body,NodeFilter.SHOW_TEXT);const bad=[];let n;while(n=w.nextNode()){if(n.parentElement.closest('[data-user],textarea,input,noscript,script,style'))continue;if(/[가-힣]/.test(n.textContent))bad.push(n.textContent.trim().slice(0,40))}document.querySelectorAll('[title],[aria-label],[placeholder]').forEach(e=>['title','aria-label','placeholder'].forEach(a=>{const v=e.getAttribute(a);if(v&&/[가-힣]/.test(v)&&!/한국어/.test(v))bad.push(a+':'+v.slice(0,40))}));return bad.filter(x=>x!=='한국어')})()";
   await ev("localStorage.clear();sessionStorage.setItem('t:nouser','1');localStorage.setItem('wesns.lang','ko')");

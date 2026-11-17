@@ -633,3 +633,206 @@ html.dark { --paper-bg: oklch(0.2 0.008 270); }
 .text-only .list .tonly { margin-left: auto; }
 .tonly + .icon-x { margin-left: 0; }
 .tonly:hover { color: var(--brand); }
+
+/* ============ 사용 안내 (애니메이션) ============ */
+.tour .tour-box { width: min(720px, calc(100vw - 24px)); padding: 18px 20px 16px; display: grid; gap: 14px; }
+.tour-top { display: flex; align-items: center; gap: 10px; }
+.tour-top .eyebrow { font-size: 12px; font-weight: 700; color: var(--brand); letter-spacing: .02em; }
+.tour-count { font: 600 12px var(--mono); color: var(--dim); }
+.tour-top .icon-x { margin-left: auto; }
+.tour-top .icon-x:hover { color: var(--text); }
+.tour-stage { position: relative; height: 260px; border-radius: 14px; overflow: hidden; background: radial-gradient(80% 90% at 50% 0%, color-mix(in oklch, var(--brand) 9%, transparent), transparent 70%), var(--raised); border: 1px solid var(--line); }
+.tour-copy h3 { margin: 0 0 6px; font-size: 18px; letter-spacing: -.02em; }
+.tour-copy p { margin: 0; color: var(--muted); font-size: 14px; line-height: 1.6; }
+.tour-copy ul { margin: 8px 0 0; padding-left: 18px; color: var(--dim); font-size: 12.5px; line-height: 1.7; }
+.tour-copy { min-height: 118px; animation: tourIn .35s ease-out; }
+.tour-dots { display: flex; justify-content: center; gap: 6px; }
+.tour-dots button { width: 7px; height: 7px; padding: 0; border: 0; border-radius: 4px; background: var(--line); cursor: pointer; transition: width .25s, background .25s; }
+.tour-dots button.on { width: 22px; background: linear-gradient(90deg, var(--brand), var(--brand-2)); }
+.tour-foot { display: flex; align-items: center; gap: 8px; }
+.tour-foot .grow { flex: 1; }
+.tour-off { display: inline-flex; align-items: center; gap: 7px; font-size: 13px; color: var(--muted); cursor: pointer; user-select: none; }
+.tour-off input { width: 16px; height: 16px; accent-color: var(--brand); margin: 0; }
+@keyframes tourIn { from { opacity: 0; transform: translateY(6px); } }
+
+/* 공통 소품 */
+.tv { position: absolute; inset: 0; --T: 6s; font-size: 11px; color: var(--text); }
+.tv * { box-sizing: border-box; }
+.tv .m-cur { position: absolute; width: 22px; height: 22px; z-index: 9; filter: drop-shadow(0 2px 3px rgb(0 0 0 / .35)); animation: var(--T) ease-in-out infinite both; }
+.tv .m-line { display: block; height: 6px; margin: 5px 0; border-radius: 3px; background: color-mix(in oklch, var(--text) 14%, transparent); width: calc(92% - var(--i) * 18%); }
+.tv .m-stage { position: absolute; border-radius: 9px; overflow: hidden; background: #0d0d12; box-shadow: 0 6px 20px rgb(0 0 0 / .22); }
+.tv .m-stage.film { background: linear-gradient(135deg, #3b4a8f, #8b3d77 55%, #d0703d); }
+.tv .m-stage.film::after { content: ''; position: absolute; inset: 0; background: radial-gradient(40% 50% at 30% 40%, rgb(255 255 255 / .22), transparent 70%); }
+.tv .m-ov { position: absolute; inset: 0; z-index: 2; }
+.tv .m-pin { position: absolute; width: 12px; height: 12px; margin: -6px 0 0 -6px; border-radius: 50%; background: var(--mark-c); border: 2px solid #fff; box-shadow: 0 1px 4px rgb(0 0 0 / .45); z-index: 3; }
+.tv .m-pin.d, .tv .m-pin.d b { background: var(--mark-d); }
+.tv .m-pin b { position: absolute; left: 50%; bottom: 12px; transform: translateX(-50%); padding: 0 6px; height: 18px; line-height: 14px; border-radius: 9px; background: var(--mark-c); color: #fff; border: 2px solid #fff; font: 700 9.5px var(--mono); white-space: nowrap; }
+.tv .m-stroke { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; z-index: 2; }
+.tv .m-stroke path { fill: none; stroke-linecap: round; stroke-linejoin: round; vector-effect: non-scaling-stroke; stroke-dasharray: 160; stroke-dashoffset: 0; animation: var(--T) ease-in-out infinite both; }
+.tv .m-stroke .o { stroke: #fff; stroke-width: 6; }
+.tv .m-stroke .i { stroke: var(--mark-c); stroke-width: 3.4; }
+.tv .m-stroke.d .i { stroke: var(--mark-d); }
+.tv .m-item { background: var(--panel); border: 1px solid var(--line); border-radius: 9px; padding: 7px 8px; box-shadow: var(--shadow); }
+.tv .m-head { display: flex; align-items: center; gap: 6px; margin-bottom: 5px; }
+.tv .m-head em { font: 700 9.5px var(--mono); font-style: normal; color: #fff; background: var(--mark-c); padding: 1px 5px; border-radius: 5px; }
+.tv .m-head code { font: 600 10px var(--mono); color: var(--text); }
+.tv .m-thumb { position: relative; height: 46px; border-radius: 6px; background: linear-gradient(135deg, #3b4a8f, #8b3d77 55%, #d0703d); }
+.tv .m-digits { display: flex; gap: 6px; }
+.tv .m-digits b { display: grid; place-items: center; width: 30px; height: 38px; border-radius: 8px; background: var(--raised); border: 1px solid var(--line); font: 700 18px var(--mono); }
+.tv .m-digits.sm b { width: 14px; height: 18px; border-radius: 4px; }
+.tv .m-phone { position: absolute; width: 92px; height: 170px; border-radius: 18px; background: var(--panel); border: 2px solid color-mix(in oklch, var(--text) 30%, transparent); box-shadow: 0 10px 28px rgb(0 0 0 / .25); padding: 14px 9px; display: grid; align-content: start; gap: 10px; justify-items: center; }
+.tv .m-ph-top { width: 30px; height: 4px; border-radius: 2px; background: color-mix(in oklch, var(--text) 20%, transparent); }
+.tv .m-ph-btn { width: 64px; height: 16px; border-radius: 6px; background: linear-gradient(90deg, var(--brand), var(--brand-2)); }
+
+/* 1. 넣기 */
+.s-add .m-input { position: absolute; left: 7%; top: 12%; width: 56%; height: 38px; display: flex; align-items: center; gap: 2px; padding: 0 6px 0 12px; background: var(--panel); border: 1px solid var(--line); border-radius: 11px; box-shadow: var(--shadow); font: 500 12px var(--mono); }
+.s-add .m-type { overflow: hidden; white-space: nowrap; display: inline-block; width: 21ch; animation: addType var(--T) steps(21) infinite both; }
+.s-add .m-caret { width: 1.5px; height: 15px; background: var(--brand); animation: blink .8s steps(2) infinite; }
+.s-add .m-btn { margin-left: auto; padding: 6px 11px; border-radius: 8px; color: #fff; font: 700 11px var(--sans, inherit); background: linear-gradient(90deg, var(--brand), var(--brand-2)); animation: addPress var(--T) infinite both; }
+.s-add .m-drop { position: absolute; left: 7%; top: 34%; width: 56%; height: 34px; display: flex; align-items: center; gap: 7px; padding: 0 12px; border: 1.5px dashed var(--line); border-radius: 10px; color: var(--muted); font-weight: 600; }
+.s-add .m-drop .ic { color: var(--brand); }
+.s-add .m-drop em { margin-left: auto; font: 500 9.5px var(--mono); font-style: normal; color: var(--dim); }
+.s-add .m-stage { left: 7%; top: 54%; width: 56%; height: 38%; animation: addStage var(--T) infinite both; }
+.s-add .m-playbtn { position: absolute; left: 50%; top: 50%; width: 26px; height: 26px; margin: -13px; border-radius: 50%; background: rgb(255 255 255 / .9); }
+.s-add .m-playbtn::after { content: ''; position: absolute; left: 10px; top: 7px; border: 6px solid transparent; border-left: 9px solid #17171f; }
+.s-add .m-chips { position: absolute; left: 67%; top: 58%; display: grid; gap: 7px; }
+.s-add .m-chips span { padding: 4px 10px; border-radius: 999px; background: var(--panel); border: 1px solid var(--line); font: 600 11px var(--mono); animation: pop var(--T) infinite both; }
+.s-add .m-chips span:nth-child(2) { animation-name: pop2; }
+.s-add .c1 { animation-name: addCur; }
+@keyframes addType { 0%, 6% { width: 0; } 34%, 100% { width: 21ch; } }
+@keyframes addPress { 0%, 40% { transform: none; } 44% { transform: scale(.92); } 48%, 100% { transform: none; } }
+@keyframes addStage { 0%, 46% { opacity: 0; transform: scale(.9); } 54%, 92% { opacity: 1; transform: none; } 100% { opacity: 0; } }
+@keyframes pop { 0%, 58% { opacity: 0; transform: scale(.6); } 64%, 92% { opacity: 1; transform: none; } 100% { opacity: 0; } }
+@keyframes pop2 { 0%, 64% { opacity: 0; transform: scale(.6); } 70%, 92% { opacity: 1; transform: none; } 100% { opacity: 0; } }
+@keyframes addCur { 0% { left: 80%; top: 80%; } 34% { left: 52%; top: 22%; } 40%, 46% { left: 56%; top: 19%; } 70%, 100% { left: 80%; top: 80%; } }
+@keyframes blink { 50% { opacity: 0; } }
+
+/* 2. 안내 · 핀 */
+.s-setup .m-card { position: absolute; top: 12%; height: 76%; padding: 12px 14px; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow); }
+.s-setup .m-card:first-child { left: 6%; width: 50%; }
+.s-setup .m-title { font-weight: 700; font-size: 12px; margin-bottom: 8px; }
+.s-setup .m-line.grow { height: 7px; margin: 9px 0; transform-origin: left; animation: growLine var(--T) infinite both; animation-delay: calc(var(--i) * .35s); }
+.s-setup .m-chipsrow { display: flex; gap: 6px; margin-top: 16px; }
+.s-setup .m-chipsrow span { height: 18px; flex: 1; border-radius: 999px; border: 1px dashed var(--line); }
+.s-setup .m-pinbox { left: 61%; width: 33%; display: grid; align-content: start; gap: 12px; justify-items: center; }
+.s-setup .m-pinbox .m-title { justify-self: start; }
+.s-setup .m-pinbox .m-digits b { animation: digit var(--T) infinite both; }
+.s-setup .m-pinbox .m-digits b:nth-child(2) { animation-delay: .25s; } .s-setup .m-pinbox .m-digits b:nth-child(3) { animation-delay: .5s; } .s-setup .m-pinbox .m-digits b:nth-child(4) { animation-delay: .75s; }
+.s-setup .m-pinbox > .ic { color: var(--ok); animation: pop var(--T) infinite both; width: 22px; height: 22px; }
+@keyframes growLine { 0%, 5% { transform: scaleX(0); } 25%, 92% { transform: none; } 100% { opacity: 0; } }
+@keyframes digit { 0%, 30% { opacity: 0; transform: translateY(-8px); } 38%, 92% { opacity: 1; transform: none; border-color: var(--brand); } 100% { opacity: 0; } }
+
+/* 3. 공유 */
+.s-share .m-link { position: absolute; left: 5%; top: 16%; width: 58%; display: flex; align-items: center; gap: 6px; padding: 7px 7px 7px 11px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; box-shadow: var(--shadow); font: 500 10px var(--mono); }
+.s-share .m-link span { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; flex: 1; color: var(--muted); }
+.s-share .m-copy { display: inline-flex; align-items: center; gap: 4px; padding: 5px 8px; border-radius: 7px; background: var(--primary); color: var(--primary-fg); font: 700 10.5px var(--sans, inherit); white-space: nowrap; animation: shPress var(--T) infinite both; }
+.s-share .m-toast { position: absolute; left: 18%; top: 44%; padding: 7px 12px; border-radius: 9px; background: #17171f; color: #fff; font-weight: 600; animation: shToast var(--T) infinite both; }
+.s-share .m-bubble { position: absolute; left: 44%; top: 62%; display: flex; align-items: center; gap: 5px; padding: 7px 10px; border-radius: 12px 12px 12px 3px; background: #FEE500; color: rgb(0 0 0 / .8); animation: shFly var(--T) ease-in-out infinite both; }
+.s-share .m-bubble span { width: 46px; height: 5px; border-radius: 3px; background: rgb(0 0 0 / .25); }
+.s-share .m-phone { right: 6%; top: 18px; }
+.s-share .m-phone .m-digits b { animation: digit var(--T) infinite both; animation-delay: 2.6s; }
+.s-share .c3 { animation-name: shCur; }
+@keyframes shPress { 0%, 20% { transform: none; } 24% { transform: scale(.9); } 28%, 100% { transform: none; } }
+@keyframes shToast { 0%, 24% { opacity: 0; transform: translateY(6px); } 30%, 46% { opacity: 1; transform: none; } 52%, 100% { opacity: 0; } }
+@keyframes shFly { 0%, 44% { opacity: 0; transform: translate(-40px, 10px) scale(.8); } 50% { opacity: 1; transform: none; } 66% { opacity: 1; transform: translate(90px, -30px) scale(.9); } 72%, 100% { opacity: 0; transform: translate(110px, -36px) scale(.6); } }
+@keyframes shCur { 0% { left: 40%; top: 80%; } 20%, 26% { left: 58%; top: 22%; } 60%, 100% { left: 40%; top: 80%; } }
+
+/* 4. 클라이언트 표시 */
+.s-mark .m-stage { left: 5%; top: 10%; width: 56%; height: 80%; }
+.s-mark .m-bar { position: absolute; left: 0; right: 0; bottom: 0; z-index: 3; display: flex; align-items: center; gap: 8px; padding: 6px 9px; background: rgb(0 0 0 / .45); color: #fff; font: 600 9.5px var(--mono); }
+.s-mark .m-bar i { flex: 1; height: 3px; border-radius: 2px; background: linear-gradient(90deg, var(--mark-c) 42%, rgb(255 255 255 / .3) 42%); }
+.s-mark .p1 { left: 30%; top: 42%; animation: pinDrop var(--T) infinite both; }
+.s-mark .m-stroke path { animation-name: drawPath; }
+.s-mark .m-side { position: absolute; left: 64%; right: 4%; top: 10%; display: grid; gap: 8px; }
+.s-mark .a1 { animation: slideIn var(--T) infinite both; }
+.s-mark .a2 { animation: slideIn2 var(--T) infinite both; }
+.s-mark .m-line.type { transform-origin: left; animation: typeLine var(--T) infinite both; }
+.s-mark .a2 .m-line.type { animation-name: typeLine2; }
+.s-mark .c4 { animation-name: markCur; }
+@keyframes pinDrop { 0%, 14% { opacity: 0; transform: translateY(-14px); } 19%, 92% { opacity: 1; transform: none; } 100% { opacity: 0; } }
+@keyframes slideIn { 0%, 18% { opacity: 0; transform: translateX(18px); } 24%, 92% { opacity: 1; transform: none; } 100% { opacity: 0; } }
+@keyframes slideIn2 { 0%, 66% { opacity: 0; transform: translateX(18px); } 72%, 92% { opacity: 1; transform: none; } 100% { opacity: 0; } }
+@keyframes typeLine { 0%, 26% { transform: scaleX(0); } 42%, 92% { transform: none; } 100% { opacity: 0; } }
+@keyframes typeLine2 { 0%, 72% { transform: scaleX(0); } 84%, 92% { transform: none; } 100% { opacity: 0; } }
+@keyframes drawPath { 0%, 46% { stroke-dashoffset: 160; } 64%, 92% { stroke-dashoffset: 0; opacity: 1; } 100% { opacity: 0; } }
+@keyframes markCur { 0% { left: 20%; top: 85%; } 14%, 18% { left: 21%; top: 45%; } 46% { left: 38%; top: 58%; } 64% { left: 50%; top: 62%; } 80%, 100% { left: 20%; top: 85%; } }
+
+/* 5. 보내기 */
+.s-send .m-win { position: absolute; top: 14%; width: 40%; height: 72%; padding: 10px; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow); }
+.s-send .left { left: 5%; } .s-send .right { right: 5%; }
+.s-send .m-wtop { display: flex; align-items: center; justify-content: space-between; gap: 6px; margin-bottom: 10px; font-weight: 700; }
+.s-send .m-sendbtn { margin-left: auto; display: inline-flex; align-items: center; gap: 5px; padding: 6px 9px; border-radius: 8px; color: #fff; font-size: 10.5px; background: linear-gradient(90deg, var(--brand), var(--brand-2)); animation: shPress var(--T) infinite both; }
+.s-send .m-sendbtn em { font: 700 9.5px var(--mono); font-style: normal; background: rgb(255 255 255 / .25); padding: 0 5px; border-radius: 5px; }
+.s-send .m-badge { font: 700 10px var(--mono); font-style: normal; color: #fff; background: var(--mark-c); padding: 1px 7px; border-radius: 9px; animation: pop var(--T) infinite both; }
+.s-send .m-plane { position: absolute; left: 36%; top: 26%; width: 26px; height: 26px; color: var(--brand); animation: plane var(--T) ease-in-out infinite both; }
+.s-send .m-inrow { height: 34px; margin: 7px 0; border-radius: 8px; background: var(--raised); border: 1px solid var(--line); border-left: 3px solid var(--mark-c); animation: slideIn var(--T) infinite both; animation-delay: 1.8s; }
+.s-send .r2 { animation-delay: 2s; }
+.s-send .c5 { animation-name: sendCur; }
+@keyframes plane { 0%, 24% { opacity: 0; transform: none; } 30% { opacity: 1; } 52% { opacity: 1; transform: translate(150px, 20px) rotate(12deg); } 58%, 100% { opacity: 0; transform: translate(170px, 26px) scale(.5); } }
+@keyframes sendCur { 0% { left: 18%; top: 80%; } 20%, 26% { left: 33%; top: 22%; } 60%, 100% { left: 18%; top: 80%; } }
+
+/* 6. 상태 · 댓글 */
+.s-reply .m-item.big { position: absolute; left: 14%; top: 8%; width: 52%; padding: 9px 10px; }
+.s-reply .m-thumb { height: 66px; }
+.s-reply .p0 { left: 40%; top: 50%; }
+.s-reply .m-seg { position: relative; display: grid; grid-template-columns: repeat(4, 1fr); margin-top: 6px; padding: 2px; border-radius: 7px; background: var(--raised); border: 1px solid var(--line); font-size: 9.5px; text-align: center; color: var(--muted); }
+.s-reply .m-seg span { position: relative; z-index: 1; padding: 3px 0; }
+.s-reply .m-segon { position: absolute; top: 2px; bottom: 2px; width: calc(25% - 1px); left: 2px; border-radius: 5px; background: var(--panel); box-shadow: 0 1px 3px rgb(0 0 0 / .15); animation: segMove var(--T) infinite both; }
+.s-reply .m-comment { display: flex; gap: 6px; align-items: center; margin-top: 7px; padding: 6px 8px; border-radius: 8px; background: color-mix(in oklch, var(--mark-d) 10%, var(--panel)); border: 1px solid color-mix(in oklch, var(--mark-d) 30%, transparent); animation: slideIn2 var(--T) infinite both; }
+.s-reply .m-comment b { color: var(--mark-d); }
+.s-reply .m-prog { position: absolute; right: 6%; top: 14%; width: 22%; height: 8px; border-radius: 4px; background: var(--line); overflow: hidden; }
+.s-reply .m-prog i { display: block; height: 100%; background: var(--ok); animation: prog var(--T) infinite both; }
+.s-reply .c6 { animation-name: replyCur; }
+@keyframes segMove { 0%, 20% { left: 2px; } 26%, 44% { left: 25%; } 50%, 92% { left: 50%; } 100% { left: 2px; } }
+@keyframes prog { 0%, 48% { width: 20%; } 56%, 100% { width: 60%; } }
+@keyframes replyCur { 0% { left: 70%; top: 85%; } 20%, 24% { left: 34%; top: 66%; } 44%, 48% { left: 47%; top: 66%; } 66%, 100% { left: 70%; top: 85%; } }
+
+/* 7. 디렉터 안내 */
+.s-notes .m-stage { left: 6%; top: 12%; width: 56%; height: 76%; }
+.s-notes .p2 { left: 62%; top: 36%; animation: pinDrop var(--T) infinite both; }
+.s-notes .m-stroke path { animation-name: drawPath; }
+.s-notes .m-phone.wide { right: 7%; top: 16px; width: 110px; }
+.s-notes .m-ph-stage { position: relative; width: 100%; height: 54px; border-radius: 6px; background: linear-gradient(135deg, #3b4a8f, #8b3d77 55%, #d0703d); }
+.s-notes .p3 { left: 62%; top: 40%; animation: pinDrop var(--T) infinite both; animation-delay: 1.6s; }
+.s-notes .m-reply { width: 100%; height: 22px; border-radius: 6px; border: 1px solid var(--line); animation: slideIn2 var(--T) infinite both; }
+.s-notes .c7 { animation-name: notesCur; }
+@keyframes notesCur { 0% { left: 30%; top: 85%; } 14%, 18% { left: 41%; top: 40%; } 46% { left: 18%; top: 72%; } 64% { left: 32%; top: 72%; } 80%, 100% { left: 30%; top: 85%; } }
+
+/* 8. 문서 확대 */
+.s-doc .m-rail { position: absolute; left: 5%; top: 10%; display: grid; gap: 7px; }
+.s-doc .m-rail i { display: block; width: 34px; height: 44px; border-radius: 4px; background: #fff; box-shadow: 0 1px 3px rgb(0 0 0 / .2); border: 2px solid transparent; }
+.s-doc .m-rail i.on { border-color: var(--brand); }
+.s-doc .m-page { position: absolute; left: 17%; top: 8%; width: 66%; height: 84%; overflow: hidden; border-radius: 6px; background: var(--paper-bg, #e9eaef); }
+.s-doc .m-zoom { position: absolute; left: 28%; top: 6%; width: 44%; height: 88%; padding: 10px; background: #fff; box-shadow: 0 4px 16px rgb(0 0 0 / .15); transform-origin: 50% 54%; animation: docZoom var(--T) ease-in-out infinite both; }
+.s-doc .m-zoom .m-line { background: #d6d8e0; }
+.s-doc .m-block { margin-top: 10px; height: 34%; border-radius: 4px; background: linear-gradient(135deg, #2f6bff55, #ec4a2444); }
+.s-doc .m-stroke path { stroke-dasharray: 40; animation-name: docDraw; }
+.s-doc .m-mini { position: absolute; right: 10px; bottom: 10px; width: 46px; height: 60px; border-radius: 4px; background: #fff; box-shadow: 0 2px 8px rgb(0 0 0 / .3); animation: pop var(--T) infinite both; animation-delay: -2.4s; }
+.s-doc .m-mini i { position: absolute; left: 34%; top: 44%; width: 34%; height: 24%; border: 1.5px solid var(--brand); background: color-mix(in oklch, var(--brand) 15%, transparent); }
+.s-doc .m-zchip { position: absolute; right: 4%; top: 10%; padding: 4px 9px; border-radius: 8px; background: var(--panel); border: 1px solid var(--line); font: 600 11px var(--mono); }
+.s-doc .m-zchip::after { content: '260%'; animation: zpct var(--T) infinite both; }
+@keyframes zpct { 0%, 18% { content: '100%'; } 22%, 26% { content: '180%'; } 30%, 86% { content: '260%'; } 92%, 100% { content: '100%'; } }
+@keyframes docZoom { 0%, 14% { transform: none; } 34%, 82% { transform: scale(2.6); } 96%, 100% { transform: none; } }
+@keyframes docDraw { 0%, 42% { stroke-dashoffset: 40; } 60%, 82% { stroke-dashoffset: 0; } 96%, 100% { stroke-dashoffset: 0; } }
+
+/* 9. 목록 보기 */
+.s-view .m-toggle { position: absolute; left: 50%; top: 9%; transform: translateX(-50%); display: grid; grid-template-columns: 1fr 1fr; padding: 3px; border-radius: 9px; background: var(--panel); border: 1px solid var(--line); font-weight: 600; font-size: 11px; }
+.s-view .m-toggle span { position: relative; z-index: 1; padding: 5px 14px; text-align: center; }
+.s-view .m-toggle i { position: absolute; top: 3px; bottom: 3px; left: 3px; width: calc(50% - 3px); border-radius: 6px; background: var(--raised); box-shadow: 0 1px 3px rgb(0 0 0 / .15); animation: tgl var(--T) infinite both; }
+.s-view .m-list { position: absolute; left: 50%; top: 26%; width: 44%; transform: translateX(-50%); display: grid; gap: 6px; }
+.s-view .m-thumb { height: 34px; overflow: hidden; animation: hideThumb var(--T) infinite both; }
+.s-view .m-item .m-line { width: 70%; margin-bottom: 0; }
+@keyframes tgl { 0%, 34% { left: 3px; } 42%, 84% { left: 50%; } 92%, 100% { left: 3px; } }
+@keyframes hideThumb { 0%, 38% { height: 34px; opacity: 1; } 46%, 84% { height: 0; opacity: 0; margin: 0; } 92%, 100% { height: 34px; opacity: 1; } }
+
+@media (max-width: 560px) {
+  .tour-stage { height: 200px; }
+  .tv { font-size: 9.5px; }
+  .tour-copy h3 { font-size: 16px; }
+  .tour-copy { min-height: 150px; }
+  .tv .m-phone { transform: scale(.82); transform-origin: top right; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .tv *, .tv .m-cur { animation: none !important; }
+  .tv .m-cur { display: none; }
+}

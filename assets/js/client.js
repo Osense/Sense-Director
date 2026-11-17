@@ -176,7 +176,7 @@ export async function renderClient(app, params) {
         <b>${t('고칠 곳을 화면에서 눌러 주세요')}</b>
         <span>${ic('pin', 14)} ${t('핀: 누른 자리에 표시 ·')} ${ic('pen', 14)} ${t('펜: 그려서 표시')}</span>
         <span>${t('장면과 시간 주소(시:분:초:프레임)가 여기에 붙고, 바로 내용을 적을 수 있어요.')}</span>
-        <span class="keys">${t('Space 재생 · , . 한 프레임 · ← → 1초 · P 핀 · D 펜 · H 손 · M 메모')}</span></div>`;
+        <span class="keys">${t('Space 재생 · ← → 또는 , . 한 프레임 · Shift ← → 1초 · P 핀 · D 펜 · H 손 · M 메모')}</span></div>`;
     } else {
       list.innerHTML = state.sent.length ? state.sent.slice().reverse().map(r => `<div class="group"><div class="group-head">${fmtDate(r.at)} · ${r.items.length}${t('건 보냄')}${r.from ? ' · ' + esc(r.from) : ''}</div>${r.items.map(it => itemCard({ ...it, _sent: r.rid })).join('')}</div>`).join('')
         : t('<div class="empty"><b>아직 보낸 요청이 없어요</b><span>작성을 마치면 오른쪽 위 "수정요청 보내기"를 눌러 주세요.</span></div>');
@@ -376,13 +376,13 @@ export async function renderClient(app, params) {
     });
     return modal({
       title: t('사용법'), wide: true,
-      body: `<ol class="steps"><li><b>${t('찾기')}</b>${t('재생하다가 고칠 장면에서 멈춰요.')} <kbd>,</kbd> <kbd>.</kbd>${t('로 한 프레임씩 맞출 수 있어요.')}</li>
+      body: `<ol class="steps"><li><b>${t('찾기')}</b>${t('재생하다가 고칠 장면에서 멈춰요.')} <kbd>←</kbd> <kbd>→</kbd>${t('로 한 프레임씩 맞출 수 있어요.')}</li>
       <li><b>${t('표시')}</b>${t('핀(P)으로 누르거나 펜(D)으로 그려요. 시간 주소가 오른쪽에 붙고, 장면 사진은 보낼 때 한 번에 만들어져요.')}</li>
       <li><b>${t('적기')}</b>${t('붙은 카드에 바로 내용을 적어요. 펜으로 이어 그린 획은 같은 카드에 합쳐져요.')}</li>
       <li><b>${t('조작')}</b>${t('손(H) 도구를 고르면 유튜브·비메오 플레이어를 직접 눌러 화질·자막·볼륨을 바꿀 수 있어요. 핀·펜으로 돌아오면 깨끗한 화면이 돼요.')}</li>
       <li><b>${t('보내기')}</b>${t('오른쪽 위')} "${t('수정요청 보내기')}"${t('. 안 되면 옆 화살표에서 메시지·HTML·PDF로 보내요.')}</li>
       <li><b>${t('회신')}</b>${t('디렉터가 단 댓글과 반영 상태는')} "${t('보낸 요청')}"${t('에서 볼 수 있어요.')}</li></ol>
-      <div class="keys-grid"><kbd>Space</kbd><span>${t('재생/정지')}</span><kbd>, .</kbd><span>${t('1프레임')}</span><kbd>← →</kbd><span>${t('1초 (Shift 5초)')}</span><kbd>J L</kbd><span>${t('5초')}</span><kbd>P D H M</kbd><span>${t('핀 · 펜 · 손 · 메모만')}</span><kbd>Esc</kbd><span>${t('입력 끝내기')}</span></div>
+      <div class="keys-grid"><kbd>Space</kbd><span>${t('재생/정지')}</span><kbd>← → , .</kbd><span>${t('1프레임')}</span><kbd>Shift ← →</kbd><span>${t('1초')}</span><kbd>J L</kbd><span>${t('5초')}</span><kbd>P D H M</kbd><span>${t('핀 · 펜 · 손 · 메모만')}</span><kbd>Esc</kbd><span>${t('입력 끝내기')}</span></div>
       <p class="note dim">${t('시간 주소는 시:분:초:프레임이에요. 프레임 수(')}${esc(P.fps ? fpsLabel(P.fps) : t('재생하면 자동 측정'))}${t(')는 영상에 맞춰 자동으로 정해져요.')}</p>`,
       actions: [{ label: t('닫기'), kind: 'primary' }],
     });

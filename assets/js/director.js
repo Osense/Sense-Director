@@ -7,6 +7,7 @@ import { splitter, workspaceSplitters } from './layout.js';
 import { probe } from './player.js';
 import { putMedia, fmtSize } from './media.js';
 import { putDoc, docType, isDoc } from './doc.js';
+import { showTour, maybeShowTour } from './tour.js';
 import { clientLink, feedbackMessage, reportHTML, printHTML, shareFile, parseIncoming, STATUS, noteLabel } from './exports.js';
 import { accountBtnHTML } from './auth.js';
 import { t, tn, lang, fmtDateL, fmtMD, langBtnHTML } from './i18n.js';
@@ -49,6 +50,7 @@ export async function renderDirector(app, params) {
     ${MODE === 'mock' ? t('<span class="chip mock" title="서버 없이 이 브라우저와 링크로 주고받는 시험 버전">시험 버전 · 서버 없음</span>') : ''}
     <button class="btn ghost" data-act="import" title="${t('수정요청 링크·HTML 가져오기')}">${ic('import')}${t('가져오기')}</button>
     ${langBtnHTML()}${themeBtnHTML()}
+    <button class="btn ghost icon" data-act="tour" aria-label="${t('사용 안내')}" title="${t('사용 안내 다시 보기')}">${ic('help')}</button>
     <button class="btn brand" data-act="new">${ic('plus')}${t('새 프로젝트')}</button>
     ${accountBtnHTML()}
   </header>
@@ -68,6 +70,7 @@ export async function renderDirector(app, params) {
   </div>`;
   splitter($('.plist-split', app), { container: $('.console', app), cssVar: '--plist', key: 'plist', axis: 'x', after: false, def: 230, min: 150, max: 420 });
   $('[data-act=new]', app).addEventListener('click', () => newDialog());
+  $('[data-act=tour]', app).addEventListener('click', () => showTour());
   $('[data-act=import]', app).addEventListener('click', () => importDialog());
   const main = $('[data-main]', app);
   if (!cur) return renderHome(main, projects);
@@ -156,6 +159,7 @@ async function startNew(url = '', given = null) {
   const p = await newProject({ src });
   if (src) { const m = await probe(src); Object.assign(p, { title: p.title || m.title, ar: m.ar || p.ar, fps: m.fps || 0, fpsHow: m.fps ? 'title' : '', poster: m.poster || '' }); Store.saveProject(p); }
   location.hash = '#p=' + p.id + '&tab=setup';
+  setTimeout(maybeShowTour, 500); // 프로젝트를 만들 때마다 사용 안내 (다시 보지 않기를 고르면 건너뛴다)
 }
 
 function importInto(pp, reqs) {

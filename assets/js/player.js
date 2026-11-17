@@ -149,7 +149,8 @@ export function createPlayer(stage, src, hooks = {}, startNative = false) {
     showFreeze(img, t) { if (this.native()) return; freeze.src = img; freeze.dataset.t = t; freeze.hidden = false; },
     hideFreeze() { freeze.hidden = true; },
     effFps() { return this.fps || 30; },
-    step(n) { this.pause(); this.seek(this.time() + n / this.effFps() + (n > 0 ? 0.0005 : -0.0005)); },
+    // 한 프레임: 지금 프레임 번호에서 n칸 — 프레임 경계에 맞춰 이동한다(연달아 눌러도 정확히 쌓이게)
+    step(n) { this.pause(); const f = this.effFps(), fr = Math.round(this.time() * f) + n; this.seek(Math.max(0, fr / f + 0.0005)); },
     toggle() { this.paused() ? this.play() : this.pause(); },
     /** 같은 장면(문서는 같은 쪽)인가 — 이어 그린 획을 한 카드로 묶을 때 */
     same(x) { return this.doc ? Math.round(x) === Math.round(this.time()) : Math.abs(x - this.time()) < 1 / this.effFps() + 0.02; },
@@ -245,17 +246,18 @@ function initVideo(P, media, url, hooks) {
 
 /* ---------- 유튜브 ---------- */
 function initYouTube(P, media, src, hooks) {
-  let player = null, state = -1, dur = 0, wantPaused = false, native = !!P._startNative, gen = 0;
+  let player = null, state = -1, dur = 0, wantPaused = false, native = !!P._startNative, gen = 0, ySeek = null;
   const playing = () => state === 1 || state === 3;
   const run = f => { try { return f(); } catch { return undefined; } };
   const waitState = async (ok, ms = 4000) => { for (let i = 0; i < ms / 40 && !ok(); i++) await sleep(40); return ok(); };
   Object.assign(P, {
-    time: () => run(() => player.getCurrentTime()) || 0,
+    // 멈춘 상태에서 막 이동했다면 플레이어가 새 시간을 알려 주기 전까지 목표 시간을 쓴다 → 방향키를 연달아 눌러도 프레임이 정확히 쌓인다
+    time: () => { const pt = run(() => player.getCurrentTime()) || 0; return ySeek && (Date.now() - ySeek.at < 1200) && Math.abs(pt - ySeek.t) > 0.002 && (wantPaused || !playing()) ? ySeek.t : pt; },
     duration: () => { const d = run(() => player.getDuration()); if (d) dur = d; return dur; },
     paused: () => wantPaused || !playing(),
     play() { wantPaused = false; P.hideFreeze(); run(() => player.playVideo()); },
     pause() { wantPaused = true; run(() => player.pauseVideo()); },
-    seek(t) { P.hideFreeze(); run(() => player.seekTo(Math.max(0, t), true)); },
+    seek(t) { P.hideFreeze(); t = Math.max(0, t); ySeek = { t, at: Date.now() }; run(() => player.seekTo(t, true)); hooks.onTime && hooks.onTime(t); },
     rate: () => run(() => player.getPlaybackRate()) || 1, setRate(r) { run(() => player.setPlaybackRate(r)); },
     setVolume(x) { run(() => player.setVolume(Math.round(x * 100))); },
     async snapshot() { P.pause(); return { t: P.time(), img: '' }; },

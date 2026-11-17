@@ -197,8 +197,9 @@ export function mountViewer(root, src, opts = {}) {
     if (k === ' ' || k === 'k' || k === 'K') { e.preventDefault(); P.toggle(); return true; }
     if (k === ',') { P.step(-1); return true; }
     if (k === '.') { P.step(1); return true; }
-    if (k === 'ArrowLeft') { e.preventDefault(); P.seek(P.time() - (e.shiftKey ? 5 : 1)); return true; }
-    if (k === 'ArrowRight') { e.preventDefault(); P.seek(P.time() + (e.shiftKey ? 5 : 1)); return true; }
+    // 방향키: 한 프레임씩(멈춘 채로) · Shift와 함께면 1초
+    if (k === 'ArrowLeft') { e.preventDefault(); e.shiftKey ? P.seek(P.time() - 1) : P.step(-1); return true; }
+    if (k === 'ArrowRight') { e.preventDefault(); e.shiftKey ? P.seek(P.time() + 1) : P.step(1); return true; }
     if (k === 'j' || k === 'J') { P.seek(P.time() - 5); return true; }
     if (k === 'l' || k === 'L') { P.seek(P.time() + 5); return true; }
     if (opts.tools && (k === 'p' || k === 'P')) { setTool('pin'); return true; }
