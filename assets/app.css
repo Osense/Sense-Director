@@ -560,3 +560,59 @@ body.resizing iframe, body.resizing video { pointer-events: none; }
 .acct-who { display: grid; gap: 2px; padding: 8px 9px 10px; border-bottom: 1px solid var(--line); margin-bottom: 4px; }
 .acct-who small { color: var(--muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; }
 .menu button span { display: grid; }
+
+/* ---------- 문서(PDF·PPT·사진) 검수 ---------- */
+:root { --paper-bg: oklch(0.93 0.006 270); }
+html.dark { --paper-bg: oklch(0.2 0.008 270); }
+.docbody { flex: 1; min-height: 0; display: flex; gap: 10px; }
+.docbody .stage { flex: 1; min-width: 0; }
+.doc-stage { background: var(--paper-bg); touch-action: none; user-select: none; -webkit-user-select: none; }
+.doc-stage .pan { position: absolute; inset: 0; transform-origin: 0 0; will-change: transform; }
+.doc-stage .media { z-index: 1; isolation: isolate; overflow: hidden; background: #fff; box-shadow: 0 1px 2px rgb(0 0 0 / .12), 0 8px 28px rgb(0 0 0 / .14); }
+.doc-stage.missing .media { background: transparent; box-shadow: none; }
+.doc-canvas, .doc-img { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.doc-img { object-fit: fill; -webkit-user-drag: none; }
+.doc-stage .pptx-preview-slide-wrapper { box-shadow: none !important; margin: 0 !important; }
+.pptx-preview-wrapper-next, .pptx-preview-wrapper-pagination, .pptx-preview-wrapper > div:not(.pptx-preview-slide-wrapper) { display: none !important; }
+.pptx-host .pptx-preview-wrapper { background: transparent !important; overflow: visible !important; }
+.pptx-host .pptx-preview-slide-wrapper { top: 0 !important; left: 0 !important; }
+.doc-loading { position: absolute; inset: 0; display: grid; place-content: center; justify-items: center; gap: 10px; color: var(--muted); font-size: 13px; background: var(--paper-bg); }
+.doc-loading .spin { width: 22px; height: 22px; border-radius: 50%; border: 2.5px solid var(--line); border-top-color: var(--brand); animation: spin .8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+/* 확대해도 핀 크기는 그대로 */
+.pan .pin { scale: calc(1 / var(--z, 1)); }
+.doc-stage[data-tool=hand] { cursor: grab; }
+.doc-stage.panning, .doc-stage.panning * { cursor: grabbing !important; }
+/* 미니맵 */
+.navmap { position: absolute; right: 12px; bottom: 12px; z-index: 6; width: 150px; max-height: 45%; background: #fff; border: 1px solid rgb(0 0 0 / .18); border-radius: 8px; overflow: hidden; box-shadow: 0 6px 22px rgb(0 0 0 / .28); cursor: pointer; touch-action: none; }
+.navmap img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: fill; pointer-events: none; }
+.navrect { position: absolute; border: 2px solid var(--brand); background: color-mix(in oklch, var(--brand) 14%, transparent); border-radius: 3px; box-shadow: 0 0 0 999px rgb(10 10 16 / .28); pointer-events: none; }
+/* 쪽 목록 */
+.pages { flex: none; width: 104px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; padding: 2px 4px 2px 0; }
+.pages[hidden] { display: none; }
+.pages button { position: relative; display: grid; gap: 4px; justify-items: center; padding: 5px; background: transparent; border: 1.5px solid transparent; border-radius: 10px; cursor: pointer; color: var(--muted); font: 600 11.5px var(--mono); }
+.pages button:hover { background: var(--active); }
+.pages button.on { border-color: var(--brand); background: var(--panel); color: var(--text); }
+.pthumb { display: grid; place-items: center; width: 100%; min-height: 54px; background: #fff; border-radius: 4px; box-shadow: 0 1px 3px rgb(0 0 0 / .18); overflow: hidden; }
+.pthumb img { display: block; width: 100%; height: auto; }
+.pcount { position: absolute; top: 1px; right: 1px; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; background: var(--mark-c); color: #fff; font: 700 10.5px/18px var(--sans, inherit); font-style: normal; border: 1.5px solid #fff; }
+/* 아래 줄: 도구 · 쪽 · 확대 */
+.doc-bar { gap: 10px; }
+.doc-bar .grow { flex: 1; }
+.pager { display: inline-flex; align-items: center; gap: 2px; }
+.pager[hidden] { display: none; }
+.pnum { display: inline-flex; align-items: baseline; gap: 4px; padding: 0 6px; font: 600 13px var(--mono); color: var(--muted); }
+.pnum b { color: var(--text); font-size: 14px; }
+.pnum small { font: 500 11.5px inherit; font-family: inherit; color: var(--dim); margin-left: 2px; }
+.zoomer .zpct { min-width: 58px; font: 600 12.5px var(--mono); justify-content: center; }
+.doc-hint { margin-top: -4px; padding: 0 4px; color: var(--dim); font-size: 12px; }
+/* 문서에는 '앞뒤 재생'이 없다 */
+.doc-mode [data-loop], .doc-mode [data-zact=loop] { display: none !important; }
+@media (max-width: 760px) {
+  .docbody { flex-direction: column-reverse; }
+  .pages { width: auto; flex-direction: row; overflow-x: auto; overflow-y: hidden; padding: 0 0 4px; }
+  .pages button { width: 64px; flex: none; }
+  .doc-bar .tools .btn { padding-inline: 9px; }
+  .doc-hint { display: none; }
+  .navmap { width: 110px; }
+}

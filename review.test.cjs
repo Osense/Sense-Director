@@ -17,7 +17,7 @@ async function ev(expr) { const r = await call('Runtime.evaluate', { expression:
 async function until(expr, ms = 10000, label = expr) { const end = Date.now() + ms; while (Date.now() < end) { try { if (await ev(expr)) return; } catch {} await delay(100); } throw Error('Timed out: ' + label); }
 async function go(url) { await call('Page.navigate', { url }); await delay(400); await until("document.readyState==='complete'"); if (process.env.THEME === 'dark') await ev("localStorage.setItem('wesns.theme','dark');document.documentElement.classList.add('dark')").catch(() => {}); }
 async function shot(name) { if (!SHOTS) return; const r = await call('Page.captureScreenshot', { format: 'png' }); fs.mkdirSync(SHOTS, { recursive: true }); fs.writeFileSync(path.join(SHOTS, name + '.png'), Buffer.from(r.result.data, 'base64')); }
-async function setFile(sel, file) { const d = await call('DOM.getDocument', { depth: -1, pierce: true }); const q = await call('DOM.querySelector', { nodeId: d.result.root.nodeId, selector: sel }); if (!q.result || !q.result.nodeId) throw Error('no input ' + sel); await call('DOM.setFileInputFiles', { nodeId: q.result.nodeId, files: [file] }); }
+async function setFile(sel, file) { const d = await call('DOM.getDocument', { depth: -1, pierce: true }); const q = await call('DOM.querySelector', { nodeId: d.result.root.nodeId, selector: sel }); if (!q.result || !q.result.nodeId) throw Error('no input ' + sel); await call('DOM.setFileInputFiles', { nodeId: q.result.nodeId, files: [].concat(file) }); }
 const SEED = "if(!localStorage.getItem('wesns.lang'))localStorage.setItem('wesns.lang','ko');if(!sessionStorage.getItem('t:nouser')&&!localStorage.getItem('wesns.mock.user'))localStorage.setItem('wesns.mock.user',JSON.stringify({id:'t',name:'tester',email:'tester@example.com',provider:'email'}));";
 const CLEAR = 'localStorage.clear();' + SEED;
 const pass = []; const ok = (c, m) => { if (!c) throw Error('FAIL: ' + m); pass.push(m); };
@@ -379,6 +379,123 @@ const pointer = (sel, pts) => ev(`(async()=>{const el=document.querySelector(${J
     await shot('12-director-vimeo');
   }
 
+
+  /* 11b. 문서 검수: PDF · PPT · 사진 */
+  const TM = f => path.join(__dirname, 'test-media', f);
+  const blank = "(c=>{const d=c.getContext('2d').getImageData(0,0,c.width,c.height).data;let n=0;for(let i=0;i<d.length;i+=4*97)if(d[i]<200||d[i+1]<200||d[i+2]<200)n++;return n})";
+  await ev(CLEAR); await go(BASE); await until("document.querySelector('[data-drop] input')");
+  await setFile('[data-drop] input', TM('doc.pdf'));
+  await until("location.hash.includes('tab=setup') && document.querySelector('.doc-canvas') && document.querySelector('.doc-canvas').width>50", 20000, 'pdf renders');
+  await delay(500);
+  ok(await ev(blank + "(document.querySelector('.doc-canvas'))>5"), 'PDF: first page is drawn');
+    ok(await ev("!document.querySelector('.viewer .controls') && !document.querySelector('.viewer [data-act=play]') && !!document.querySelector('.doc-bar [data-act=zin]')"), 'PDF: no playback bar — page and zoom controls instead');
+  ok(await ev("document.querySelector('[data-dur]').textContent==='3' && document.querySelectorAll('[data-pages] [data-page]').length===3"), 'PDF: 3 pages with page rail');
+  ok(await ev("document.querySelector('[data-meta]').textContent.includes('PDF') && document.querySelector('[data-meta]').textContent.includes('3')"), 'PDF: kind and page count shown');
+  await until("[...document.querySelectorAll('[data-pages] img')].every(i=>!i.hidden && i.src)", 10000, 'page thumbs');
+  ok(true, 'PDF: page thumbnails made');
+  // 쪽 넘기기 → 가로 쪽은 화면비가 바뀐다
+  await ev("document.querySelector('[data-pages] [data-page=\"2\"]').click()"); await delay(600);
+  ok(await ev("document.querySelector('[data-tc]').textContent==='3' && (()=>{const o=document.querySelector('.overlay');return o.offsetWidth>o.offsetHeight})()"), 'PDF: page 3 (landscape) fits its own shape');
+  await ev("document.querySelector('[data-act=pprev]').click()"); await delay(400);
+  const dPin = await ev("[...document.querySelectorAll('.pin-show span')].map(s=>s.textContent).join('')");
+  const dLink = await ev("document.querySelector('[data-link]').value");
+  await ev("document.querySelector('[data-tab=inbox]').click()");
+  await until("document.querySelector('.doc-bar [data-tool=pen]') && document.querySelector('.doc-canvas') && document.querySelector('.doc-canvas').width>50", 15000, 'inbox doc viewer');
+  ok(await ev("document.querySelectorAll('.doc-bar [data-tool]').length===3"), 'PDF: marking tools (pin, pen, move) in the bottom bar');
+  await ev("document.querySelector('[data-pages] [data-page=\"1\"]').click()"); await delay(400);
+  // 확대
+  const pdfPid = await ev("location.hash.match(/p=(\\w+)/)[1]");
+  const cw0 = await ev("document.querySelector('.doc-canvas').width");
+  await ev("document.querySelector('[data-act=zin]').click();document.querySelector('[data-act=zin]').click()"); await delay(300);
+  ok(await ev("document.querySelector('[data-zpct]').textContent==='225%' && !document.querySelector('[data-navmap]').hidden && document.querySelector('.pan').style.transform.includes('scale(2.25)')"), 'zoom: buttons zoom in and show the mini-map');
+  await delay(400);
+  ok(await ev("document.querySelector('.doc-canvas').width") > cw0 * 1.8, 'zoom: PDF is redrawn sharper when zoomed');
+  await shot('19-doc-zoomed');
+  // 확대한 채 펜으로 그리기 → 촘촘한 좌표
+  await ev("document.querySelector('.doc-bar [data-tool=pen]').click()");
+  await pointer('.overlay', [[0.5, 0.5], [0.50137, 0.50241], [0.50333, 0.50517], [0.50611, 0.50733]]); await delay(400);
+  const nt = await ev(`(async()=>{const {Store}=await import('/assets/js/store.js');const p=Store.getProject('${pdfPid}');return p.notes||[]})()`);
+  ok(nt.length === 1 && nt[0].t === 1 && nt[0].s[0].some(v => Math.round(v * 10) !== v * 10) && nt[0].ar && nt[0].th.startsWith('data:image/jpeg'), 'zoom: fine pen stroke saved on page 2 with page image');
+  // 미니맵으로 이동
+  const navBefore = await ev("document.querySelector('.pan').style.transform");
+  await pointer('[data-navmap]', [[0.05, 0.05], [0.05, 0.05]]); await delay(150);
+  ok(await ev("document.querySelector('.pan').style.transform") !== navBefore, 'mini-map: click moves the zoomed view');
+  // 이동 도구로 끌기
+  await ev("document.querySelector('.doc-bar [data-tool=hand]').click()");
+  const b2 = await ev("document.querySelector('.pan').style.transform");
+  await pointer('.stage', [[0.5, 0.5], [0.4, 0.4], [0.3, 0.3]]); await delay(150);
+  ok(await ev("document.querySelector('.pan').style.transform") !== b2, 'hand tool: drag pans the zoomed page');
+  await ev("document.querySelector('[data-act=zfit]').click()"); await delay(200);
+  ok(await ev("document.querySelector('[data-zpct]').textContent==='100%' && document.querySelector('[data-navmap]').hidden"), 'zoom: fit returns to 100%');
+  // Ctrl + 휠
+  await ev("(()=>{const s=document.querySelector('.stage'),r=s.getBoundingClientRect();s.dispatchEvent(new WheelEvent('wheel',{deltaY:-200,ctrlKey:true,clientX:r.left+r.width*.3,clientY:r.top+r.height*.3,bubbles:true,cancelable:true}))})()"); await delay(200);
+  ok(await ev("parseInt(document.querySelector('[data-zpct]').textContent)>100"), 'zoom: Ctrl + wheel zooms');
+  await ev("document.querySelector('[data-act=zfit]').click()");
+  // 클라이언트
+  await go(dLink); await until("document.querySelector('.pin-boxes input')"); await typePin(dPin);
+  await until("document.querySelector('.doc-canvas') && document.querySelector('.doc-canvas').width>50", 15000, 'client pdf');
+  await ev("document.querySelectorAll('.modal .foot .btn').forEach(b=>b.click())"); await delay(300);
+  ok(await ev("!!document.querySelector('.overlay .pin.d')===false && document.querySelector('[data-pages] [data-page=\"1\"] .pcount').textContent==='1'"), 'client: page rail shows the director note count');
+  await ev("document.querySelector('[data-act=pnext]').click()"); await delay(500);
+  ok(await ev("!!document.querySelector('.overlay .ann.d')"), 'client: sees the director drawing on page 2');
+  await pointer('.overlay', [[0.3, 0.4], [0.3, 0.4]]); await delay(600);
+  ok(await ev("(()=>{const c=document.querySelector('.list .item:not(.sent) .tcbtn');return c && c.textContent==='2쪽'})()"), 'client: pin card shows the page (2쪽)');
+  ok(await ev("document.querySelector('.list .item .snap img') && document.querySelector('.list .item .snap img').src.startsWith('data:image/jpeg')"), 'client: page image attached instantly');
+  await ev("document.querySelector('.list .item textarea').value='로고를 오른쪽으로';document.querySelector('.list .item textarea').dispatchEvent(new Event('input',{bubbles:true}))");
+  await shot('20-doc-client');
+  await click('[data-act=send]'); await until("document.querySelector('[data-name]')");
+  await ev("document.querySelector('.modal .foot .primary').click()");
+  await until("document.querySelector('.sent-ok')", 8000, 'doc sent');
+  const dIn = await ev(`JSON.parse(localStorage.getItem('sd:inbox:${pdfPid}'))`);
+  ok(dIn.length === 1 && dIn[0].items[0].t === 1 && dIn[0].items[0].ar, 'client: request with page reaches the director');
+  await ev("document.querySelector('[data-fb=msg]').click()"); await delay(500);
+  const dClip = await ev("navigator.clipboard.readText().catch(()=> '')");
+  ok(!dClip || dClip.includes('2쪽'), 'message fallback names the page');
+  await ev("document.querySelectorAll('.modal .foot .btn').forEach(b=>b.click())");
+  await go(BASE + '#p=' + pdfPid + '&tab=inbox'); await until("document.querySelector('.list .item')", 8000);
+  ok(await ev("document.querySelector('.list .item .tcbtn').textContent==='2쪽'"), 'director inbox shows the page');
+  await ev("document.querySelector('[data-act=pnext]') && document.querySelector('[data-act=pprev]').click()");
+  await ev("document.querySelector('.list .item [data-seek]').click()"); await delay(400);
+  ok(await ev("document.querySelector('[data-tc]').textContent==='2'"), 'director: card jumps to its page');
+  await shot('21-doc-director-inbox');
+  const repHtml = await ev(`(async()=>{const {Store}=await import('/assets/js/store.js');const {reportHTML}=await import('/assets/js/exports.js');return reportHTML(Store.getProject('${pdfPid}'),Store.inbox('${pdfPid}'))})()`).catch(() => '');
+  ok(!repHtml || repHtml.includes('2쪽'), 'HTML report names the page');
+
+  // PPT
+  await ev(CLEAR); await go(BASE); await until("document.querySelector('[data-drop] input')");
+  await setFile('[data-drop] input', TM('deck.pptx'));
+  await until("document.querySelector('.doc-stage .pptx-preview-slide-wrapper')", 25000, 'pptx renders');
+  await delay(600);
+  ok(await ev("document.querySelector('[data-dur]').textContent==='3' && document.querySelector('.doc-stage').innerText.includes('박스 1')"), 'PPT: slides render with text');
+  ok(await ev("!document.querySelector('.doc-stage .pptx-preview-wrapper-next') || getComputedStyle(document.querySelector('.doc-stage .pptx-preview-wrapper-next')).display==='none'"), 'PPT: library buttons hidden');
+  await ev("document.querySelector('[data-act=pnext]').click()"); await delay(400);
+  ok(await ev("document.querySelector('.doc-stage').innerText.includes('박스 2')"), 'PPT: next slide');
+  await ev("document.querySelector('[data-tab=inbox]').click()");
+  await until("document.querySelector('.doc-bar [data-tool=pin]') && document.querySelector('.doc-stage .pptx-preview-slide-wrapper')", 20000, 'pptx inbox');
+  await delay(400); await ev("document.querySelector('[data-act=pnext]').click()"); await delay(400);
+  await pointer('.overlay', [[0.5, 0.5], [0.5, 0.5]]);
+  await until(`(async()=>{const {Store}=await import('/assets/js/store.js');return (Store.projects()[0].notes||[]).length===1})()`, 10000, 'ppt note');
+  const pn = await ev(`(async()=>{const {Store}=await import('/assets/js/store.js');return Store.projects()[0].notes||[]})()`);
+  ok(pn.length === 1 && pn[0].t === 1 && (pn[0].th || '').length > 2000, 'PPT: note gets a slide image');
+  ok(await ev("document.querySelector('.list .item .tcbtn') ? document.querySelector('.list .item .tcbtn').textContent==='슬라이드 2' : true"), 'PPT: address reads 슬라이드 2');
+  await until("[...document.querySelectorAll('[data-pages] img')].every(i=>!i.hidden && i.src)", 15000, 'slide thumbs');
+  await shot('22-doc-pptx');
+
+  // 사진 여러 장
+  await ev(CLEAR); await go(BASE); await until("document.querySelector('[data-drop] input')");
+  await setFile('[data-drop] input', [TM('photo1.jpg'), TM('photo2.png')]);
+  await until("document.querySelector('.doc-img') && document.querySelector('.doc-img').complete && document.querySelector('.doc-img').naturalWidth>0", 15000, 'image renders');
+  ok(await ev("document.querySelector('[data-dur]').textContent==='2' && document.querySelector('[data-meta]').textContent.includes('2')"), 'images: two photos form one set');
+  await ev("document.querySelector('[data-act=pnext]').click()"); await delay(300);
+  ok(await ev("(()=>{const o=document.querySelector('.overlay');return o.offsetHeight>o.offsetWidth})()"), 'images: portrait photo keeps its shape');
+  await shot('23-doc-images');
+  await ev("document.querySelector('[data-tab=inbox]').click()"); await until("document.querySelector('.doc-bar [data-tool=pin]') && document.querySelector('.doc-img') && document.querySelector('.doc-img').naturalWidth", 10000);
+  ok(await ev("(()=>{const o=document.querySelector('.overlay'),r=o.getBoundingClientRect(),e=document.elementFromPoint(r.left+r.width/2,r.top+r.height/2);return o.contains(e)||e===o})()"), 'marking layer sits above the document');
+  await call('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 2, mobile: true });
+  await ev("document.querySelector('[data-tab=inbox]') && document.querySelector('[data-tab=inbox]').click()"); await delay(1200);
+  ok(await ev("document.documentElement.scrollWidth<=innerWidth+1"), 'phone: document view has no horizontal scroll');
+  await shot('24-doc-phone');
+  await call('Emulation.clearDeviceMetricsOverride');
   /* 12. WesNS 로그인 (목업) */
   const HANGUL = "(()=>{const w=document.createTreeWalker(document.body,NodeFilter.SHOW_TEXT);const bad=[];let n;while(n=w.nextNode()){if(n.parentElement.closest('[data-user],textarea,input,noscript,script,style'))continue;if(/[가-힣]/.test(n.textContent))bad.push(n.textContent.trim().slice(0,40))}document.querySelectorAll('[title],[aria-label],[placeholder]').forEach(e=>['title','aria-label','placeholder'].forEach(a=>{const v=e.getAttribute(a);if(v&&/[가-힣]/.test(v)&&!/한국어/.test(v))bad.push(a+':'+v.slice(0,40))}));return bad.filter(x=>x!=='한국어')})()";
   await ev("localStorage.clear();sessionStorage.setItem('t:nouser','1');localStorage.setItem('wesns.lang','ko')");

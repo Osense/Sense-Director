@@ -49,7 +49,7 @@ export function openZoom(o) {
 
   /* ---------- 크기 맞추기 ---------- */
   function fit() {
-    const [aw, ah] = o.ar, r = view.getBoundingClientRect();
+    const [aw, ah] = (cur() && cur().ar) || o.ar, r = view.getBoundingClientRect();
     const s = Math.min((r.width - 24) / aw, (r.height - 84) / ah); // 아래 확대 도구 자리를 비워 둔다
     inner.style.width = aw * s + 'px'; inner.style.height = ah * s + 'px'; inner.style.marginBottom = '60px';
   }
@@ -78,6 +78,7 @@ export function openZoom(o) {
   /* ---------- 내용 ---------- */
   function draw() {
     const it = cur(); if (!it) return close();
+    fit();
     const n = o.numOf(it);
     $('[data-no]', wrap).textContent = String(n).padStart(2, '0');
     $('[data-tc]', wrap).textContent = tc(it.t, o.fps());

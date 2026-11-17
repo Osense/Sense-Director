@@ -1,5 +1,6 @@
 /* 공통 도구: DOM, 아이콘, 시간 주소, 압축 링크, 토스트·모달 */
-import { t, tn, lang, fmtDateL, fmtMD } from './i18n.js';
+import { t, t as tr, tn, lang, fmtDateL, fmtMD } from './i18n.js';
+import { docFromUrl } from './doc.js';
 export const $ = (s, r = document) => r.querySelector(s);
 export const $$ = (s, r = document) => [...r.querySelectorAll(s)];
 export const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -25,6 +26,8 @@ const P = {
   print: '<path d="M7 9V3h10v6M7 17H4v-7h16v7h-3M7 14h10v7H7z"/>',
   plus: '<path d="M12 5v14M5 12h14"/>',
   minus: '<path d="M5 12h14"/>',
+  chevL: '<path d="M15 5l-7 7 7 7"/>',
+  chevR: '<path d="M9 5l7 7-7 7"/>',
   expand: '<path d="M14 4h6v6M10 20H4v-6M20 4l-7 7M4 20l7-7"/>',
   close: '<path d="M6 6l12 12M18 6 6 18"/>',
   trash: '<path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/>',
@@ -64,6 +67,8 @@ export function snapFps(f) {
 }
 export function tc(t, fps = 30) {
   t = Math.max(0, +t || 0);
+  // 문서: 시간 대신 쪽·슬라이드·사진 번호
+  if (fps < 0) { const n = Math.round(t) + 1; return fps === -2 ? tr('슬라이드 {n}', { n }) : fps === -3 ? tr('사진 {n}', { n }) : tr('{n}쪽', { n }); }
   const base = Math.round(fps) || 30;
   let frames = Math.round(t * (fps || 30));
   const ff = frames % base, s = Math.floor(frames / base);
@@ -108,7 +113,7 @@ export function parseSource(raw) {
   if (vp) return { k: 'vimeo', id: vp[1], h: vp[2] || undefined };
   const v = url.match(/vimeo\.com\/(?:[^?#]*\/)?(\d{6,})(?:\/([0-9a-f]{6,}))?/i);
   if (v) return { k: 'vimeo', id: v[1], h: v[2] || (url.match(/[?&]h=([0-9a-f]+)/i) || [])[1] };
-  if (/^https?:\/\/.+/i.test(url)) return { k: 'url', url };
+  if (/^https?:\/\/.+/i.test(url)) return docFromUrl(url) || { k: 'url', url };
   return null;
 }
 
@@ -180,9 +185,10 @@ export function srcText(src) {
   if (src.k === 'yt') return 'https://youtu.be/' + src.id;
   if (src.k === 'vimeo') return 'https://vimeo.com/' + src.id + (src.h ? '/' + src.h : '');
   if (src.k === 'file') return src.name || t('영상 파일');
+  if (src.k === 'doc') return src.url || src.name || '';
   return src.url;
 }
-export const srcKind = src => !src ? '' : ({ yt: 'YouTube', vimeo: 'Vimeo', file: t('영상 파일'), url: t('영상 주소') })[src.k];
+export const srcKind = src => !src ? '' : src.k === 'doc' ? ({ pdf: 'PDF', pptx: 'PowerPoint', img: t('사진') })[src.dt] : ({ yt: 'YouTube', vimeo: 'Vimeo', file: t('영상 파일'), url: t('영상 주소') })[src.k];
 
 /* ---------- WesNS 로고 마크: 하나로 이어진 선이 W(Wes)를 그리고 N(Osense)으로 이어진다 ---------- */
 let markN = 0;

@@ -18,6 +18,7 @@ export const pinHTML = (it, n, extra = '') => it.x == null ? '' : `<span class="
 export const posterOf = (src, given = '') => given || (src && src.k === 'yt' ? `https://i.ytimg.com/vi/${src.id}/hqdefault.jpg` : '');
 /** 카드용 스냅샷: 이미지 위에 핀·그림을 다시 얹는다 */
 export function snapHTML(it, n, ar = [16, 9], poster = '', emptyText = t('장면 사진 없음'), o = {}) {
+  if (it.ar) ar = it.ar; // 문서는 쪽마다 크기가 다를 수 있다
   const img = it.th ? `<img src="${esc(it.th)}" alt="${n}${t('번 장면')}" loading="lazy">`
     : (poster ? `<img src="${esc(poster)}" alt="" class="fallback" loading="lazy">` : '') + `<span class="nosnap">${esc(emptyText)}</span>`;
   return `<div class="snap" style="aspect-ratio:${ar[0]}/${ar[1]}" title="${o.full ? t('누르면 이 장면으로 이동') : t('크게 보기')}">${img}${strokesSVG(it.s, it.by === 'd' ? 'd' : '')}${pinHTML(it, n)}${o.full
@@ -32,6 +33,9 @@ export function snapHTML(it, n, ar = [16, 9], poster = '', emptyText = t('장면
  * opts.onPin({x,y}), opts.onStroke(points), opts.onMeta(meta), opts.onReady(info), opts.onError(msg)
  */
 export function mountViewer(root, src, opts = {}) {
+  const DOC = !!src && src.k === 'doc';
+  document.documentElement.classList.toggle('doc-mode', DOC);
+  if (DOC) return mountDoc(root, src, opts);
   root.innerHTML = `
   <div class="viewer">
     <div class="stage" tabindex="-1"></div>
@@ -203,12 +207,278 @@ export function mountViewer(root, src, opts = {}) {
     if (opts.tools && (k === 'h' || k === 'H')) { setTool(tool === 'hand' ? 'pin' : 'hand'); return true; }
     return false;
   };
-  /** 수정 포인트 앞뒤로 반복 재생 */
   V.loopAround = (t, pad = 2) => {
     const a = Math.max(0, t - pad), b = t + pad;
     P.seek(a); P.play();
     clearInterval(V._loop);
     V._loop = setInterval(() => { if (P.paused()) { clearInterval(V._loop); return; } if (P.time() >= b) { P.pause(); P.seek(t); clearInterval(V._loop); } }, 80);
   };
+  return V;
+}
+
+/* ============================================================
+   문서(PDF·PPT·사진) — 재생 줄 없이 표시 도구만.
+   확대해서 세밀하게 그리고, 미니맵·쪽 목록으로 이동한다.
+   ============================================================ */
+const ZMIN = 1, ZMAX = 8;
+function mountDoc(root, src, opts) {
+  const unit = src.dt === 'pptx' ? t('슬라이드') : src.dt === 'img' ? t('사진') : t('쪽');
+  root.innerHTML = `
+  <div class="viewer doc">
+    <div class="docbody">
+      <nav class="pages" data-pages aria-label="${t('쪽 목록')}" hidden></nav>
+      <div class="stage" tabindex="-1"></div>
+    </div>
+    <div class="toolbar doc-bar">
+      ${opts.tools ? `<div class="seg tools" role="group" aria-label="${t('주석 도구')}">
+        <button class="btn on" data-tool="pin" title="${t('핀 (P)')}">${ic('pin')}${t('핀')}</button>
+        <button class="btn" data-tool="pen" title="${t('펜 (D)')}">${ic('pen')}${t('펜')}<i class="swatch" aria-hidden="true"></i></button>
+        <button class="btn" data-tool="hand" title="${t('이동 (H) — 확대한 화면을 끌어서 옮겨요')}">${ic('hand')}${t('이동')}</button>
+      </div>
+      <button class="btn ghost" data-act="memo" title="${t('핀 없이 이 쪽에 메모 (M)')}">${ic('note')}${t('메모만')}</button>` : ''}
+      <span class="grow"></span>
+      <div class="pager" data-pager>
+        <button class="btn icon ghost" data-act="pprev" aria-label="${t('이전')}" title="${t('이전 (←)')}">${ic('chevL', 16)}</button>
+        <span class="pnum"><b data-tc>1</b><span>/</span><span data-dur>1</span><small>${unit}</small></span>
+        <button class="btn icon ghost" data-act="pnext" aria-label="${t('다음')}" title="${t('다음 (→)')}">${ic('chevR', 16)}</button>
+      </div>
+      <div class="zoomer seg" role="group" aria-label="${t('확대')}">
+        <button class="btn icon" data-act="zout" aria-label="${t('축소')}" title="${t('축소 (-)')}">${ic('minus', 15)}</button>
+        <button class="btn zpct" data-act="zfit" title="${t('화면에 맞추기 (0)')}" data-zpct>100%</button>
+        <button class="btn icon" data-act="zin" aria-label="${t('확대')}" title="${t('확대 (+) — Ctrl + 휠, 두 손가락으로도')}">${ic('plus', 15)}</button>
+      </div>
+    </div>
+    ${opts.tools ? `<div class="doc-hint" data-hint>${t('누르면 그 자리에 핀이 붙어요 · Ctrl + 휠이나 두 손가락으로 확대해 세밀하게 그려요')}</div>` : ''}
+  </div>`;
+  $('.viewer', root).dataset.mine = opts.mine || 'c';
+  const stage = $('.stage', root), rail = $('[data-pages]', root);
+  let tool = 'pin', live = null, z = 1, tx = 0, ty = 0, gesture = null;
+  const V = { tool: () => tool, root, setTool };
+  const P = createPlayer(stage, src, {
+    onReady: () => { updatePage(); buildRail(); opts.onReady && opts.onReady({ duration: P.duration() }); },
+    onMeta: m => { opts.onMeta && opts.onMeta(m); },
+    onError: msg => { stage.insertAdjacentHTML('beforeend', `<div class="stage-err"><b>${t('문서를 열 수 없어요')}</b><span>${esc(msg)}</span></div>`); opts.onError && opts.onError(msg); },
+    onTime: () => { resetZoom(); updatePage(); render(); },
+  });
+  V.P = P;
+  const overlay = P.overlay, pan = $('.pan', stage);
+  stage.insertAdjacentHTML('beforeend', `<div class="navmap" data-navmap hidden><img alt=""><i class="navrect"></i></div>`);
+  const navmap = $('[data-navmap]', stage), navImg = $('img', navmap), navRect = $('.navrect', navmap);
+
+  /* ---------- 쪽 ---------- */
+  function updatePage() {
+    if (!P.ready()) return;
+    $('[data-tc]', root).textContent = P.time() + 1;
+    $('[data-dur]', root).textContent = P.duration() + 1;
+    $('[data-act=pprev]', root).disabled = P.time() <= 0;
+    $('[data-act=pnext]', root).disabled = P.time() >= P.duration();
+    $('[data-pager]', root).hidden = P.duration() < 1;
+    rail.querySelectorAll('[data-page]').forEach(b => b.classList.toggle('on', +b.dataset.page === P.time()));
+    const on = rail.querySelector('.on'); on && on.scrollIntoView({ block: 'nearest' });
+    navImg.removeAttribute('src'); navThumb();
+  }
+  const thumbs = new Map();
+  const getThumb = i => thumbs.get(i) || (thumbs.set(i, P.thumb(i, 220).catch(() => '')), thumbs.get(i));
+  async function navThumb() { const i = P.time(), u = await getThumb(i); if (i === P.time() && u) navImg.src = u; }
+  async function buildRail() {
+    const n = P.duration() + 1;
+    if (n < 2) { rail.hidden = true; return; }
+    rail.hidden = false;
+    rail.innerHTML = Array.from({ length: n }, (_, i) => `<button type="button" data-page="${i}" class="${i === P.time() ? 'on' : ''}" aria-label="${tc(i, P.effFps())}"><span class="pthumb"><img alt="" hidden></span><span class="plabel">${i + 1}</span><i class="pcount" hidden></i></button>`).join('');
+    railCounts();
+    for (let i = 0; i < n; i++) { // 앞쪽부터 차례로 작은 그림을 만든다
+      if (P.destroyed) return;
+      const u = await getThumb(i), im = rail.querySelector(`[data-page="${i}"] img`);
+      if (u && im) { im.src = u; im.hidden = false; }
+    }
+  }
+  function railCounts() {
+    if (rail.hidden || !opts.items) return;
+    const c = {}; opts.items().forEach(it => { const k = Math.round(it.t); c[k] = (c[k] || 0) + 1; });
+    rail.querySelectorAll('[data-page]').forEach(b => { const n = c[b.dataset.page] || 0, el = $('.pcount', b); el.hidden = !n; el.textContent = n; });
+  }
+  rail.addEventListener('click', e => { const b = e.target.closest('[data-page]'); if (b) P.seek(+b.dataset.page); });
+
+  /* ---------- 핀·그림 ---------- */
+  function render() {
+    if (!opts.items) return;
+    const pg = P.time(), items = opts.items(), sel = opts.selected && opts.selected();
+    let html = '';
+    items.forEach((it, i) => {
+      if (Math.round(it.t) !== pg) return;
+      html += strokesSVG(it.s, (it.id === sel ? 'sel ' : '') + (it.by === 'd' ? 'd' : '')) + pinHTML(it, opts.label ? opts.label(it, i) : i + 1, it.id === sel ? ' sel' : '');
+    });
+    if (live) html += strokesSVG([live], 'live' + (opts.mine === 'd' ? ' d' : ''));
+    overlay.innerHTML = html;
+    railCounts();
+  }
+  V.render = render; V.renderMarks = railCounts;
+
+  function setTool(name) {
+    tool = name;
+    root.querySelectorAll('.toolbar [data-tool]').forEach(b => b.classList.toggle('on', b.dataset.tool === name));
+    overlay.dataset.tool = name; stage.dataset.tool = name;
+    const h = $('[data-hint]', root);
+    if (h) h.textContent = name === 'pen' ? t('그려서 표시해요 — 이어 그린 획은 같은 메모에 붙어요 · 확대하면 더 세밀하게')
+      : name === 'hand' ? t('끌어서 확대한 화면을 옮겨요 · 두 번 누르면 2배 / 맞춤')
+      : t('누르면 그 자리에 핀이 붙어요 · Ctrl + 휠이나 두 손가락으로 확대해 세밀하게 그려요');
+  }
+  setTool(opts.tools ? 'pin' : 'hand');
+
+  /* ---------- 확대·이동 ---------- */
+  const boxOf = () => { const s = overlay.style; return { x: parseFloat(s.left) || 0, y: parseFloat(s.top) || 0, w: parseFloat(s.width) || 1, h: parseFloat(s.height) || 1 }; };
+  function clampPan() {
+    const b = boxOf(), cw = stage.clientWidth, ch = stage.clientHeight;
+    const fit = (lo, size, view, cur) => size * z <= view ? view / 2 - z * (lo + size / 2) : Math.min(-z * lo, Math.max(view - z * (lo + size), cur));
+    tx = fit(b.x, b.w, cw, tx); ty = fit(b.y, b.h, ch, ty);
+  }
+  function apply() {
+    clampPan();
+    pan.style.transform = `translate(${tx}px, ${ty}px) scale(${z})`;
+    pan.style.setProperty('--z', z);
+    stage.classList.toggle('zoomed', z > 1.001);
+    $('[data-zpct]', root).textContent = Math.round(z * 100) + '%';
+    $('[data-act=zout]', root).disabled = z <= ZMIN + 0.001;
+    $('[data-act=zin]', root).disabled = z >= ZMAX - 0.001;
+    P.setZoom && P.setZoom(Math.min(4, Math.ceil(z * 2) / 2));
+    updateNav();
+  }
+  function zoomAt(nz, cx = stage.clientWidth / 2, cy = stage.clientHeight / 2) {
+    nz = clamp(nz, ZMIN, ZMAX);
+    // 손가락·마우스 아래 지점이 그대로 있도록
+    tx = cx - (cx - tx) * nz / z; ty = cy - (cy - ty) * nz / z; z = nz;
+    apply();
+  }
+  function resetZoom() { z = 1; tx = 0; ty = 0; apply(); }
+  V.zoomAt = zoomAt; V.resetZoom = resetZoom; V.zoom = () => z;
+  function updateNav() {
+    navmap.hidden = z <= 1.001;
+    if (navmap.hidden) return;
+    const b = boxOf(), cw = stage.clientWidth, ch = stage.clientHeight;
+    navmap.style.aspectRatio = `${b.w} / ${b.h}`;
+    const fx = v => clamp(((v - tx) / z - b.x) / b.w, 0, 1), fy = v => clamp(((v - ty) / z - b.y) / b.h, 0, 1);
+    const l = fx(0), r = fx(cw), tp = fy(0), bt = fy(ch);
+    Object.assign(navRect.style, { left: l * 100 + '%', top: tp * 100 + '%', width: (r - l) * 100 + '%', height: (bt - tp) * 100 + '%' });
+  }
+  // 미니맵: 누르거나 끌면 그 자리를 가운데로
+  const navTo = e => {
+    const r = navmap.getBoundingClientRect(), b = boxOf();
+    const fx = clamp((e.clientX - r.left) / r.width, 0, 1), fy = clamp((e.clientY - r.top) / r.height, 0, 1);
+    tx = stage.clientWidth / 2 - z * (b.x + fx * b.w); ty = stage.clientHeight / 2 - z * (b.y + fy * b.h); apply();
+  };
+  navmap.addEventListener('pointerdown', e => { e.stopPropagation(); e.preventDefault(); try { navmap.setPointerCapture(e.pointerId); } catch {} navmap._drag = true; navTo(e); });
+  navmap.addEventListener('pointermove', e => { if (navmap._drag) navTo(e); });
+  navmap.addEventListener('pointerup', () => { navmap._drag = false; });
+  new ResizeObserver(() => apply()).observe(stage);
+
+  // 휠: Ctrl(⌘)·트랙패드 집기 = 확대, 확대 중엔 이동, 아니면 쪽 넘기기
+  let wheelAcc = 0, wheelAt = 0;
+  stage.addEventListener('wheel', e => {
+    if (!P.ready()) return;
+    e.preventDefault();
+    const r = stage.getBoundingClientRect();
+    if (e.ctrlKey || e.metaKey) { zoomAt(z * Math.exp(-e.deltaY * (e.deltaMode ? 0.05 : 0.0025) * (e.ctrlKey && !e.metaKey && Math.abs(e.deltaY) < 50 ? 4 : 1)), e.clientX - r.left, e.clientY - r.top); return; }
+    if (z > 1.001) { tx -= e.deltaX; ty -= e.deltaY; apply(); return; }
+    if (Date.now() - wheelAt < 380) return;
+    wheelAcc += e.deltaY;
+    if (Math.abs(wheelAcc) > 90) { P.step(wheelAcc > 0 ? 1 : -1); wheelAcc = 0; wheelAt = Date.now(); }
+  }, { passive: false });
+
+  // 손가락 두 개 = 확대·이동, 이동 도구·가운데 버튼 = 끌어 옮기기
+  const touches = new Map();
+  let panDrag = null;
+  stage.addEventListener('pointerdown', e => {
+    if (e.target.closest('.navmap')) return;
+    if (e.pointerType === 'touch') {
+      touches.set(e.pointerId, [e.clientX, e.clientY]);
+      if (touches.size === 2) {
+        live = null; render(); // 그리던 획은 버리고 확대로
+        const [a, b] = [...touches.values()];
+        gesture = { d: Math.hypot(a[0] - b[0], a[1] - b[1]), z, mx: (a[0] + b[0]) / 2, my: (a[1] + b[1]) / 2, tx, ty };
+        e.stopPropagation(); e.preventDefault(); return;
+      }
+    }
+    if (tool === 'hand' || e.button === 1) {
+      e.preventDefault(); try { stage.setPointerCapture(e.pointerId); } catch {}
+      panDrag = { x: e.clientX, y: e.clientY, tx, ty }; stage.classList.add('panning');
+    }
+  }, true);
+  stage.addEventListener('pointermove', e => {
+    if (touches.has(e.pointerId)) touches.set(e.pointerId, [e.clientX, e.clientY]);
+    if (gesture && touches.size >= 2) {
+      e.stopPropagation();
+      const [a, b] = [...touches.values()], r = stage.getBoundingClientRect();
+      const d = Math.hypot(a[0] - b[0], a[1] - b[1]), mx = (a[0] + b[0]) / 2, my = (a[1] + b[1]) / 2;
+      const nz = clamp(gesture.z * d / (gesture.d || 1), ZMIN, ZMAX), ox = gesture.mx - r.left, oy = gesture.my - r.top;
+      tx = ox - (ox - gesture.tx) * nz / gesture.z + (mx - gesture.mx); ty = oy - (oy - gesture.ty) * nz / gesture.z + (my - gesture.my); z = nz;
+      apply(); return;
+    }
+    if (panDrag) { tx = panDrag.tx + e.clientX - panDrag.x; ty = panDrag.ty + e.clientY - panDrag.y; apply(); }
+  }, true);
+  const up = e => {
+    touches.delete(e.pointerId);
+    if (gesture) { if (touches.size < 2) gesture = null; e.stopPropagation(); }
+    if (panDrag) { panDrag = null; stage.classList.remove('panning'); }
+  };
+  stage.addEventListener('pointerup', up, true); stage.addEventListener('pointercancel', up, true);
+  stage.addEventListener('dblclick', e => { if (tool !== 'hand') return; const r = stage.getBoundingClientRect(); z > 1.001 ? resetZoom() : zoomAt(2, e.clientX - r.left, e.clientY - r.top); });
+
+  /* ---------- 표시 도구 ---------- */
+  // 확대할수록 더 촘촘하게 기록해 세밀한 선이 각지지 않게
+  const pos = e => { const r = overlay.getBoundingClientRect(), k = z > 1.5 ? 100 : 10, rr = n => Math.round(n * k) / k; return [rr(clamp((e.clientX - r.left) / r.width * 100, 0, 100)), rr(clamp((e.clientY - r.top) / r.height * 100, 0, 100))]; };
+  if (opts.tools) {
+    overlay.addEventListener('pointerdown', e => {
+      if (e.button !== 0 || !P.ready() || gesture) return;
+      e.preventDefault();
+      if (tool === 'pin') {
+        if (e.pointerType === 'touch') { overlay._pin = { id: e.pointerId, e: [e.clientX, e.clientY], at: pos(e) }; return; } // 두 번째 손가락이 오면 확대로
+        const [x, y] = pos(e); opts.onPin && opts.onPin({ x, y }); return;
+      }
+      if (tool === 'pen') { overlay.setPointerCapture(e.pointerId); live = pos(e); render(); }
+    });
+    overlay.addEventListener('pointermove', e => {
+      if (!live || gesture) return;
+      const [x, y] = pos(e), n = live.length;
+      if (Math.hypot(x - live[n - 2], y - live[n - 1]) > 0.35 / z) { live.push(x, y); render(); }
+    });
+    const end = e => {
+      if (overlay._pin && e && overlay._pin.id === e.pointerId) { const p = overlay._pin; overlay._pin = null; if (!gesture && e.type === 'pointerup') { const [x, y] = p.at; opts.onPin && opts.onPin({ x, y }); } return; }
+      if (!live) return; const s = live; live = null; if (s.length < 4) s.push(s[0] + 0.1 / z, s[1] + 0.1 / z); opts.onStroke && opts.onStroke(s); render();
+    };
+    overlay.addEventListener('pointerup', end); overlay.addEventListener('pointercancel', end);
+    root.querySelectorAll('.toolbar [data-tool]').forEach(b => b.addEventListener('click', () => setTool(b.dataset.tool)));
+    $('[data-act=memo]', root).addEventListener('click', () => opts.onMemo && opts.onMemo());
+  }
+  $('[data-act=pprev]', root).addEventListener('click', () => P.step(-1));
+  $('[data-act=pnext]', root).addEventListener('click', () => P.step(1));
+  $('[data-act=zin]', root).addEventListener('click', () => zoomAt(z * 1.5));
+  $('[data-act=zout]', root).addEventListener('click', () => zoomAt(z / 1.5));
+  $('[data-act=zfit]', root).addEventListener('click', () => resetZoom());
+
+  V.destroy = () => P.destroy();
+  V.needsShare = () => false; V.canShare = () => true;
+  V.makeThumbs = async (items, onProgress = () => {}) => {
+    const need = items.filter(it => !it.th);
+    for (let i = 0; i < need.length; i++) { onProgress(i, need.length); need[i].th = await P.grabAt(need[i].t); if (!need[i].ar) need[i].ar = P.pageAr(Math.round(need[i].t)); }
+    onProgress(need.length, need.length);
+    return { made: need.filter(x => x.th).length, need: need.length };
+  };
+  V.key = e => {
+    const k = e.key;
+    if (k === 'ArrowLeft' || k === 'PageUp' || k === ',') { e.preventDefault(); P.step(-1); return true; }
+    if (k === 'ArrowRight' || k === 'PageDown' || k === '.') { e.preventDefault(); P.step(1); return true; }
+    if (k === 'Home') { P.seek(0); return true; }
+    if (k === 'End') { P.seek(P.duration()); return true; }
+    if (k === '+' || k === '=') { zoomAt(z * 1.5); return true; }
+    if (k === '-' || k === '_') { zoomAt(z / 1.5); return true; }
+    if (k === '0') { resetZoom(); return true; }
+    if (opts.tools && (k === 'p' || k === 'P')) { setTool('pin'); return true; }
+    if (opts.tools && (k === 'd' || k === 'D')) { setTool('pen'); return true; }
+    if (opts.tools && (k === 'm' || k === 'M')) { opts.onMemo && opts.onMemo(); return true; }
+    if (opts.tools && (k === 'h' || k === 'H')) { setTool(tool === 'hand' ? 'pin' : 'hand'); return true; }
+    return false;
+  };
+  V.loopAround = x => P.seek(x); // 문서는 그 쪽으로 이동만
+  apply();
   return V;
 }

@@ -45,6 +45,17 @@ WesNS 제품 (Wes & Osense).
 
 Node.js가 필요하고, 따로 설치할 패키지는 없습니다. `Sense Director 실행.cmd`를 더블클릭하거나 `node review-server.cjs`를 실행한 뒤 `http://127.0.0.1:8765/`를 엽니다.
 
+## 문서 검수 (PDF · PPT · 사진)
+
+영상뿐 아니라 PDF, PowerPoint(.pptx), 사진(여러 장을 한 세트로)도 올려 검수할 수 있습니다.
+
+- 문서는 '쪽이 시간인 플레이어'로 다룹니다. 시간 주소 대신 `3쪽`, `슬라이드 3`, `사진 3`이 붙고, 핀·그림·카드·보내기·받은함·보고서는 영상과 똑같이 동작합니다.
+- 재생 줄은 없고 아래 줄에 표시 도구(핀·펜·이동·메모), 쪽 넘기기, 확대가 있습니다. 왼쪽에 쪽 목록(쪽마다 요청 수 표시)이 붙습니다.
+- 확대: Ctrl(⌘) + 휠, 트랙패드 집기, 두 손가락, `+ − 0` 키, 아래 확대 버튼. 확대하면 오른쪽 아래 미니맵이 나타나 보는 자리를 옮길 수 있고, 이동(H) 도구나 마우스 가운데 버튼으로 끌어서 옮깁니다. 확대한 채로 그리면 더 촘촘한 좌표로 기록되고, PDF는 확대에 맞춰 선명하게 다시 그립니다.
+- 쪽 사진은 표시하는 순간 바로 만들어집니다(화면 공유 없음). 쪽마다 크기가 달라도 카드 비율이 맞습니다.
+- PPT는 브라우저에서 직접 그리므로 글꼴·도형이 원본과 조금 다를 수 있습니다. 정확히 보려면 PDF로 저장해 올리세요. 예전 `.ppt` 형식은 열 수 없습니다.
+- 라이브러리(PDF.js, pptx-preview, modern-screenshot)는 `assets/vendor/`에 들어 있고, 해당 문서를 열 때만 불러옵니다.
+
 ## 언어
 
 한국어와 영어를 지원합니다. 상단의 언어 버튼(EN / 한국어)으로 바꾸며, 선택은 WesNS 사이트와 같은 `wesns.lang`에 저장됩니다. 처음에는 브라우저 언어를 따릅니다.
@@ -63,6 +74,8 @@ assets/js/client.js   클라이언트 화면
 assets/js/viewer.js   재생 화면·주석 도구 (공통)
 assets/js/player.js   유튜브·비메오·영상 주소·파일 플레이어, 장면 사진, 화면비·fps 판단
 assets/js/media.js    영상 파일 보관 (지금은 브라우저 저장 목업)
+assets/js/doc.js      PDF·PPT·사진 렌더링 (쪽 = 시간)
+assets/vendor/        PDF.js · pptx-preview · modern-screenshot
 assets/js/exports.js  링크·메시지·HTML·PDF
 assets/js/store.js    저장소 (지금은 브라우저 저장소 목업)
 assets/js/auth.js     WesNS 로그인 (목업)

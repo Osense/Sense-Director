@@ -98,7 +98,7 @@ export async function renderClient(app, params) {
     if (!P.ready()) return;
     P.pause();
     const snap = await P.snapshot(); // 영상 주소·파일은 바로 찍히고, 유튜브·비메오는 보낼 때 한 번에 찍는다
-    const it = { id: uid(6), t: snap.t, x, y, s, tx: '', th: snap.img, st: 'open', rp: [], at: Date.now() };
+    const it = { id: uid(6), t: snap.t, x, y, s, tx: '', th: snap.img, st: 'open', rp: [], at: Date.now(), ...(snap.ar ? { ar: snap.ar } : {}) };
     state.draft.push(it); state.draft.sort((a, b) => a.t - b.t);
     activeId = it.id; selected = it.id; tab = 'draft';
     save(); renderList(); V.render();
@@ -106,7 +106,7 @@ export async function renderClient(app, params) {
   }
   function addStroke(pts) {
     const a = state.draft.find(it => it.id === activeId);
-    if (a && Math.abs(a.t - P.time()) < 1 / P.effFps() + 0.02 && P.paused()) { a.s = [...(a.s || []), pts]; save(); renderList(); V.render(); return; }
+    if (a && P.same(a.t) && P.paused()) { a.s = [...(a.s || []), pts]; save(); renderList(); V.render(); return; }
     addItem({ s: [pts] });
   }
 
@@ -363,6 +363,16 @@ export async function renderClient(app, params) {
     });
   }
   function help() {
+    if (P.doc) return modal({
+      title: t('사용법'), wide: true,
+      body: `<ol class="steps"><li><b>${t('찾기')}</b>${t('왼쪽 쪽 목록이나 아래 화살표, 키보드 ← →로 고칠 쪽을 열어요.')}</li>
+      <li><b>${t('확대')}</b>${t('Ctrl + 휠, 두 손가락, 또는 아래 + 버튼으로 확대해요. 확대하면 오른쪽 아래 미니맵으로 보는 자리를 옮기고, 이동(H) 도구로 끌어서 옮겨요.')}</li>
+      <li><b>${t('표시')}</b>${t('핀(P)으로 누르거나 펜(D)으로 그려요. 확대한 채로 그리면 더 세밀하게 그려져요. 쪽 번호와 사진이 오른쪽 카드에 바로 붙어요.')}</li>
+      <li><b>${t('적기')}</b>${t('붙은 카드에 바로 내용을 적어요. 같은 쪽에 이어 그린 획은 같은 카드에 합쳐져요.')}</li>
+      <li><b>${t('보내기')}</b>${t('오른쪽 위')} "${t('수정요청 보내기')}"${t('. 안 되면 옆 화살표에서 메시지·HTML·PDF로 보내요.')}</li></ol>
+      <div class="keys-grid"><kbd>← →</kbd><span>${t('이전 / 다음 쪽')}</span><kbd>+ −</kbd><span>${t('확대 / 축소')}</span><kbd>0</kbd><span>${t('화면에 맞추기')}</span><kbd>P D H M</kbd><span>${t('핀 · 펜 · 이동 · 메모')}</span><kbd>Esc</kbd><span>${t('입력 마치기')}</span></div>`,
+      actions: [{ label: t('닫기'), kind: 'primary' }],
+    });
     return modal({
       title: t('사용법'), wide: true,
       body: `<ol class="steps"><li><b>${t('찾기')}</b>${t('재생하다가 고칠 장면에서 멈춰요.')} <kbd>,</kbd> <kbd>.</kbd>${t('로 한 프레임씩 맞출 수 있어요.')}</li>

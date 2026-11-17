@@ -3,6 +3,7 @@
    작업 중에는 화면 공유를 쓰지 않는다(지연 없음). 장면 사진은 보낼 때 grabAt()으로 한 번에 만든다. */
 import { sleep, snapFps, esc } from './util.js';
 import { getMedia, putMedia, fmtSize } from './media.js';
+import { initDoc, DOC_FPS } from './doc.js';
 import { t, tn, lang, fmtDateL, fmtMD } from './i18n.js';
 
 const loadScript = (src, ok) => new Promise((res, rej) => {
@@ -46,6 +47,7 @@ export async function probe(src) {
     } catch {}
     return out;
   }
+  if (src.k === 'doc') return { title: (src.name || decodeURIComponent((src.url || '').split(/[?#]/)[0].split('/').pop() || '')).replace(/\.[^.]+$/, ''), ar: null, fps: DOC_FPS[src.dt] || -1, poster: '' };
   if (src.k === 'file') return { title: (src.name || '').replace(/\.[^.]+$/, ''), ar: [16, 9], fps: 0, poster: '' };
   return { title: decodeURIComponent((src.url.split('/').pop() || '').split('?')[0]).replace(/\.[^.]+$/, ''), ar: [16, 9], fps: 0, poster: '' };
 }
@@ -115,7 +117,9 @@ function estimate(intervals) {
  * hooks: onReady({title,duration}), onState(playing), onMeta({ar,fps,fpsHow,title,poster}), onError(msg), onTime(t)
  */
 export function createPlayer(stage, src, hooks = {}, startNative = false) {
-  stage.innerHTML = '<div class="media"></div><img class="freeze" alt="" hidden><div class="overlay"></div>';
+  const inner = '<div class="media"></div><img class="freeze" alt="" hidden><div class="overlay"></div>';
+  // 문서는 확대·이동할 수 있게 한 겹(.pan)으로 감싼다 — 핀·그림도 함께 따라간다
+  stage.innerHTML = src.k === 'doc' ? `<div class="pan">${inner}</div>` : inner;
   const media = stage.querySelector('.media'), freeze = stage.querySelector('.freeze'), overlay = stage.querySelector('.overlay');
   const P = {
     kind: src.k, src, ar: src.k === 'yt' && src.short ? [9, 16] : [16, 9], fps: 0, fpsHow: '', title: '', poster: '', _ready: false, stage, overlay, destroyed: false,
@@ -147,13 +151,16 @@ export function createPlayer(stage, src, hooks = {}, startNative = false) {
     effFps() { return this.fps || 30; },
     step(n) { this.pause(); this.seek(this.time() + n / this.effFps() + (n > 0 ? 0.0005 : -0.0005)); },
     toggle() { this.paused() ? this.play() : this.pause(); },
+    /** 같은 장면(문서는 같은 쪽)인가 — 이어 그린 획을 한 카드로 묶을 때 */
+    same(x) { return this.doc ? Math.round(x) === Math.round(this.time()) : Math.abs(x - this.time()) < 1 / this.effFps() + 0.02; },
   };
   new ResizeObserver(() => P.layout()).observe(stage);
   P.layout();
-  probe(src).then(m => { if (!P.destroyed) P.setMeta({ ar: src.k === 'yt' || src.k === 'vimeo' ? m.ar : null, fps: m.fps, how: m.fps ? 'title' : '', title: m.title, poster: m.poster }); });
+  if (src.k !== 'doc') probe(src).then(m => { if (!P.destroyed) P.setMeta({ ar: src.k === 'yt' || src.k === 'vimeo' ? m.ar : null, fps: m.fps, how: m.fps ? 'title' : '', title: m.title, poster: m.poster }); });
 
   P._startNative = startNative;
-  if (src.k === 'url') initVideo(P, media, src.url, hooks);
+  if (src.k === 'doc') initDoc(P, media, src, hooks);
+  else if (src.k === 'url') initVideo(P, media, src.url, hooks);
   else if (src.k === 'file') initFile(P, media, src, hooks);
   else if (src.k === 'vimeo') initVimeo(P, media, src, hooks);
   else initYouTube(P, media, src, hooks);
