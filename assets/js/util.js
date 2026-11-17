@@ -1,4 +1,5 @@
 /* 공통 도구: DOM, 아이콘, 시간 주소, 압축 링크, 토스트·모달 */
+import { t, tn, lang, fmtDateL, fmtMD } from './i18n.js';
 export const $ = (s, r = document) => r.querySelector(s);
 export const $$ = (s, r = document) => [...r.querySelectorAll(s)];
 export const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -46,6 +47,9 @@ const P = {
   dot: '<circle cx="12" cy="12" r="4" fill="currentColor" stroke="none"/>',
   hand: '<path d="M8 13V5.5a1.5 1.5 0 0 1 3 0V12M11 11.5v-8a1.5 1.5 0 0 1 3 0V12M14 11.5V5a1.5 1.5 0 0 1 3 0v7.5M17 9.5a1.5 1.5 0 0 1 3 0V15a7 7 0 0 1-7 7h-1.2a6 6 0 0 1-4.6-2.2L4 15.6a1.6 1.6 0 0 1 2.4-2.1L8 15"/>',
   sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',
+  user: '<circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/>',
+  logout: '<path d="M15 4h4v16h-4M10 8l-4 4 4 4M6 12h11"/>',
+  globe: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/>',
   moon: '<path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"/>',
 };
 export const ic = (n, s = 16) => `<svg class="ic" width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${P[n] || ''}</svg>`;
@@ -159,15 +163,15 @@ export function modal({ title = '', body = '', actions = [], wide = false, onOpe
   });
 }
 
-export const fmtDate = ts => { const d = new Date(ts); return `${d.getMonth() + 1}월 ${d.getDate()}일 ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; };
+export const fmtDate = ts => fmtDateL(ts);
 export function dueLabel(due) {
   if (!due) return '';
   const d = new Date(due + 'T23:59:59'), now = new Date();
   const days = Math.ceil((d - now) / 864e5);
-  const md = `${d.getMonth() + 1}/${d.getDate()}`;
-  if (days < 0) return `마감 지남 · ${md}`;
-  if (days === 0) return `오늘 마감 · ${md}`;
-  return `D-${days} · ${md}`;
+  const md = fmtMD(d);
+  if (days < 0) return `${t('마감 지남 ·')} ${md}`;
+  if (days === 0) return `${t('오늘 마감 ·')} ${md}`;
+  return lang === 'ko' ? `D-${days} · ${md}` : `${days}d left · ${md}`;
 }
 
 /** 영상 출처를 사람이 읽는 주소로 */
@@ -175,10 +179,10 @@ export function srcText(src) {
   if (!src) return '';
   if (src.k === 'yt') return 'https://youtu.be/' + src.id;
   if (src.k === 'vimeo') return 'https://vimeo.com/' + src.id + (src.h ? '/' + src.h : '');
-  if (src.k === 'file') return src.name || '영상 파일';
+  if (src.k === 'file') return src.name || t('영상 파일');
   return src.url;
 }
-export const srcKind = src => !src ? '' : ({ yt: 'YouTube', vimeo: 'Vimeo', file: '영상 파일', url: '영상 주소' })[src.k];
+export const srcKind = src => !src ? '' : ({ yt: 'YouTube', vimeo: 'Vimeo', file: t('영상 파일'), url: t('영상 주소') })[src.k];
 
 /* ---------- WesNS 로고 마크: 하나로 이어진 선이 W(Wes)를 그리고 N(Osense)으로 이어진다 ---------- */
 let markN = 0;
@@ -190,6 +194,6 @@ export function logoMark(cls = 'mark') {
     <line x1="21.5" y1="12.5" x2="21.5" y2="27.5" stroke="#fff" stroke-opacity=".55" stroke-width="3" stroke-linecap="round"/><circle cx="21.5" cy="12.5" r="2.1" fill="#fff"/><circle cx="34.6" cy="30.6" r="1.3" fill="#fff" fill-opacity=".7"/></svg>`;
 }
 /** 제품 로고: WSNS 마크 + 쎈스 디렉터 / Sense Director */
-export const brandHTML = (tag = 'span', attrs = '') => `<${tag} class="wordmark" ${attrs}>${logoMark()}<span class="bn"><b>쎈스 디렉터</b><small>Sense Director</small></span></${tag}>`;
+export const brandHTML = (tag = 'span', attrs = '') => `<${tag} class="wordmark" ${attrs}>${logoMark()}<span class="bn"><b>${t('쎈스 디렉터')}</b><small>${lang === 'ko' ? 'Sense Director' : 'by WesNS'}</small></span></${tag}>`;
 /** 밝은 화면 / 다크 모드 (WesNS 사이트와 같은 설정을 쓴다) */
-export const themeBtnHTML = () => `<button class="btn icon ghost theme-btn" data-theme-toggle aria-label="다크 모드 전환" title="밝은 화면 / 다크 모드">${ic('sun', 17).replace('class="ic"', 'class="ic sun"')}${ic('moon', 17).replace('class="ic"', 'class="ic moon"')}</button>`;
+export const themeBtnHTML = () => `<button class="btn icon ghost theme-btn" data-theme-toggle aria-label="${t('다크 모드 전환')}" title="${t('밝은 화면 / 다크 모드')}">${ic('sun', 17).replace('class="ic"', 'class="ic sun"')}${ic('moon', 17).replace('class="ic"', 'class="ic moon"')}</button>`;

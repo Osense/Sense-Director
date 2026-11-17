@@ -1,4 +1,5 @@
 /* 칸 나누기 — 경계선을 끌어 재생 화면·목록·수정내역 칸의 비율을 조정한다. 크기는 기억한다. */
+import { t, tn, lang, fmtDateL, fmtMD } from './i18n.js';
 
 const KEY = 'sd:layout:';
 const load = k => { try { return +localStorage.getItem(KEY + k) || 0; } catch { return 0; } };
@@ -24,7 +25,7 @@ export function splitter(el, o) {
   el.setAttribute('role', 'separator');
   el.setAttribute('tabindex', '0');
   el.setAttribute('aria-orientation', axis === 'x' ? 'vertical' : 'horizontal');
-  el.title = '끌어서 크기 조정 · 두 번 누르면 처음 크기';
+  el.title = t('끌어서 크기 조정 · 두 번 누르면 처음 크기');
   let size = load(key);
   if (size) size = apply(size);
   const current = () => size || parseFloat(getComputedStyle(container).getPropertyValue(cssVar)) || def || 380;

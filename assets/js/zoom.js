@@ -3,6 +3,7 @@
 import { $, ic, esc, tc, clamp } from './util.js';
 import { strokesSVG, pinHTML } from './viewer.js';
 import { splitter } from './layout.js';
+import { t, tn, lang, fmtDateL, fmtMD } from './i18n.js';
 
 /**
  * openZoom({ items, index, ar, poster, fps, numOf, from, detail, wire, onSeek, onClose, emptyText })
@@ -22,21 +23,21 @@ export function openZoom(o) {
       <span class="no" data-no></span><b class="ztc" data-tc></b><span class="kind" data-kind></span>
       <div class="grow"></div>
       <span class="zcount" data-zcount></span>
-      <button class="btn icon ghost" data-z="prev" aria-label="이전" title="이전 (←)">${ic('back', 18)}</button>
-      <button class="btn icon ghost flip" data-z="next" aria-label="다음" title="다음 (→)">${ic('back', 18)}</button>
-      <button class="btn icon" data-z="close" aria-label="닫기" title="닫기 (Esc)">${ic('close', 18)}</button>
+      <button class="btn icon ghost" data-z="prev" aria-label="${t('이전')}" title="${t('이전 (←)')}">${ic('back', 18)}</button>
+      <button class="btn icon ghost flip" data-z="next" aria-label="${t('다음')}" title="${t('다음 (→)')}">${ic('back', 18)}</button>
+      <button class="btn icon" data-z="close" aria-label="${t('닫기')}" title="${t('닫기 (Esc)')}">${ic('close', 18)}</button>
     </div>
     <div class="zoom-body">
       <div class="zoom-view" data-view>
         <div class="zoom-inner" data-inner></div>
         <div class="zoom-tools">
-          <button class="btn icon" data-z="out" aria-label="축소" title="축소 (-)">${ic('minus', 16)}</button>
+          <button class="btn icon" data-z="out" aria-label="${t('축소')}" title="${t('축소 (-)')}">${ic('minus', 16)}</button>
           <span class="zpct" data-pct>100%</span>
-          <button class="btn icon" data-z="in" aria-label="확대" title="확대 (+)">${ic('plus', 16)}</button>
-          <button class="btn small" data-z="fit" title="화면에 맞추기 (0)">맞추기</button>
+          <button class="btn icon" data-z="in" aria-label="${t('확대')}" title="${t('확대 (+)')}">${ic('plus', 16)}</button>
+          <button class="btn small" data-z="fit" title="${t('화면에 맞추기 (0)')}">${t('맞추기')}</button>
         </div>
       </div>
-      <div class="splitter col" aria-label="수정사항 칸 너비 조정"></div>
+      <div class="splitter col" aria-label="${t('수정사항 칸 너비 조정')}"></div>
       <aside class="zoom-side" data-side></aside>
     </div>`;
   document.body.appendChild(wrap);
@@ -80,11 +81,11 @@ export function openZoom(o) {
     const n = o.numOf(it);
     $('[data-no]', wrap).textContent = String(n).padStart(2, '0');
     $('[data-tc]', wrap).textContent = tc(it.t, o.fps());
-    $('[data-kind]', wrap).textContent = it.x != null ? (it.s && it.s.length ? '핀 + 그림' : '핀') : it.s && it.s.length ? '그림' : '메모';
+    $('[data-kind]', wrap).textContent = it.x != null ? (it.s && it.s.length ? t('핀 + 그림') : t('핀')) : it.s && it.s.length ? t('그림') : t('메모');
     $('[data-zcount]', wrap).textContent = `${i + 1} / ${items().length}`;
     $('[data-z=prev]', wrap).disabled = i <= 0; $('[data-z=next]', wrap).disabled = i >= items().length - 1;
-    const img = it.th ? `<img src="${esc(it.th)}" alt="${n}번 장면" draggable="false">`
-      : (o.poster ? `<img src="${esc(o.poster)}" alt="" class="fallback" draggable="false">` : '') + `<span class="nosnap">${esc(o.emptyText ? o.emptyText(it) : '장면 사진 없음')}</span>`;
+    const img = it.th ? `<img src="${esc(it.th)}" alt="${n}${t('번 장면')}" draggable="false">`
+      : (o.poster ? `<img src="${esc(o.poster)}" alt="" class="fallback" draggable="false">` : '') + `<span class="nosnap">${esc(o.emptyText ? o.emptyText(it) : t('장면 사진 없음'))}</span>`;
     $('[data-no]', wrap).classList.toggle('d', it.by === 'd');
     inner.innerHTML = img + strokesSVG(it.s, it.by === 'd' ? 'd' : '') + pinHTML(it, n);
     side.innerHTML = o.detail(it);

@@ -3,6 +3,7 @@
    작업 중에는 화면 공유를 쓰지 않는다(지연 없음). 장면 사진은 보낼 때 grabAt()으로 한 번에 만든다. */
 import { sleep, snapFps, esc } from './util.js';
 import { getMedia, putMedia, fmtSize } from './media.js';
+import { t, tn, lang, fmtDateL, fmtMD } from './i18n.js';
 
 const loadScript = (src, ok) => new Promise((res, rej) => {
   if (ok()) return res();
@@ -166,16 +167,16 @@ async function initFile(P, media, src, hooks) {
   if (blob) return initVideo(P, media, URL.createObjectURL(blob), hooks);
   // 다른 기기: 서버가 없으니 같은 파일을 직접 골라 연결한다
   media.innerHTML = `<div class="file-missing">
-    <b>영상 파일을 이 기기에서 찾을 수 없어요</b>
-    <span>시험 버전이라 영상이 아직 서버에 올라가지 않아요. 디렉터에게 받은 같은 파일을 골라 주세요.</span>
+    <b>${t('영상 파일을 이 기기에서 찾을 수 없어요')}</b>
+    <span>${t('시험 버전이라 영상이 아직 서버에 올라가지 않아요. 디렉터에게 받은 같은 파일을 골라 주세요.')}</span>
     <span class="dim">${esc(src.name || '')}${src.size ? ' · ' + fmtSize(src.size) : ''}</span>
-    <label class="btn primary">파일 고르기<input type="file" accept="video/*,.mp4,.mov,.m4v,.webm,.mkv" hidden></label>
+    <label class="btn primary">${t('파일 고르기')}<input type="file" accept="video/*,.mp4,.mov,.m4v,.webm,.mkv" hidden></label>
     <span class="warn" hidden></span></div>`;
   P.stage.classList.add('missing');
   const input = media.querySelector('input'), warn = media.querySelector('.warn');
   input.addEventListener('change', async () => {
     const f = input.files[0]; if (!f) return;
-    if (src.size && f.size !== src.size) { warn.hidden = false; warn.textContent = `파일 크기가 달라요(${fmtSize(f.size)}). 다른 편집본이면 시간이 어긋날 수 있어요.`; await sleep(1800); }
+    if (src.size && f.size !== src.size) { warn.hidden = false; warn.textContent = `${t('파일 크기가 달라요(')}${fmtSize(f.size)}${t('). 다른 편집본이면 시간이 어긋날 수 있어요.')}`; await sleep(1800); }
     await putMedia(src.fid, f);
     P.stage.classList.remove('missing');
     initVideo(P, media, URL.createObjectURL(f), hooks);
@@ -191,7 +192,7 @@ function initVideo(P, media, url, hooks) {
   let retried = false;
   v.addEventListener('error', () => {
     if (!retried && v.crossOrigin) { retried = true; v.removeAttribute('crossorigin'); v.src = url; return; }
-    hooks.onError && hooks.onError('영상을 불러오지 못했어요. 링크가 영상 파일(mp4·webm)로 바로 열리는지, 브라우저가 재생할 수 있는 형식인지 확인해 주세요.');
+    hooks.onError && hooks.onError(t('영상을 불러오지 못했어요. 링크가 영상 파일(mp4·webm)로 바로 열리는지, 브라우저가 재생할 수 있는 형식인지 확인해 주세요.'));
   });
   v.addEventListener('loadedmetadata', () => {
     P._ready = true; P.setMeta({ ar: [v.videoWidth || 16, v.videoHeight || 9] });
@@ -323,9 +324,9 @@ function initYouTube(P, media, src, hooks) {
           },
           onError: e => {
             const c = e.data;
-            hooks.onError && hooks.onError(c === 100 ? '영상을 찾을 수 없어요. 삭제되거나 비공개로 바뀌었는지 확인해 주세요.'
-              : (c === 101 || c === 150) ? '이 영상은 다른 사이트에서 재생(퍼가기)이 막혀 있어요. 유튜브 스튜디오에서 "퍼가기 허용"을 켜 주세요.'
-                : c === 2 ? '링크 형식을 알아볼 수 없어요.' : '유튜브 재생 오류 (' + c + ')');
+            hooks.onError && hooks.onError(c === 100 ? t('영상을 찾을 수 없어요. 삭제되거나 비공개로 바뀌었는지 확인해 주세요.')
+              : (c === 101 || c === 150) ? t('이 영상은 다른 사이트에서 재생(퍼가기)이 막혀 있어요. 유튜브 스튜디오에서 "퍼가기 허용"을 켜 주세요.')
+                : c === 2 ? t('링크 형식을 알아볼 수 없어요.') : t('유튜브 재생 오류 (') + c + ')');
             resolve();
           },
         },
@@ -334,7 +335,7 @@ function initYouTube(P, media, src, hooks) {
     });
   }
   loadYt().then(() => { if (!P.destroyed) build(null); })
-    .catch(() => hooks.onError && hooks.onError('유튜브 플레이어를 불러오지 못했어요. 인터넷 연결을 확인해 주세요.'));
+    .catch(() => hooks.onError && hooks.onError(t('유튜브 플레이어를 불러오지 못했어요. 인터넷 연결을 확인해 주세요.')));
   const tick = () => { if (P.destroyed) return; if (P._ready && hooks.onTime) hooks.onTime(P.time()); setTimeout(tick, 120); };
   tick();
 }
@@ -382,14 +383,14 @@ function initVimeo(P, media, src, hooks) {
     if (player) { const old = player; player = null; await old.destroy().catch(() => {}); }
     const q = new URLSearchParams({ controls: native ? '1' : '0', title: '0', byline: '0', portrait: '0', dnt: '1', playsinline: '1', autopause: '0', keyboard: native ? '1' : '0', pip: '0' });
     if (src.h) q.set('h', src.h);
-    media.innerHTML = `<iframe src="https://player.vimeo.com/video/${encodeURIComponent(src.id)}?${q}" allow="autoplay; fullscreen; picture-in-picture" title="Vimeo 영상"></iframe>`;
+    media.innerHTML = `<iframe src="https://player.vimeo.com/video/${encodeURIComponent(src.id)}?${q}" allow="autoplay; fullscreen; picture-in-picture" title="${t('Vimeo 영상')}"></iframe>`;
     const pl = new Vimeo.Player(media.firstChild);
     player = pl;
     pl.on('timeupdate', d => { if (my === gen) { cur = d.seconds; hooks.onTime && hooks.onTime(cur); } });
     pl.on('seeked', d => { if (my === gen) { cur = d.seconds; hooks.onTime && hooks.onTime(cur); } });
     pl.on('play', () => { if (my !== gen) return; isPaused = false; if (!P.stage.classList.contains('capturing')) hooks.onState && hooks.onState(true); });
     pl.on('pause', () => { if (my !== gen) return; isPaused = true; if (!P.stage.classList.contains('capturing')) hooks.onState && hooks.onState(false); });
-    pl.on('error', e => hooks.onError && hooks.onError('비메오 재생 오류: ' + (e && e.message || '알 수 없음')));
+    pl.on('error', e => hooks.onError && hooks.onError(t('비메오 재생 오류: ') + (e && e.message || t('알 수 없음'))));
     try {
       await pl.ready();
       if (keep) {
@@ -407,9 +408,9 @@ function initVimeo(P, media, src, hooks) {
       P.setMeta({ title });
       hooks.onReady && hooks.onReady({ title, duration: d });
     } catch (e) {
-      hooks.onError && hooks.onError('비메오 영상을 열 수 없어요. 비공개 영상이면 공유 링크 전체(뒤의 해시 포함)를 넣고, 퍼가기 설정에서 이 사이트를 허용해 주세요.');
+      hooks.onError && hooks.onError(t('비메오 영상을 열 수 없어요. 비공개 영상이면 공유 링크 전체(뒤의 해시 포함)를 넣고, 퍼가기 설정에서 이 사이트를 허용해 주세요.'));
     }
   }
   loadVimeo().then(() => { if (!P.destroyed) build(null); })
-    .catch(() => hooks.onError && hooks.onError('비메오 플레이어를 불러오지 못했어요. 인터넷 연결을 확인해 주세요.'));
+    .catch(() => hooks.onError && hooks.onError(t('비메오 플레이어를 불러오지 못했어요. 인터넷 연결을 확인해 주세요.')));
 }

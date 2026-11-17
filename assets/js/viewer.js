@@ -1,6 +1,7 @@
 /* 재생 화면 — 무대(영상+주석), 도구, 재생 줄. 디렉터·클라이언트가 함께 쓴다. */
 import { $, ic, tc, fpsLabel, esc, clamp } from './util.js';
 import { createPlayer, Cap } from './player.js';
+import { t, tn, lang, fmtDateL, fmtMD } from './i18n.js';
 
 const r1 = n => Math.round(n * 10) / 10;
 
@@ -16,11 +17,11 @@ export const pinHTML = (it, n, extra = '') => it.x == null ? '' : `<span class="
 /** 대표 이미지(장면 사진이 없을 때 흐리게 깔아 둔다) */
 export const posterOf = (src, given = '') => given || (src && src.k === 'yt' ? `https://i.ytimg.com/vi/${src.id}/hqdefault.jpg` : '');
 /** 카드용 스냅샷: 이미지 위에 핀·그림을 다시 얹는다 */
-export function snapHTML(it, n, ar = [16, 9], poster = '', emptyText = '장면 사진 없음', o = {}) {
-  const img = it.th ? `<img src="${esc(it.th)}" alt="${n}번 장면" loading="lazy">`
+export function snapHTML(it, n, ar = [16, 9], poster = '', emptyText = t('장면 사진 없음'), o = {}) {
+  const img = it.th ? `<img src="${esc(it.th)}" alt="${n}${t('번 장면')}" loading="lazy">`
     : (poster ? `<img src="${esc(poster)}" alt="" class="fallback" loading="lazy">` : '') + `<span class="nosnap">${esc(emptyText)}</span>`;
-  return `<div class="snap" style="aspect-ratio:${ar[0]}/${ar[1]}" title="${o.full ? '누르면 이 장면으로 이동' : '크게 보기'}">${img}${strokesSVG(it.s, it.by === 'd' ? 'd' : '')}${pinHTML(it, n)}${o.full
-    ? `<button type="button" class="snap-full" data-full aria-label="${n} 전체화면으로 보기" title="전체화면으로 장면·수정사항 보기">${ic('expand', 15)}</button>`
+  return `<div class="snap" style="aspect-ratio:${ar[0]}/${ar[1]}" title="${o.full ? t('누르면 이 장면으로 이동') : t('크게 보기')}">${img}${strokesSVG(it.s, it.by === 'd' ? 'd' : '')}${pinHTML(it, n)}${o.full
+    ? `<button type="button" class="snap-full" data-full aria-label="${n} ${t('전체화면으로 보기')}" title="${t('전체화면으로 장면·수정사항 보기')}">${ic('expand', 15)}</button>`
     : `<span class="snap-zoom" aria-hidden="true">${ic('expand', 14)}</span>`}</div>`;
 }
 
@@ -35,23 +36,23 @@ export function mountViewer(root, src, opts = {}) {
   <div class="viewer">
     <div class="stage" tabindex="-1"></div>
     ${opts.tools ? `<div class="toolbar">
-      <div class="seg tools" role="group" aria-label="주석 도구">
-        <button class="btn on" data-tool="pin" title="핀 (P)">${ic('pin')}핀</button>
-        <button class="btn" data-tool="pen" title="펜 (D)">${ic('pen')}펜<i class="swatch" aria-hidden="true"></i></button>
-        <button class="btn" data-tool="hand" title="손 (H) — 영상 플레이어를 직접 조작: 화질·자막·볼륨">${ic('hand')}손</button>
+      <div class="seg tools" role="group" aria-label="${t('주석 도구')}">
+        <button class="btn on" data-tool="pin" title="${t('핀 (P)')}">${ic('pin')}${t('핀')}</button>
+        <button class="btn" data-tool="pen" title="${t('펜 (D)')}">${ic('pen')}${t('펜')}<i class="swatch" aria-hidden="true"></i></button>
+        <button class="btn" data-tool="hand" title="${t('손 (H) — 영상 플레이어를 직접 조작: 화질·자막·볼륨')}">${ic('hand')}${t('손')}</button>
       </div>
-      <button class="btn ghost" data-act="memo" title="핀 없이 지금 시점에 메모 (M)">${ic('note')}메모만</button>
-      <span class="tool-hint" data-hint>화면을 누르면 영상이 멈추고 그 시점이 오른쪽에 붙어요</span>
+      <button class="btn ghost" data-act="memo" title="${t('핀 없이 지금 시점에 메모 (M)')}">${ic('note')}${t('메모만')}</button>
+      <span class="tool-hint" data-hint>${t('화면을 누르면 영상이 멈추고 그 시점이 오른쪽에 붙어요')}</span>
     </div>` : ''}
     <div class="controls">
-      <button class="btn icon play" data-act="play" aria-label="재생 (Space)" title="재생 / 정지 (Space, K)">${ic('play', 18)}</button>
-      <button class="btn icon" data-act="prev" aria-label="1프레임 뒤로" title="1프레임 뒤로 ( , )">${ic('prev', 15)}</button>
-      <button class="btn icon" data-act="next" aria-label="1프레임 앞으로" title="1프레임 앞으로 ( . )">${ic('next', 15)}</button>
-      <div class="tc" data-tc title="시:분:초:프레임">00:00:00:00</div>
-      <div class="scrub"><div class="track"><i class="fill"></i><div class="marks"></div></div><input type="range" min="0" max="1" step="0.001" value="0" aria-label="재생 위치"></div>
+      <button class="btn icon play" data-act="play" aria-label="${t('재생 (Space)')}" title="${t('재생 / 정지 (Space, K)')}">${ic('play', 18)}</button>
+      <button class="btn icon" data-act="prev" aria-label="${t('1프레임 뒤로')}" title="${t('1프레임 뒤로 ( , )')}">${ic('prev', 15)}</button>
+      <button class="btn icon" data-act="next" aria-label="${t('1프레임 앞으로')}" title="${t('1프레임 앞으로 ( . )')}">${ic('next', 15)}</button>
+      <div class="tc" data-tc title="${t('시:분:초:프레임')}">00:00:00:00</div>
+      <div class="scrub"><div class="track"><i class="fill"></i><div class="marks"></div></div><input type="range" min="0" max="1" step="0.001" value="0" aria-label="${t('재생 위치')}"></div>
       <div class="dur" data-dur>00:00:00:00</div>
-      <select class="speed" aria-label="재생 속도" title="재생 속도"><option value="0.25">0.25×</option><option value="0.5">0.5×</option><option value="1" selected>1×</option><option value="1.5">1.5×</option><option value="2">2×</option></select>
-      <span class="chip fps" data-fps title="프레임 수">fps</span>
+      <select class="speed" aria-label="${t('재생 속도')}" title="${t('재생 속도')}"><option value="0.25">0.25×</option><option value="0.5">0.5×</option><option value="1" selected>1×</option><option value="1.5">1.5×</option><option value="2">2×</option></select>
+      <span class="chip fps" data-fps title="${t('프레임 수')}">fps</span>
     </div>
   </div>`;
   $('.viewer', root).dataset.mine = opts.mine || 'c';
@@ -63,7 +64,7 @@ export function mountViewer(root, src, opts = {}) {
     onReady: info => { opts.onReady && opts.onReady(info); updateTime(P.time()); renderMarks(); },
     onState: playing => { $('[data-act=play]', root).innerHTML = ic(playing ? 'pause' : 'play', 18); render(); },
     onMeta: m => { updateFps(); opts.onMeta && opts.onMeta(m); render(); },
-    onError: msg => { stage.insertAdjacentHTML('beforeend', `<div class="stage-err"><b>영상을 열 수 없어요</b><span>${esc(msg)}</span></div>`); opts.onError && opts.onError(msg); },
+    onError: msg => { stage.insertAdjacentHTML('beforeend', `<div class="stage-err"><b>${t('영상을 열 수 없어요')}</b><span>${esc(msg)}</span></div>`); opts.onError && opts.onError(msg); },
     onTime: t => { lastT = t; updateTime(t); },
   }, !opts.tools); // 주석 도구가 없는 미리보기는 처음부터 플레이어 자체 컨트롤을 켠다
   V.P = P;
@@ -71,9 +72,9 @@ export function mountViewer(root, src, opts = {}) {
 
   function updateFps() {
     const el = $('[data-fps]', root);
-    const how = P.fpsHow === 'measured' ? '재생하며 측정' : P.fpsHow === 'title' ? '영상 정보' : '측정 전 — 재생하면 자동으로 맞춰요';
+    const how = P.fpsHow === 'measured' ? t('재생하며 측정') : P.fpsHow === 'title' ? t('영상 정보') : t('측정 전 — 재생하면 자동으로 맞춰요');
     el.textContent = P.fps ? fpsLabel(P.fps) : '30fps?';
-    el.title = '프레임 수: ' + (P.fps ? fpsLabel(P.fps) : '아직 모름(30 기준)') + ' · ' + how;
+    el.title = t('프레임 수: ') + (P.fps ? fpsLabel(P.fps) : t('아직 모름(30 기준)')) + ' · ' + how;
     el.classList.toggle('measured', P.fpsHow === 'measured');
   }
   function updateTime(t) {
@@ -107,19 +108,19 @@ export function mountViewer(root, src, opts = {}) {
   }
   V.render = render; V.renderMarks = renderMarks;
 
-  async function setTool(t) {
+  async function setTool(name) {
     const was = tool;
-    tool = t;
-    root.querySelectorAll('[data-tool]').forEach(b => b.classList.toggle('on', b.dataset.tool === t));
-    overlay.dataset.tool = t;
+    tool = name;
+    root.querySelectorAll('[data-tool]').forEach(b => b.classList.toggle('on', b.dataset.tool === name));
+    overlay.dataset.tool = name;
     const h = $('[data-hint]', root);
-    if (h) h.textContent = t === 'pen' ? '화면에 그리면 영상이 멈추고, 이어 그린 획은 같은 메모에 붙어요'
-      : t === 'hand' ? (P.kind === 'yt' ? '유튜브 화면을 직접 눌러 조작해요 — 화질·자막은 오른쪽 아래 톱니바퀴에서' : P.kind === 'vimeo' ? '비메오 화면을 직접 조작해요 — 화질·자막은 플레이어 메뉴에서' : '플레이어를 직접 조작해요 — 자막·전체 화면은 플레이어 메뉴에서')
-      : '화면을 누르면 영상이 멈추고 그 시점이 오른쪽에 붙어요';
+    if (h) h.textContent = name === 'pen' ? t('화면에 그리면 영상이 멈추고, 이어 그린 획은 같은 메모에 붙어요')
+      : name === 'hand' ? (P.kind === 'yt' ? t('유튜브 화면을 직접 눌러 조작해요 — 화질·자막은 오른쪽 아래 톱니바퀴에서') : P.kind === 'vimeo' ? t('비메오 화면을 직접 조작해요 — 화질·자막은 플레이어 메뉴에서') : t('플레이어를 직접 조작해요 — 자막·전체 화면은 플레이어 메뉴에서'))
+      : t('화면을 누르면 영상이 멈추고 그 시점이 오른쪽에 붙어요');
     // 손 도구일 때만 플레이어 자체 컨트롤을 켠다 (핀·펜일 때는 깨끗한 화면)
-    if (opts.tools && (t === 'hand') !== (was === 'hand')) {
+    if (opts.tools && (name === 'hand') !== (was === 'hand')) {
       root.classList.add('switching-tool');
-      await P.setNative(t === 'hand');
+      await P.setNative(name === 'hand');
       root.classList.remove('switching-tool');
     }
   }

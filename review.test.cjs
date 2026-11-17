@@ -13,11 +13,13 @@ const browser = spawn(chrome, ['--headless=new', '--disable-gpu', '--no-sandbox'
 const delay = ms => new Promise(r => setTimeout(r, ms));
 let ws, id = 0; const pending = new Map();
 const call = (method, params = {}) => new Promise((res, rej) => { const t = setTimeout(() => rej(Error('timeout ' + method)), 30000); pending.set(++id, m => { clearTimeout(t); res(m); }); ws.send(JSON.stringify({ id, method, params })); });
-async function ev(expr) { const r = await call('Runtime.evaluate', { expression: expr, awaitPromise: true, returnByValue: true, userGesture: true }); if (r.result.exceptionDetails) throw Error(r.result.exceptionDetails.exception?.description || JSON.stringify(r.result.exceptionDetails)); return r.result.result.value; }
+async function ev(expr) { const r = await call('Runtime.evaluate', { expression: expr, awaitPromise: true, returnByValue: true, userGesture: true }); if (r.result.exceptionDetails) throw Error((r.result.exceptionDetails.exception?.description || JSON.stringify(r.result.exceptionDetails)) + '\n  in: ' + expr.slice(0, 160)); return r.result.result.value; }
 async function until(expr, ms = 10000, label = expr) { const end = Date.now() + ms; while (Date.now() < end) { try { if (await ev(expr)) return; } catch {} await delay(100); } throw Error('Timed out: ' + label); }
 async function go(url) { await call('Page.navigate', { url }); await delay(400); await until("document.readyState==='complete'"); if (process.env.THEME === 'dark') await ev("localStorage.setItem('wesns.theme','dark');document.documentElement.classList.add('dark')").catch(() => {}); }
 async function shot(name) { if (!SHOTS) return; const r = await call('Page.captureScreenshot', { format: 'png' }); fs.mkdirSync(SHOTS, { recursive: true }); fs.writeFileSync(path.join(SHOTS, name + '.png'), Buffer.from(r.result.data, 'base64')); }
 async function setFile(sel, file) { const d = await call('DOM.getDocument', { depth: -1, pierce: true }); const q = await call('DOM.querySelector', { nodeId: d.result.root.nodeId, selector: sel }); if (!q.result || !q.result.nodeId) throw Error('no input ' + sel); await call('DOM.setFileInputFiles', { nodeId: q.result.nodeId, files: [file] }); }
+const SEED = "if(!localStorage.getItem('wesns.lang'))localStorage.setItem('wesns.lang','ko');if(!sessionStorage.getItem('t:nouser')&&!localStorage.getItem('wesns.mock.user'))localStorage.setItem('wesns.mock.user',JSON.stringify({id:'t',name:'tester',email:'tester@example.com',provider:'email'}));";
+const CLEAR = 'localStorage.clear();' + SEED;
 const pass = []; const ok = (c, m) => { if (!c) throw Error('FAIL: ' + m); pass.push(m); };
 const click = sel => ev(`(()=>{const e=document.querySelector(${JSON.stringify(sel)});if(!e)throw Error('no '+${JSON.stringify(sel)});e.click();return true})()`);
 const pointer = (sel, pts) => ev(`(async()=>{const el=document.querySelector(${JSON.stringify(sel)}),r=el.getBoundingClientRect();const P=${JSON.stringify(pts)};
@@ -29,6 +31,7 @@ const pointer = (sel, pts) => ev(`(async()=>{const el=document.querySelector(${J
   await new Promise(r => ws.addEventListener('open', r, { once: true }));
   ws.addEventListener('message', e => { const m = JSON.parse(e.data); if (pending.has(m.id)) { pending.get(m.id)(m); pending.delete(m.id); } });
   await call('Page.enable'); await call('Runtime.enable'); await call('DOM.enable');
+  await call('Page.addScriptToEvaluateOnNewDocument', { source: SEED });
   await call('Browser.grantPermissions', { permissions: ['clipboardReadWrite', 'clipboardSanitizedWrite'], origin: BASE.slice(0, -1) }).catch(() => {});
 
   /* 1. 디렉터: 영상 링크로 프로젝트 만들기 */
@@ -247,7 +250,7 @@ const pointer = (sel, pts) => ev(`(async()=>{const el=document.querySelector(${J
   const { fbLink, rLink, html } = await ev(`(async()=>{const E=await import('/assets/js/exports.js');const {Store}=await import('/assets/js/store.js');
     const p=Store.getProject(${JSON.stringify(pid)}),reqs=Store.inbox(${JSON.stringify(pid)});
     return {fbLink:await E.clientLink(p,reqs), rLink:await E.replyLink(E.projectPayload(p),reqs[0]), html:E.reportHTML({p,reqs,role:'director'})};})()`);
-  await ev("localStorage.clear()");
+  await ev(CLEAR);
   await go(fbLink); await until("document.querySelector('[data-tab=sent]') || document.querySelector('.pin-boxes')", 8000);
   if (await ev("!!document.querySelector('.pin-boxes')")) { await typePin(pin); await until("document.querySelector('[data-tab=sent]')", 8000); }
   await ev("document.querySelector('.modal .foot .primary') && document.querySelector('.modal .foot .primary').click()");
@@ -265,14 +268,14 @@ const pointer = (sel, pts) => ev(`(async()=>{const el=document.querySelector(${J
   const nrLink = await ev(`(async()=>{const E=await import('/assets/js/exports.js');const {Store}=await import('/assets/js/store.js');const req=Store.inbox(${JSON.stringify(pid)}).slice(-1)[0];return req.nr && req.nr.length ? await E.replyLink(E.projectPayload({...Store.getProject?.(${JSON.stringify(pid)})||{}, id:${JSON.stringify(pid)}, title:'단편영화 1차 편집본', src:${JSON.stringify({ k: 'url', url: VIDEO })}, notes:${JSON.stringify(pnotes.map(n => ({ ...n, th: undefined })))}}), req) : ''})()`);
   ok(!!nrLink, 'reply-only request carries note replies');
   await ev("document.querySelector('.modal .foot .primary').click()");
-  await ev("localStorage.clear()");
+  await ev(CLEAR);
   await go(BASE); await go(rLink);
   await until("document.querySelectorAll('.pbody.inbox .item').length===3", 8000, 'import via #r link');
   ok(await ev("document.querySelector('.pitem.on .pt').textContent==='단편영화 1차 편집본'"), 'client request link imports into a fresh director console');
   ok(html.includes('id="sd-data"') && html.includes('00:00:02:15') && html.includes('반영'), 'HTML report includes data, time address and status');
   const back = await ev(`(async()=>{const E=await import('/assets/js/exports.js');const d=await E.parseIncoming(${JSON.stringify(html)});return d.reqs[0].items.length})()`);
   ok(back === 3, 'HTML report can be imported back');
-  await ev("localStorage.clear()");
+  await ev(CLEAR);
   await go(BASE); await go(nrLink);
   await until("location.hash.includes('tab=inbox')", 8000, 'import note replies');
   const merged = await ev(`(async()=>{const {Store}=await import('/assets/js/store.js');return Store.getProject(${JSON.stringify(pid)}).notes.flatMap(n=>n.rp||[]).map(x=>x.b)})()`);
@@ -300,7 +303,7 @@ const pointer = (sel, pts) => ev(`(async()=>{const el=document.querySelector(${J
   await call('Emulation.clearDeviceMetricsOverride');
 
   /* 9. 영상 파일 올리기(목업) */
-  await ev("localStorage.clear()");
+  await ev(CLEAR);
   await go(BASE);
   await until("document.querySelector('[data-drop] input')");
   await setFile('[data-drop] input', path.join(__dirname, 'test-media', 'clip.mp4'));
@@ -327,7 +330,7 @@ const pointer = (sel, pts) => ev(`(async()=>{const el=document.querySelector(${J
 
   if (ONLINE) {
     /* 10. 유튜브: 작업 중 화면 공유 없음 → 보낼 때 장면 사진 한 번에 */
-    await ev("localStorage.clear()");
+    await ev(CLEAR);
     await go(BASE); await until("document.querySelector('.hero-form input')");
     await ev(`document.querySelector('.hero-form input').value='https://www.youtube.com/watch?v=aqz-KE-bpKQ';document.querySelector('.hero-form .btn').click()`);
     await until("document.querySelector('[data-link]') && document.querySelector('[data-link]').value.includes('#c=') && document.querySelector('[data-dur]').textContent!=='00:00:00:00'", 20000, 'youtube project');
@@ -369,12 +372,65 @@ const pointer = (sel, pts) => ev(`(async()=>{const el=document.querySelector(${J
     await shot('11-client-youtube-sent');
 
     /* 11. 비메오 */
-    await ev("localStorage.clear()"); await go(BASE); await until("document.querySelector('.hero-form input')");
+    await ev(CLEAR); await go(BASE); await until("document.querySelector('.hero-form input')");
     await ev(`document.querySelector('.hero-form input').value='https://vimeo.com/76979871';document.querySelector('.hero-form .btn').click()`);
     await until("document.querySelector('.stage iframe[src*=vimeo]') && document.querySelector('[data-dur]').textContent!=='00:00:00:00'", 25000, 'vimeo ready');
     ok(await ev("document.querySelector('[data-meta]').textContent.includes('Vimeo') && document.querySelector('[data-f=title]').value.length>0"), 'Vimeo: embeds, title and duration detected');
     await shot('12-director-vimeo');
   }
+
+  /* 12. WesNS 로그인 (목업) */
+  const HANGUL = "(()=>{const w=document.createTreeWalker(document.body,NodeFilter.SHOW_TEXT);const bad=[];let n;while(n=w.nextNode()){if(n.parentElement.closest('[data-user],textarea,input,noscript,script,style'))continue;if(/[가-힣]/.test(n.textContent))bad.push(n.textContent.trim().slice(0,40))}document.querySelectorAll('[title],[aria-label],[placeholder]').forEach(e=>['title','aria-label','placeholder'].forEach(a=>{const v=e.getAttribute(a);if(v&&/[가-힣]/.test(v)&&!/한국어/.test(v))bad.push(a+':'+v.slice(0,40))}));return bad.filter(x=>x!=='한국어')})()";
+  await ev("localStorage.clear();sessionStorage.setItem('t:nouser','1');localStorage.setItem('wesns.lang','ko')");
+  await go(BASE + '?login'); await until("document.querySelector('.auth-card')", 6000, 'login screen');
+  ok(await ev("!document.querySelector('.console') && !document.querySelector('.hero-form')"), 'login screen shown before the console when signed out');
+  await shot('13-login');
+  await ev("document.querySelector('[name=email]').value='director@example.com';document.querySelector('[name=pw]').value='short';document.querySelector('.auth-submit').click()");
+  ok(await ev("!document.querySelector('.auth-err').hidden && !localStorage.getItem('wesns.mock.user')"), 'login rejects a password under 8 characters');
+  await ev("document.querySelector('[name=pw]').value='password1';document.querySelector('.auth-submit').click()");
+  await until("document.querySelector('.hero-form input')", 6000, 'console after login');
+  ok(await ev("JSON.parse(localStorage.getItem('wesns.mock.user')).email==='director@example.com' && document.querySelector('.avatar').textContent==='D'"), 'email login stores the WesNS mock user and shows the account button');
+  await go(BASE + '?again'); await until("document.querySelector('.hero-form input')", 6000);
+  ok(await ev("!document.querySelector('.auth-card')"), 'already signed in: login is skipped');
+  await ev("document.querySelector('[data-act=account]').click()"); await delay(100);
+  ok(await ev("!document.querySelector('.acct-menu').hidden && document.querySelector('.acct-who small').textContent==='director@example.com'"), 'account menu shows the signed-in email');
+  await shot('14-account-menu');
+  await ev("document.querySelector('.acct-menu [data-act=logout]').click()");
+  await delay(800); await until("document.readyState==='complete' && document.querySelector('.auth-card')", 6000, 'logged out');
+  ok(await ev("!localStorage.getItem('wesns.mock.user')"), 'logout clears the user and returns to login');
+  await ev("document.querySelector('[data-provider=kakao]').click()");
+  await until("document.querySelector('.hero-form input')", 6000, 'kakao login');
+  ok(await ev("JSON.parse(localStorage.getItem('wesns.mock.user')).provider==='kakao'"), 'Kakao mock login works');
+
+  /* 13. 영어판 */
+  await ev("sessionStorage.removeItem('t:nouser');localStorage.clear();localStorage.setItem('wesns.lang','en')");
+  await go(BASE + '?en'); await until("document.querySelector('.hero-form input')", 6000);
+  ok(await ev("document.documentElement.lang==='en' && document.querySelector('.hero h2').textContent.includes('review link')"), 'English: director home is in English');
+  let bad = await ev(HANGUL); ok(!bad.length, 'English: no Korean left on director home ' + JSON.stringify(bad));
+  await shot('15-en-director-home');
+  await ev(`document.querySelector('.hero-form input').value=${JSON.stringify(VIDEO)};document.querySelector('.hero-form .btn').click()`);
+  await until("location.hash.includes('tab=setup') && document.querySelector('[data-link]') && document.querySelector('[data-link]').value.includes('#c=')", 10000, 'en link');
+  await until("document.querySelector('.stage video') && document.querySelector('.stage video').readyState>=2", 10000);
+  bad = await ev(HANGUL); ok(!bad.length, 'English: no Korean in setup ' + JSON.stringify(bad));
+  await shot('16-en-director-setup');
+  const enPin = await ev("[...document.querySelectorAll('.pin-show span')].map(s=>s.textContent).join('')");
+  const enLink = await ev("document.querySelector('[data-link]').value");
+  await ev("document.querySelector('[data-tab=inbox]') && document.querySelector('[data-tab=inbox]').click()"); await delay(300);
+  bad = await ev(HANGUL); ok(!bad.length, 'English: no Korean in inbox ' + JSON.stringify(bad));
+  await go(enLink); await until("document.querySelector('.pin-boxes input')");
+  bad = await ev(HANGUL); ok(!bad.length, 'English: no Korean on PIN gate ' + JSON.stringify(bad));
+  await ev(`(()=>{const b=[...document.querySelectorAll('.pin-boxes input')];${JSON.stringify(enPin)}.split('').forEach((c,i)=>{b[i].value=c;b[i].dispatchEvent(new Event('input',{bubbles:true}))});})()`);
+  await until("document.querySelector('.viewer .stage video')", 8000, 'en client');
+  await ev("document.querySelectorAll('.modal .foot .btn').forEach(b=>b.click())"); await delay(300);
+  await until("document.querySelector('.stage video').readyState>=2", 8000);
+  await pointer('.overlay', [[0.4, 0.4], [0.4, 0.4]]); await delay(400);
+  ok(await ev("document.querySelectorAll('.list .item').length===1"), 'English: client can pin');
+  bad = await ev(HANGUL); ok(!bad.length, 'English: no Korean in client view ' + JSON.stringify(bad));
+  await shot('17-en-client');
+  await ev("document.querySelector('[data-act=help]').click()"); await delay(300);
+  bad = await ev(HANGUL); ok(!bad.length, 'English: no Korean in help ' + JSON.stringify(bad));
+  await shot('18-en-help');
+  ok((await ev("window.__i18nMissing||[]")).length === 0, 'English: every UI string has a translation ' + JSON.stringify(await ev("window.__i18nMissing||[]")));
   console.log('PASS ' + pass.length + ':\n- ' + pass.join('\n- '));
   browser.kill(); process.exit(0);
 })().catch(e => { console.error(e.message || e); console.log('passed before failure: ' + pass.join(', ')); browser.kill(); process.exit(1); });

@@ -1,8 +1,10 @@
 /* 라우터 — #c= 클라이언트 화면, #r= 수정요청 가져오기, 그 밖은 디렉터 콘솔 */
 import { hashParams, toast } from './util.js';
 import { renderClient } from './client.js';
+import { t } from './i18n.js';
 import { renderDirector, importDialog } from './director.js';
 import { closeAllZooms } from './zoom.js';
+import { requireLogin } from './auth.js';
 
 const app = document.getElementById('app');
 let mode = '';
@@ -19,8 +21,11 @@ async function route() {
     await renderClient(app, params);
   } else {
     mode = 'director';
+    document.body.dataset.view = 'auth';
+    await requireLogin(app);
+    if (hashParams().c) return route();
     document.body.dataset.view = 'director';
-    await renderDirector(app, params);
+    await renderDirector(app, hashParams());
   }
 }
 addEventListener('hashchange', route);
@@ -33,7 +38,7 @@ addEventListener('drop', async e => {
   if (document.body.dataset.view !== 'director') return;
   e.preventDefault(); document.body.classList.remove('dragging');
   const f = e.dataTransfer.files[0]; if (!f) return;
-  if (!/\.(html?|json)$/i.test(f.name)) { toast('수정요청 HTML이나 JSON 파일을 끌어 놓아 주세요'); return; }
+  if (!/\.(html?|json)$/i.test(f.name)) { toast(t('수정요청 HTML이나 JSON 파일을 끌어 놓아 주세요')); return; }
   importDialog(await f.text());
 });
 
