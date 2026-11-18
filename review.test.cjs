@@ -600,6 +600,11 @@ const pointer = (sel, pts) => ev(`(async()=>{const el=document.querySelector(${J
   await ev("document.querySelector('.hero-form input').value='https://canva.link/abc123';document.querySelector('.hero-form .btn').click()"); await delay(600);
   ok(await nproj() === 0 && await ev("document.body.innerText.includes('canva.link')"), 'Canva short link: explains to use the full public view link');
   await ev("document.querySelector('.hero-form input').value='https://www.canva.com/design/DAGi7rMbwQI/DL_b2qdGHZhErapcUnzRlQ/view?utm_content=x';document.querySelector('.hero-form .btn').click()");
+  await until("document.querySelector('.modal [data-cn]')", 6000, 'canva page-count question');
+  ok(await ev("document.querySelector('.modal [data-cn]').value==='1'"), 'Canva: asks for the page count right away (starts at 1)');
+  await ev("document.querySelector('.modal [data-cs=\"1\"]').click();document.querySelector('.modal .foot .primary').click()");
+  await until("document.querySelector('[data-dur]') && document.querySelector('[data-dur]').textContent==='2'", 6000, 'canva 2 pages');
+  ok(await ev("document.querySelector('[data-canva=n]').value==='2'"), 'Canva: the answer (2 pages) is used');
   await until("document.querySelector('.canva-frame') && document.querySelector('.canva-frame').src.includes('#1')", 8000, 'canva frame');
   await until("document.querySelector('[data-meta]') && document.querySelector('[data-meta]').textContent.includes('Canva')", 6000, 'canva meta');
   ok(await ev("document.querySelector('.canva-frame').src.startsWith('https://www.canva.com/design/DAGi7rMbwQI/DL_b2qdGHZhErapcUnzRlQ/view?embed') && document.querySelector('[data-meta]').textContent.includes('Canva') && !!document.querySelector('[data-canva=n]')"), 'Canva: public view link opens as an embed, with page count and ratio settings');

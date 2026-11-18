@@ -1052,3 +1052,10 @@ html.dark .logo-stacked .on-dark { display: block; }
 .canva-set { display: grid; grid-template-columns: 120px 1fr; gap: 10px; margin-top: 10px; align-items: end; }
 .canva-set label { display: grid; gap: 4px; font-size: 12px; font-weight: 600; color: var(--muted); }
 .canva-set .note { grid-column: 1 / -1; margin: 0; font-size: 12px; line-height: 1.55; }
+.canva-ask { display: grid; gap: 12px; margin-top: 6px; }
+.canva-ask .stepper { display: flex; align-items: center; gap: 8px; }
+.canva-ask .stepper input { width: 84px; height: 44px; text-align: center; font: 700 20px var(--mono); border: 1px solid var(--line); border-radius: 10px; background: var(--raised); color: var(--text); }
+.canva-ask .stepper span { color: var(--muted); font-weight: 600; margin-right: 4px; }
+.canva-ask .card-title { margin: 4px 0 -4px; }
+.canva-ask .ar-seg { display: flex; flex-wrap: wrap; gap: 4px; }
+.canva-ask .ar-seg .btn { font: 600 12px var(--mono); }

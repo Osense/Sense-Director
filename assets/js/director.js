@@ -161,7 +161,39 @@ async function checkSource(v) {
   if (src && src.error === 'canva-short') { toast(t('canva.link 짧은 주소는 열 수 없어요. 캔바 공유 → 공개 보기 링크의 전체 주소(canva.com/design/…)를 넣어 주세요'), 5200); return false; }
   if (src && src.error === 'mixed') { toast(t('여러 링크는 사진 주소만 한 세트로 넣을 수 있어요'), 4200); return false; }
   if (!src) { toast(t('알아볼 수 없는 링크예요. 유튜브·비메오·캔바 링크나 영상·PDF·사진 주소인지 확인해 주세요'), 4600); return false; }
+  if (src.dt === 'canva') return canvaDialog(src);
   return src;
+}
+
+/** 캔바는 페이지 수·화면비를 알려 주지 않는다 → 넣을 때 바로 묻는다 */
+const CANVA_AR = [['16:9', '16 : 9'], ['4:3', '4 : 3'], ['1:1', '1 : 1'], ['9:16', '9 : 16'], ['210:297', 'A4 ↕'], ['297:210', 'A4 ↔']];
+async function canvaDialog(src) {
+  let n = Math.max(1, +src.n || 1), ar = (src.ar || [16, 9]).join(':');
+  const v = await modal({
+    title: t('캔바 디자인 페이지 수'),
+    body: `<p class="note">${t('캔바는 페이지 수를 알려 주지 않아요. 디자인이 몇 페이지인지 알려 주세요. 나중에 설정에서 바꿀 수 있어요.')}</p>
+      <div class="canva-ask">
+        <div class="stepper"><button type="button" class="btn icon" data-cs="-1" aria-label="${t('한 페이지 줄이기')}">${ic('minus')}</button>
+          <input type="number" min="1" max="300" value="${n}" data-cn aria-label="${t('페이지 수')}"><span>${t('페이지')}</span>
+          <button type="button" class="btn icon" data-cs="1" aria-label="${t('한 페이지 늘리기')}">${ic('plus')}</button></div>
+        <div class="card-title">${t('화면비')}</div>
+        <div class="seg ar-seg">${CANVA_AR.map(([k, l]) => `<button type="button" class="btn ${k === ar ? 'on' : ''}" data-car="${k}">${l}</button>`).join('')}</div>
+      </div>`,
+    actions: [{ label: t('확인'), kind: 'primary', value: 'ok' }],
+    onOpen: w => {
+      const inp = w.querySelector('[data-cn]');
+      inp.focus(); inp.select();
+      w.addEventListener('click', e => {
+        const s = e.target.closest('[data-cs]'); if (s) { inp.value = n = Math.max(1, Math.min(300, (parseInt(inp.value) || 1) + +s.dataset.cs)); }
+        const a = e.target.closest('[data-car]'); if (a) { ar = a.dataset.car; w.querySelectorAll('[data-car]').forEach(b => b.classList.toggle('on', b === a)); }
+      });
+      inp.addEventListener('input', () => { n = Math.max(1, Math.min(300, parseInt(inp.value) || 1)); });
+      inp.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); w.querySelector('.foot .primary').click(); } });
+      w.addEventListener('click', () => { n = Math.max(1, Math.min(300, parseInt(inp.value) || 1)); }, true);
+    },
+  });
+  if (v !== 'ok') n = Math.max(1, Math.min(300, parseInt(n) || 1));
+  return { ...src, n, ar: ar.split(':').map(Number) };
 }
 
 async function startNew(url = '', given = null) {

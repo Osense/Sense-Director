@@ -41,7 +41,7 @@ export function canvaFrom(u) {
   if (/^https?:\/\/(www\.)?canva\.link\//i.test(u)) return { error: 'canva-short' };
   const m = u.match(/canva\.(?:com|cn)\/design\/([\w-]+)(?:\/([\w-]+))?\/(?:view|edit|watch)/i);
   if (!m) return null;
-  return { k: 'doc', dt: 'canva', id: m[1], tk: m[2] || '', url: `https://www.canva.com/design/${m[1]}${m[2] ? '/' + m[2] : ''}/view?embed`, orig: u, n: 10, ar: [16, 9] };
+  return { k: 'doc', dt: 'canva', id: m[1], tk: m[2] || '', url: `https://www.canva.com/design/${m[1]}${m[2] ? '/' + m[2] : ''}/view?embed`, orig: u, n: 1, ar: [16, 9] };
 }
 /** 정말 사진으로 열리는가 (확장자가 없는 인터넷 사진 주소가 많다) */
 export const isImageUrl = (u, ms = 8000) => new Promise(res => {
@@ -216,7 +216,7 @@ async function pptxRenderer(data) {
    → 페이지 수·화면비는 디렉터가 정하고, 장면 사진은 보낼 때 화면 공유로 찍는다 */
 function canvaRenderer(src) {
   let iframe, cur = -1, loadedAt = 0, waiters = [];
-  const n = Math.max(1, Math.min(300, +src.n || 10)), ar = src.ar || [16, 9];
+  const n = Math.max(1, Math.min(300, +src.n || 1)), ar = src.ar || [16, 9];
   return {
     count: n, size: () => ar, live: false,
     mount(el) {
