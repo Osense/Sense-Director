@@ -1,5 +1,5 @@
 /* 클라이언트 화면 — 핀 번호로 들어와 핀·펜으로 수정요청을 남기고 디렉터에게 보낸다 */
-import { $, $$, ic, esc, uid, tc, sha, unpack, modal, toast, dueLabel, fmtDate, copyText, shareOrCopy, safeName, fpsLabel, brandHTML, themeBtnHTML, listViewHTML, toggleListView, logoStacked, pronHTML, WSNS_HOME } from './util.js';
+import { $, $$, ic, esc, uid, tc, sha, unpack, modal, toast, dueLabel, fmtDate, copyText, shareOrCopy, safeName, fpsLabel, brandHTML, themeBtnHTML, listViewHTML, toggleListView, logoStacked, pronHTML, WSNS_HOME, saidHTML } from './util.js';
 import { Store, MODE } from './store.js';
 import { mountViewer, snapHTML, posterOf } from './viewer.js';
 import { openZoom } from './zoom.js';
@@ -123,14 +123,14 @@ export async function renderClient(app, params) {
         ${sent ? `<span class="tag st-${st}">${STATUS[st]}</span>` : `<button class="icon-x" data-del aria-label="${t('삭제')}" title="${t('삭제')}">${ic('trash', 15)}</button>`}
       </div>
       <div data-zoom role="button" tabindex="0" aria-label="${n}${t('번 크게 보기')}">${snapHTML(it, n, P.ar, posterOf(p.src, P.poster || p.pv), sent ? t('장면 사진 없음') : t('장면 사진은 보낼 때 자동으로 붙어요'))}</div>
-      ${sent ? `<p class="tx">${esc(it.tx || t('(내용 없음)'))}</p>` : `<textarea rows="2" placeholder="${t('어떻게 고치면 좋을지 적어 주세요')}" data-tx>${esc(it.tx)}</textarea>`}
+      ${sent ? saidHTML(t('나'), it.tx || t('(내용 없음)'), 'c tx') : `<textarea rows="2" placeholder="${t('어떻게 고치면 좋을지 적어 주세요')}" data-tx>${esc(it.tx)}</textarea>`}
       ${thread(it, sent)}
     </article>`;
   }
   function thread(it, sent) {
     const rp = it.rp || [];
     if (!sent) return '';
-    return `<div class="thread">${rp.map(r => `<div class="rp ${r.by}"><b>${r.by === 'd' ? esc(r.n || t('디렉터')) : t('나')}</b><span>${esc(r.b)}</span><time>${fmtDate(r.at)}</time></div>`).join('')}
+    return `<div class="thread">${rp.map(r => saidHTML(r.by === 'd' ? (r.n || t('디렉터')) : t('나'), r.b, 'rp ' + r.by, `<time>${fmtDate(r.at)}</time>`)).join('')}
       ${rp.some(r => r.by === 'd') ? `<form class="reply" data-reply><input placeholder="${t('디렉터에게 답글')}" aria-label="${t('답글')}"><button class="btn small" aria-label="${t('답글 보내기')}">${ic('reply', 14)}</button></form>` : t('<div class="waiting">디렉터 확인을 기다리는 중</div>')}
     </div>`;
   }
@@ -139,12 +139,12 @@ export async function renderClient(app, params) {
     return `<article class="item note${it.id === selected ? ' sel' : ''}" data-id="${it.id}" data-note>
       <div class="item-head"><span class="no d">${n}</span><button class="tcbtn" data-seek title="${t('이 시점으로 이동')}">${tc(it.t, P.effFps())}</button><span class="kind">${kind}</span><button class="icon-x tonly" data-zoom aria-label="${t('크게 보기')}" title="${t('장면과 함께 크게 보기')}">${ic('expand', 14)}</button><span class="tag d">${t('디렉터 안내')}</span></div>
       <div data-zoom role="button" tabindex="0" aria-label="${n} ${t('크게 보기')}">${snapHTML(it, n, P.ar, posterOf(p.src, P.poster || p.pv))}</div>
-      <p class="tx">${esc(it.tx || t('(내용 없음)'))}</p>
+      ${saidHTML(p.by || t('디렉터'), it.tx || t('(내용 없음)'), 'd tx')}
       ${noteThread(it)}
     </article>`;
   }
   function noteThread(it) {
-    return `<div class="thread">${(it.rp || []).map(r => `<div class="rp ${r.by}"><b>${r.by === 'd' ? esc(r.n || p.by || t('디렉터')) : t('나')}</b><span>${esc(r.b)}</span><time>${r.pending ? t('보내기 전') : fmtDate(r.at)}</time></div>`).join('')}
+    return `<div class="thread">${(it.rp || []).map(r => saidHTML(r.by === 'd' ? (r.n || p.by || t('디렉터')) : t('나'), r.b, 'rp ' + r.by, `<time>${r.pending ? t('보내기 전') : fmtDate(r.at)}</time>`)).join('')}
       <form class="reply" data-reply><input placeholder="${t('디렉터에게 답글')}" aria-label="${t('답글')}"><button class="btn small" aria-label="${t('답글 보내기')}">${ic('reply', 14)}</button></form></div>`;
   }
   async function noteReply(id, b) {
@@ -217,10 +217,10 @@ export async function renderClient(app, params) {
       emptyText: it => it._sent ? t('장면 사진 없음') : t('장면 사진은 보낼 때 자동으로 붙어요'),
       from: it => $(`.list [data-id="${it.id}"] .snap`, app),
       detail: it => {
-        if (it.by === 'd') return `<div class="zfrom d">${t('디렉터 안내')}${p.by ? ' · ' + esc(p.by) : ''}</div><p class="ztx">${esc(it.tx || t('(내용 없음)'))}</p>
+        if (it.by === 'd') return `<div class="zfrom d">${t('디렉터 안내')}</div>${saidHTML(p.by || t('디렉터'), it.tx || t('(내용 없음)'), 'd ztx')}
           <div class="zacts"><button class="btn" data-zact="play">${ic('play', 14)}${t('이 장면 재생')}</button></div>${noteThread(it)}`;
         const sent = !!it._sent, st = it.st || 'open';
-        return `${sent ? `<div class="zrow"><span class="tag st-${st}">${STATUS[st]}</span></div><p class="ztx">${esc(it.tx || t('(내용 없음)'))}</p>`
+        return `${sent ? `<div class="zrow"><span class="tag st-${st}">${STATUS[st]}</span></div>${saidHTML(t('나'), it.tx || t('(내용 없음)'), 'c ztx')}`
           : `<label class="field"><span>${t('수정할 내용')}</span><textarea class="ztx-in" data-ztx rows="5" placeholder="${t('어떻게 고치면 좋을지 적어 주세요')}">${esc(it.tx)}</textarea></label>`}
           <div class="zacts"><button class="btn" data-zact="play">${ic('play', 14)}${t('이 장면 재생')}</button>${sent ? '' : `<button class="btn ghost danger" data-zact="del">${ic('trash', 14)}${t('삭제')}</button>`}</div>
           ${sent ? thread(it, true) : ''}`;

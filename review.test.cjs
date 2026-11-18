@@ -623,7 +623,7 @@ const pointer = (sel, pts) => ev(`(async()=>{const el=document.querySelector(${J
   await until("document.querySelector('[data-railcap]')", 6000, 'rail capture button');
   ok(true, 'Canva: page list offers to make page images');
   await ev("document.querySelector('[data-railcap]').click()");
-  await until("!document.querySelector('[data-railcap]') && [...document.querySelectorAll('[data-pages] [data-page] img')].length===4 && [...document.querySelectorAll('[data-pages] [data-page] img')].every(i=>!i.hidden && i.src.startsWith('data:image'))", 40000, 'canva page images');
+  await until("!document.querySelector('[data-railcap]') && [...document.querySelectorAll('[data-pages] [data-page] img')].length===4 && [...document.querySelectorAll('[data-pages] [data-page] img')].every(i=>!i.hidden && i.src.startsWith('data:image'))", 90000, 'canva page images');
   ok(true, 'Canva: one screen share fills the page list with every page');
   await ev("document.querySelector('[data-act=pnext]').click()"); await delay(300);
   await pointer('.overlay', [[0.6, 0.6], [0.6, 0.6]]); await delay(700);

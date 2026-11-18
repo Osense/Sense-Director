@@ -230,3 +230,6 @@ export function setListView(text) {
 }
 export const toggleListView = () => setListView(!textOnly());
 addEventListener('click', e => { const b = e.target.closest('[data-listview]'); if (b) setListView(b.dataset.listview === 'text'); });
+
+/** 누가 무엇을 썼는지 한눈에: 작성자: "내용" */
+export const saidHTML = (who, text, cls = '', extra = '') => `<p class="said ${cls}"><b class="who">${esc(who)}</b><span class="colon">:</span> <span class="q">"${esc(text)}"</span>${extra}</p>`;

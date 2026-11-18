@@ -1065,3 +1065,38 @@ html.dark .logo-stacked .on-dark { display: block; }
 .short-steps { margin: 10px 0; padding-left: 20px; display: grid; gap: 10px; font-size: 13.5px; }
 .short-steps li { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 @media (max-width: 760px) { .rail-cap { width: 64px; flex: none; } }
+
+/* ---------- 작성자: "내용" ---------- */
+.said { margin: 0; font-size: 13.5px; line-height: 1.6; white-space: pre-wrap; word-break: break-word; }
+.said .who { font-weight: 700; }
+.said .colon { margin-right: 2px; color: var(--muted); font-weight: 600; }
+.said .q { color: var(--text); }
+.said.c .who, .said.rp.c .who { color: var(--mark-c); }
+.said.d .who, .said.rp.d .who { color: var(--mark-d); }
+.item .said.tx { margin-top: 8px; }
+.said.rp { display: block; padding: 7px 10px; background: var(--raised); border: 1px solid var(--div); border-radius: 10px; font-size: 13px; }
+.said.rp time { float: right; margin-left: 8px; font: 500 10.5px var(--mono); color: var(--dim); line-height: 1.9; }
+.said.who-line { margin: 8px 0 3px; font-size: 13px; }
+
+/* ---------- 첫 화면 진행 순서: 버튼이 아닌 설명 (상자 없이 번호와 선) ---------- */
+.flow-title { margin: 30px 0 10px; font-size: 12px; font-weight: 700; letter-spacing: .02em; color: var(--dim); text-align: center; }
+.flow { margin: 0; gap: 0; counter-reset: none; }
+.flow li { position: relative; padding: 0 8px; background: none; border: 0; border-radius: 0; box-shadow: none; text-align: center; justify-items: center; gap: 2px; }
+.flow li b { display: grid; place-items: center; width: 24px; height: 24px; margin-bottom: 6px; border-radius: 50%; border: 1.5px solid color-mix(in oklch, var(--brand) 55%, var(--line)); background: var(--bg); color: var(--brand); font: 700 11.5px var(--mono); position: relative; z-index: 1; }
+.flow li::before { content: ''; position: absolute; top: 12px; left: -50%; width: 100%; height: 1.5px; background: var(--line); }
+.flow li:first-child::before { display: none; }
+.flow span { font-size: 13px; font-weight: 700; color: var(--text); }
+.flow small { font-size: 11.5px; color: var(--dim); }
+@media (max-width: 860px) {
+  .flow { grid-template-columns: 1fr; gap: 0; max-width: 360px; margin: 0 auto; }
+  .flow li { grid-template-columns: 24px 1fr; column-gap: 12px; justify-items: start; text-align: left; padding: 0 0 14px; }
+  .flow li b { grid-row: span 2; margin: 0; align-self: start; }
+  .flow li::before { top: -14px; left: 11px; width: 1.5px; height: 14px; }
+  .flow li:not(:last-child)::after { content: ''; position: absolute; left: 11px; top: 26px; bottom: 0; width: 1.5px; background: var(--line); }
+  .flow li::before { display: none; }
+  .flow-title { text-align: left; max-width: 360px; margin: 26px auto 12px; }
+}
+@media (max-width: 520px) {
+  .flow { grid-template-columns: 1fr; gap: 0; }
+  .flow li { grid-template-columns: 24px 1fr; column-gap: 12px; padding: 0 0 14px; }
+}

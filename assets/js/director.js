@@ -1,5 +1,5 @@
 /* 디렉터 콘솔 — 영상 임베드, 프로젝트·안내사항·핀 설정, 링크 공유, 받은 수정요청에 댓글로 환류 */
-import { $, $$, ic, esc, uid, tc, sha, modal, toast, dueLabel, fmtDate, copyText, shareOrCopy, parseSource, safeName, fpsLabel, unpack, srcText, srcKind, STD_FPS, brandHTML, themeBtnHTML, listViewHTML, toggleListView } from './util.js';
+import { $, $$, ic, esc, uid, tc, sha, modal, toast, dueLabel, fmtDate, copyText, shareOrCopy, parseSource, safeName, fpsLabel, unpack, srcText, srcKind, STD_FPS, brandHTML, themeBtnHTML, listViewHTML, toggleListView, saidHTML } from './util.js';
 import { Store, MODE } from './store.js';
 import { mountViewer, snapHTML, posterOf } from './viewer.js';
 import { openZoom } from './zoom.js';
@@ -83,12 +83,13 @@ function renderHome(main) {
     <h2>${t('영상 링크나 문서를 넣으면')}<br><span class="text-gradient">${t('검수 링크')}</span>${t('가 바로 만들어져요')}</h2>
     <form class="hero-form" data-hero><input placeholder="${t('유튜브 · 비메오 · 캔바 링크, 영상 · PDF · 사진 주소')}" aria-label="${t('영상 링크')}" autofocus><button class="btn brand">${ic('plus')}${t('만들기')}</button></form>
     <label class="drop-file" data-drop>${ic('import', 18)}<span><b>${t('파일 올리기')}</b><small>${t('영상 · PDF · PPT(.pptx) · 사진 — 끌어 놓거나 눌러서 고르기')}</small></span><input type="file" accept="video/*,.mp4,.mov,.m4v,.webm,.mkv,application/pdf,.pdf,.pptx,image/*" multiple hidden></label>
-    <ol class="flow">
-      <li><b>01</b><span>${t('영상 임베드')}</span><small>${t('화면비·프레임 수는 알아서 맞춰요')}</small></li>
-      <li><b>02</b><span>${t('안내사항 · 핀 번호')}</span><small>${t('4자리 핀으로 클라이언트만 열어요')}</small></li>
-      <li><b>03</b><span>${t('링크 공유')}</span><small>${t('카톡·메시지·QR')}</small></li>
-      <li><b>04</b><span>${t('수정요청 받기')}</span><small>${t('장면·시간 주소·내용')}</small></li>
-      <li><b>05</b><span>${t('댓글로 환류')}</span><small>${t('반영 상태와 답을 돌려보내요')}</small></li>
+    <div class="flow-title">${t('이렇게 진행돼요')}</div>
+    <ol class="flow" aria-label="${t('이렇게 진행돼요')}">
+      <li><b>1</b><span>${t('영상 임베드')}</span><small>${t('화면비·프레임 수는 알아서 맞춰요')}</small></li>
+      <li><b>2</b><span>${t('안내사항 · 핀 번호')}</span><small>${t('4자리 핀으로 클라이언트만 열어요')}</small></li>
+      <li><b>3</b><span>${t('링크 공유')}</span><small>${t('카톡·메시지·QR')}</small></li>
+      <li><b>4</b><span>${t('수정요청 받기')}</span><small>${t('장면·시간 주소·내용')}</small></li>
+      <li><b>5</b><span>${t('댓글로 환류')}</span><small>${t('반영 상태와 답을 돌려보내요')}</small></li>
     </ol>
   </div>`;
   wireSourcePicker(main);
@@ -554,7 +555,7 @@ function renderInbox(side, p, getSel, setSel, hooks, initialPane) {
       <div class="item-head"><span class="no">${n}</span><button class="tcbtn" data-seek title="${t('이 시점으로')}">${tc(it.t, fps)}</button>
         <button class="icon-x tonly" data-full aria-label="${t('크게 보기')}" title="${t('장면과 함께 크게 보기')}">${ic('expand', 14)}</button><button class="icon-x" data-loop title="${t('앞뒤 2초 반복 재생')}" aria-label="${t('앞뒤 재생')}">${ic('loop', 15)}</button></div>
       <div data-snapseek role="button" tabindex="0" aria-label="${n}${t('번 장면으로 이동')}">${snapHTML(it, n, p.ar || [16, 9], poster, undefined, { full: true })}</div>
-      <p class="tx">${esc(it.tx || t('(내용 없음)'))}</p>
+      ${it.tx ? saidHTML(r.from || t('클라이언트'), it.tx, 'c tx') : `<p class="tx said empty-said"><b class="who">${esc(r.from || t('클라이언트'))}</b><span class="colon">:</span> <span class="dim">${t('(내용 없음)')}</span></p>`}
       ${statusSeg(st)}
       ${threadHTML(it, r.from)}
     </article>`;
@@ -566,12 +567,13 @@ function renderInbox(side, p, getSel, setSel, hooks, initialPane) {
       <div class="item-head"><span class="no d">${n}</span><button class="tcbtn" data-seek title="${t('이 시점으로')}">${tc(it.t, fps)}</button><span class="kind">${kind}</span><button class="icon-x tonly" data-full aria-label="${t('크게 보기')}" title="${t('장면과 함께 크게 보기')}">${ic('expand', 14)}</button>
         <button class="icon-x" data-ndel aria-label="${t('안내 삭제')}" title="${t('삭제')}">${ic('trash', 15)}</button></div>
       <div data-snapseek role="button" tabindex="0" aria-label="${n} ${t('장면으로 이동')}">${snapHTML(it, n, p.ar || [16, 9], poster, V && V.needsShare() ? t('장면 사진 없음 — 위 버튼으로 만들 수 있어요') : t('장면 사진 없음'), { full: true })}</div>
+      <div class="said d who-line"><b class="who">${esc(p.by || t('디렉터'))}</b><span class="colon">:</span></div>
       <textarea rows="2" placeholder="${t('클라이언트에게 남길 안내를 적어 주세요')}" data-ntx>${esc(it.tx || '')}</textarea>
       ${(it.rp || []).length ? threadHTML(it, t('클라이언트'), true) : ''}
     </article>`;
   }
   function threadHTML(it, from, noteThread = false) {
-    return `<div class="thread">${(it.rp || []).map(x => `<div class="rp ${x.by}"><b>${x.by === 'd' ? t('나') : esc(x.n || from || t('클라이언트'))}</b><span>${esc(x.b)}</span><time>${fmtDate(x.at)}</time></div>`).join('')}
+    return `<div class="thread">${(it.rp || []).map(x => saidHTML(x.by === 'd' ? (x.n || p.by || t('디렉터')) : (x.n || from || t('클라이언트')), x.b, 'rp ' + x.by, `<time>${fmtDate(x.at)}</time>`)).join('')}
         ${noteThread ? '' : `<div class="qchips">${REPLY_CHIPS.map(c => `<button class="chipbtn" data-q>${esc(c)}</button>`).join('')}</div>`}
         <form class="reply" data-reply><input placeholder="${noteThread ? t('답글') : t('댓글로 답하기')}" aria-label="${t('댓글')}"><button class="btn small" aria-label="${t('댓글 달기')}">${ic('reply', 14)}</button></form>
       </div>`;
@@ -604,7 +606,7 @@ function renderInbox(side, p, getSel, setSel, hooks, initialPane) {
         ? `<div class="zfrom d">${t('디렉터 안내')}</div><label class="field"><span>${t('안내 내용')}</span><textarea class="ztx-in" data-zntx rows="5" placeholder="${t('클라이언트에게 남길 안내를 적어 주세요')}">${esc(it.tx || '')}</textarea></label>
           <div class="zacts"><button class="btn" data-zact="loop">${ic('loop', 14)}${t('앞뒤 2초 재생')}</button><button class="btn ghost danger" data-zact="ndel">${ic('trash', 14)}${t('삭제')}</button></div>
           ${threadHTML(it, t('클라이언트'), true)}`
-        : `<div class="zfrom">${esc(it._from || t('클라이언트'))}</div><p class="ztx">${esc(it.tx || t('(내용 없음)'))}</p>
+        : `${saidHTML(it._from || t('클라이언트'), it.tx || t('(내용 없음)'), 'c ztx')}
           ${statusSeg(it.st || 'open')}
           <div class="zacts"><button class="btn" data-zact="loop">${ic('loop', 14)}${t('앞뒤 2초 재생')}</button></div>
           ${threadHTML(it, it._from)}`,
