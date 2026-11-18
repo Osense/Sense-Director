@@ -3,7 +3,7 @@
    그래서 핀·그림·카드·보내기·받은함·보고서는 영상과 똑같이 돌아간다. */
 import { esc, sleep, parseSource } from './util.js';
 import { Cap } from './player.js';
-import { getMedia, putMedia, fmtSize } from './media.js';
+import { getMedia, putMedia, putValue, fmtSize } from './media.js';
 import { t } from './i18n.js';
 
 /** 문서 종류별 프레임 자리 표시값 — tc()가 이 값을 보고 '3쪽'·'슬라이드 3'·'사진 3'으로 적는다 */
@@ -38,7 +38,7 @@ export function directLink(u) {
 }
 /** 캔바 디자인 링크 → 임베드 주소 (공개 보기 링크·임베드를 켠 디자인) */
 export function canvaFrom(u) {
-  if (/^https?:\/\/(www\.)?canva\.link\//i.test(u)) return { error: 'canva-short' };
+  if (/^https?:\/\/(www\.)?canva\.link\//i.test(u)) return { error: 'canva-short', short: u };
   const m = u.match(/canva\.(?:com|cn)\/design\/([\w-]+)(?:\/([\w-]+))?\/(?:view|edit|watch)/i);
   if (!m) return null;
   return { k: 'doc', dt: 'canva', id: m[1], tk: m[2] || '', url: `https://www.canva.com/design/${m[1]}${m[2] ? '/' + m[2] : ''}/view?embed`, orig: u, n: 1, ar: [16, 9] };
@@ -217,8 +217,14 @@ async function pptxRenderer(data) {
 function canvaRenderer(src) {
   let iframe, cur = -1, loadedAt = 0, waiters = [];
   const n = Math.max(1, Math.min(300, +src.n || 1)), ar = src.ar || [16, 9];
+  // 페이지 사진: 화면 공유로 한 번 찍어 두면 이 브라우저에 남는다 (쪽 목록·카드 사진에 바로 쓴다)
+  const cache = new Map(), key = i => `canva:${src.id}:${ar.join('x')}:${i}`;
+  const ready = Promise.all(Array.from({ length: n }, (_, i) => getMedia(key(i)).then(v => { if (typeof v === 'string' && v) cache.set(i, v); })));
   return {
-    count: n, size: () => ar, live: false,
+    count: n, size: () => ar, cache, ready,
+    get live() { return cache.size >= n; },
+    capturable: true,
+    remember(i, img) { if (!img) return; cache.set(i, img); putValue(key(i), img); },
     mount(el) {
       el.innerHTML = `<iframe class="canva-frame" title="Canva" allow="fullscreen; clipboard-write" allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe>`;
       iframe = el.firstChild;
@@ -229,8 +235,30 @@ function canvaRenderer(src) {
       iframe.src = `${src.url}&sdpage=${i + 1}#${i + 1}`; // 매번 새로 열어 그 페이지가 확실히 나오게
     },
     loaded: () => new Promise(res => { const go = () => setTimeout(res, 1400); loadedAt ? go() : (waiters.push(go), setTimeout(res, 6000)); }),
-    async snap() { return ''; },
+    async snap(i) { await ready; return cache.get(Math.round(i)) || ''; },
   };
+}
+
+/** 찍은 그림이 거의 한 가지 색인가 (캔바가 아직 그리기 전) */
+const blankish = url => new Promise(res => {
+  if (!url) return res(true);
+  const im = new Image(); im.onload = () => {
+    const c = canvasOf(24, 24), x = c.getContext('2d'); x.drawImage(im, 0, 0, 24, 24);
+    const d = x.getImageData(0, 0, 24, 24).data; let mn = 765, mx = 0;
+    for (let i = 0; i < d.length; i += 4) { const v = d[i] + d[i + 1] + d[i + 2]; if (v < mn) mn = v; if (v > mx) mx = v; }
+    res(mx - mn < 40);
+  }; im.onerror = () => res(true); im.src = url;
+});
+/** 캔바 페이지를 찍는다 — 다 그려질 때까지 몇 번 다시 찍는다 */
+async function grabCanva(P, w) {
+  let img = '';
+  for (let k = 0; k < 6; k++) {
+    await Cap.fresh(3, 900);
+    img = Cap.grab(P.contentRect(), w);
+    if (!await blankish(img)) return img;
+    await sleep(900);
+  }
+  return img;
 }
 
 /* ---------- 플레이어 ---------- */
@@ -281,10 +309,23 @@ export async function initDoc(P, media, src, hooks) {
     async snapshot() { return { t: page, img: await R.snap(page), ar: P.pageAr(page) }; },
     async grabAt(x) {
       if (R.live !== false) return R.snap(Math.round(x));
+      const have = R.cache && R.cache.get(Math.round(x)); if (have) return have;
       // 캔바: 그 페이지를 열고 화면 공유 장면에서 찍는다 (보낼 때 한 번)
       if (!Cap.active) return '';
-      setPage(x); await R.loaded(); await Cap.fresh(3, 900);
-      return Cap.grab(P.contentRect(), 1280);
+      setPage(x); await R.loaded();
+      const img = await grabCanva(P, 1280);
+      R.remember && R.remember(Math.round(x), img);
+      return img;
+    },
+    /** 캔바: 모든 페이지 사진을 한 번에 (화면 공유 중에 부른다) */
+    canCaptureAll: !!R.capturable,
+    async captureAll(onProgress = () => {}) {
+      const back = page;
+      for (let i = 0; i < R.count; i++) {
+        onProgress(i, R.count); setPage(i); await R.loaded();
+        R.remember(i, await grabCanva(P, 960));
+      }
+      onProgress(R.count, R.count); setPage(back);
     },
     thumb: (i, w = 240) => R.snap(i, w),
     destroy() { P.destroyed = true; R.destroy && R.destroy(); },

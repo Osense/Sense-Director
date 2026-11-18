@@ -1,5 +1,5 @@
 /* 재생 화면 — 무대(영상+주석), 도구, 재생 줄. 디렉터·클라이언트가 함께 쓴다. */
-import { $, ic, tc, fpsLabel, esc, clamp } from './util.js';
+import { $, ic, tc, fpsLabel, esc, clamp, toast } from './util.js';
 import { createPlayer, Cap } from './player.js';
 import { t, tn, lang, fmtDateL, fmtMD } from './i18n.js';
 
@@ -301,9 +301,11 @@ function mountDoc(root, src, opts) {
   async function navThumb() { const i = P.time(), u = await getThumb(i); if (i === P.time() && u) navImg.src = u; }
   async function buildRail() {
     const n = P.duration() + 1;
-    if (n < 2) { rail.hidden = true; return; }
+    const canCap = P.canCaptureAll && Cap.supported();
+    if (n < 2 && !canCap) { rail.hidden = true; return; }
     rail.hidden = false;
-    rail.innerHTML = Array.from({ length: n }, (_, i) => `<button type="button" data-page="${i}" class="${i === P.time() ? 'on' : ''}" aria-label="${tc(i, P.effFps())}"><span class="pthumb"><img alt="" hidden></span><span class="plabel">${i + 1}</span><i class="pcount" hidden></i></button>`).join('');
+    if (P.renderer && P.renderer.ready) await P.renderer.ready;
+    rail.innerHTML = (canCap && !P.live() ? `<button type="button" class="rail-cap" data-railcap title="${t('이 탭을 한 번 공유하면 모든 페이지를 차례로 찍어 쪽 목록에 넣어요. 사진은 이 브라우저에 남고, 카드 장면 사진에도 바로 쓰여요.')}">${ic('camera', 16)}<span>${t('페이지 사진 만들기')}</span></button>` : '') + Array.from({ length: n }, (_, i) => `<button type="button" data-page="${i}" class="${i === P.time() ? 'on' : ''}" aria-label="${tc(i, P.effFps())}"><span class="pthumb"><img alt="" hidden></span><span class="plabel">${i + 1}</span><i class="pcount" hidden></i></button>`).join('');
     railCounts();
     for (let i = 0; i < n; i++) { // 앞쪽부터 차례로 작은 그림을 만든다
       if (P.destroyed) return;
@@ -316,7 +318,23 @@ function mountDoc(root, src, opts) {
     const c = {}; opts.items().forEach(it => { const k = Math.round(it.t); c[k] = (c[k] || 0) + 1; });
     rail.querySelectorAll('[data-page]').forEach(b => { const n = c[b.dataset.page] || 0, el = $('.pcount', b); el.hidden = !n; el.textContent = n; });
   }
-  rail.addEventListener('click', e => { const b = e.target.closest('[data-page]'); if (b) P.seek(+b.dataset.page); });
+  rail.addEventListener('click', async e => {
+    if (e.target.closest('[data-railcap]')) return captureAllPages();
+    const b = e.target.closest('[data-page]'); if (b) P.seek(+b.dataset.page);
+  });
+  // 캔바: 화면 공유 한 번으로 모든 페이지 사진 만들기
+  async function captureAllPages() {
+    const btn = rail.querySelector('[data-railcap]');
+    resetZoom(); stage.classList.add('capturing'); root.classList.add('thumbing');
+    try {
+      if (!await Cap.start(stage)) { toast(Cap.err === 'NotAllowedError' ? t('화면 공유를 취소했어요') : t('이 브라우저에서는 화면 공유로 사진을 만들 수 없어요'), 3600); return; }
+      await P.captureAll((i, n) => { if (btn) btn.querySelector('span').textContent = `${t('페이지 사진 만드는 중')} ${Math.min(i + 1, n)} / ${n}`; });
+      thumbs.clear(); toast(t('페이지 사진을 만들었어요'));
+    } finally {
+      Cap.stop(); stage.classList.remove('capturing'); root.classList.remove('thumbing');
+      buildRail(); navThumb();
+    }
+  }
 
   /* ---------- 핀·그림 ---------- */
   let lastDocHtml = null;

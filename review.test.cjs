@@ -597,9 +597,10 @@ const pointer = (sel, pts) => ev(`(async()=>{const el=document.querySelector(${J
   ok(true, 'several photo links become one set (2 pages)');
   // 캔바
   await ev(CLEAR); await go(BASE); await until("document.querySelector('.hero-form input')");
-  await ev("document.querySelector('.hero-form input').value='https://canva.link/abc123';document.querySelector('.hero-form .btn').click()"); await delay(600);
-  ok(await nproj() === 0 && await ev("document.body.innerText.includes('canva.link')"), 'Canva short link: explains to use the full public view link');
-  await ev("document.querySelector('.hero-form input').value='https://www.canva.com/design/DAGi7rMbwQI/DL_b2qdGHZhErapcUnzRlQ/view?utm_content=x';document.querySelector('.hero-form .btn').click()");
+  await ev("document.querySelector('.hero-form input').value='https://canva.link/abc123';document.querySelector('.hero-form .btn').click()");
+  await until("document.querySelector('.modal [data-full]')", 4000, 'short link dialog');
+  ok(await nproj() === 0 && await ev("document.querySelector('.modal [data-open]').href==='https://canva.link/abc123' && document.querySelector('.modal [data-open]').target==='_blank'"), 'Canva short link: opens it in a new tab and asks for the full address');
+  await ev("const i=document.querySelector('.modal [data-full]');i.value='https://www.canva.com/design/DAGi7rMbwQI/DL_b2qdGHZhErapcUnzRlQ/view?utm_content=x';i.dispatchEvent(new Event('input',{bubbles:true}));document.querySelector('.modal .foot .primary').click()");
   await until("document.querySelector('.modal [data-cn]')", 6000, 'canva page-count question');
   ok(await ev("document.querySelector('.modal [data-cn]').value==='1'"), 'Canva: asks for the page count right away (starts at 1)');
   await ev("document.querySelector('.modal [data-cs=\"1\"]').click();document.querySelector('.modal .foot .primary').click()");
@@ -610,13 +611,24 @@ const pointer = (sel, pts) => ev(`(async()=>{const el=document.querySelector(${J
   ok(await ev("document.querySelector('.canva-frame').src.startsWith('https://www.canva.com/design/DAGi7rMbwQI/DL_b2qdGHZhErapcUnzRlQ/view?embed') && document.querySelector('[data-meta]').textContent.includes('Canva') && !!document.querySelector('[data-canva=n]')"), 'Canva: public view link opens as an embed, with page count and ratio settings');
   await ev("const n=document.querySelector('[data-canva=n]');n.value='4';n.dispatchEvent(new Event('change',{bubbles:true}))");
   await until("document.querySelector('[data-dur]') && document.querySelector('[data-dur]').textContent==='4'", 6000, 'canva pages');
-  ok(await ev("document.querySelectorAll('[data-pages] [data-page]').length===4"), 'Canva: page count drives the page list');
+  await until("document.querySelectorAll('[data-pages] [data-page]').length===4", 5000, 'canva rail 4');
+  ok(true, 'Canva: page count drives the page list');
   await ev("document.querySelector('[data-tab=inbox]').click()"); await until("document.querySelector('.doc-bar [data-tool=pin]') && document.querySelector('.canva-frame')", 8000);
   await ev("document.querySelector('[data-act=pnext]').click()"); await delay(300);
   ok(await ev("document.querySelector('.canva-frame').src.endsWith('#2') && document.querySelector('[data-tc]').textContent==='2'"), 'Canva: next page opens page 2 of the design');
   await pointer('.overlay', [[0.4, 0.4], [0.4, 0.4]]); await delay(600);
   ok(await ev("(()=>{const c=document.querySelector('.list .item .tcbtn');return c && c.textContent==='슬라이드 2'})()"), 'Canva: pin card shows the slide');
   await shot('33-canva');
+  // 페이지 사진 만들기 (화면 공유 한 번)
+  await until("document.querySelector('[data-railcap]')", 6000, 'rail capture button');
+  ok(true, 'Canva: page list offers to make page images');
+  await ev("document.querySelector('[data-railcap]').click()");
+  await until("!document.querySelector('[data-railcap]') && [...document.querySelectorAll('[data-pages] [data-page] img')].length===4 && [...document.querySelectorAll('[data-pages] [data-page] img')].every(i=>!i.hidden && i.src.startsWith('data:image'))", 40000, 'canva page images');
+  ok(true, 'Canva: one screen share fills the page list with every page');
+  await ev("document.querySelector('[data-act=pnext]').click()"); await delay(300);
+  await pointer('.overlay', [[0.6, 0.6], [0.6, 0.6]]); await delay(700);
+  ok(await ev("[...document.querySelectorAll('.list .item .snap img')].some(i=>i.src.startsWith('data:image'))"), 'Canva: after that, cards get page images instantly');
+  await shot('34-canva-thumbs');
   /* 11d. 사용 안내 (애니메이션) */
   await ev(CLEAR + "sessionStorage.setItem('t:tour','1');localStorage.removeItem('sd:tour:off')");
   await go(BASE + '?tour'); await until("document.querySelector('.hero-form input')");

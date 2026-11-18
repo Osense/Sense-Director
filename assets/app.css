@@ -1059,3 +1059,9 @@ html.dark .logo-stacked .on-dark { display: block; }
 .canva-ask .card-title { margin: 4px 0 -4px; }
 .canva-ask .ar-seg { display: flex; flex-wrap: wrap; gap: 4px; }
 .canva-ask .ar-seg .btn { font: 600 12px var(--mono); }
+.rail-cap { display: grid; justify-items: center; gap: 4px; padding: 8px 6px; border: 1.5px dashed var(--line); border-radius: 10px; background: var(--panel); color: var(--muted); font-size: 11px; font-weight: 600; line-height: 1.3; text-align: center; cursor: pointer; }
+.rail-cap:hover { border-color: var(--brand); color: var(--brand); }
+.rail-cap .ic { color: var(--brand); }
+.short-steps { margin: 10px 0; padding-left: 20px; display: grid; gap: 10px; font-size: 13.5px; }
+.short-steps li { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+@media (max-width: 760px) { .rail-cap { width: 64px; flex: none; } }

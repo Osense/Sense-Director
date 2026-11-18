@@ -6,7 +6,7 @@ import { openZoom } from './zoom.js';
 import { splitter, workspaceSplitters } from './layout.js';
 import { probe } from './player.js';
 import { putMedia, fmtSize } from './media.js';
-import { putDoc, docType, isDoc, resolveSource } from './doc.js';
+import { putDoc, docType, isDoc, resolveSource, canvaFrom } from './doc.js';
 import { showTour, maybeShowTour } from './tour.js';
 import { clientLink, feedbackMessage, reportHTML, printHTML, shareFile, parseIncoming, STATUS, noteLabel } from './exports.js';
 import { accountBtnHTML } from './auth.js';
@@ -158,11 +158,37 @@ async function checkSource(v) {
   v = (v || '').trim(); if (!v) return null;
   const slow = setTimeout(() => toast(t('링크를 확인하는 중…'), 2500), 500);
   const src = await resolveSource(v); clearTimeout(slow);
-  if (src && src.error === 'canva-short') { toast(t('canva.link 짧은 주소는 열 수 없어요. 캔바 공유 → 공개 보기 링크의 전체 주소(canva.com/design/…)를 넣어 주세요'), 5200); return false; }
+  if (src && src.error === 'canva-short') { const full = await canvaShortDialog(src.short); return full ? checkSource(full) : false; }
   if (src && src.error === 'mixed') { toast(t('여러 링크는 사진 주소만 한 세트로 넣을 수 있어요'), 4200); return false; }
   if (!src) { toast(t('알아볼 수 없는 링크예요. 유튜브·비메오·캔바 링크나 영상·PDF·사진 주소인지 확인해 주세요'), 4600); return false; }
   if (src.dt === 'canva') return canvaDialog(src);
   return src;
+}
+
+/** canva.link 짧은 주소: 브라우저는 다른 사이트가 어디로 넘어가는지 읽을 수 없다 → 새 탭에서 열고 주소를 붙여 넣게 한다 */
+async function canvaShortDialog(short) {
+  let full = '';
+  const v = await modal({
+    title: t('캔바 짧은 주소'),
+    body: `<p class="note">${t('짧은 주소(canva.link)는 브라우저가 진짜 주소를 알려 주지 않아서 한 단계가 더 필요해요.')}</p>
+      <ol class="short-steps">
+        <li><a class="btn" href="${esc(short)}" target="_blank" rel="noopener" data-open>${ic('link', 15)}${t('캔바에서 열기')}</a><span>${t('새 탭에 캔바 디자인이 열려요')}</span></li>
+        <li><span>${t('그 탭의 주소창 주소(canva.com/design/…)를 복사해 아래에 붙여 넣어 주세요')}</span></li>
+      </ol>
+      <input class="field-in" data-full placeholder="https://www.canva.com/design/…/view" aria-label="${t('캔바 전체 주소')}">
+      <p class="note dim">${t('디자인 소유자가 공유 → 공개 보기 링크를 켜 둔 디자인만 열 수 있어요.')}</p>`,
+    actions: [{ label: t('취소'), value: null }, { label: t('확인'), kind: 'primary', value: 'ok' }],
+    onOpen: w => {
+      const inp = w.querySelector('[data-full]');
+      const sync = () => { full = inp.value.trim(); };
+      inp.addEventListener('input', sync); inp.addEventListener('paste', () => setTimeout(sync));
+      inp.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); sync(); w.querySelector('.foot .primary').click(); } });
+      w.querySelector('[data-open]').addEventListener('click', () => setTimeout(() => inp.focus(), 300));
+    },
+  });
+  if (v !== 'ok' || !full) return '';
+  if (!canvaFrom(full) || canvaFrom(full).error) { toast(t('canva.com/design/… 로 시작하는 전체 주소를 넣어 주세요'), 4200); return ''; }
+  return full;
 }
 
 /** 캔바는 페이지 수·화면비를 알려 주지 않는다 → 넣을 때 바로 묻는다 */

@@ -28,3 +28,5 @@ export async function putMedia(fid, file, onProgress = () => {}) {
 export async function getMedia(fid) { try { return (await tx('readonly', s => s.get(fid))) || null; } catch { return null; } }
 export async function deleteMedia(fid) { try { await tx('readwrite', s => s.delete(fid)); } catch {} }
 export const fmtSize = n => n > 1 << 30 ? (n / (1 << 30)).toFixed(2) + 'GB' : n > 1 << 20 ? (n / (1 << 20)).toFixed(1) + 'MB' : Math.round(n / 1024) + 'KB';
+/** 작은 값(그림 데이터 등) 보관 — 캔바 페이지 사진 */
+export async function putValue(key, value) { try { await tx('readwrite', s => s.put(value, key)); return true; } catch { return false; } }
