@@ -1,10 +1,11 @@
 /* WesNS 로그인 (목업) — WesNS 사이트와 같은 저장 키(wesns.mock.user)를 쓴다.
-   osense.github.io 아래에서 같은 저장소를 쓰므로 WesNS 사이트에서 로그인했다면 여기서는 건너뛴다. */
-import { $, esc, ic, brandHTML, themeBtnHTML, logoStacked, pronHTML, WSNS_HOME } from './util.js';
+   WSNS 웹(https://wes-ns.vercel.app, 소스 kwonohhwan-wes/WesNS)과는 주소가 달라 로그인이 공유되지 않는다.
+   이 브라우저에서 한 번 로그인하면 다음부터 건너뛴다. 회원가입·계정 관리는 WSNS 웹으로 연결한다. */
+import { $, esc, ic, brandHTML, themeBtnHTML, logoStacked, pronHTML, WSNS_HOME, WSNS_SITE } from './util.js';
 import { t, lang, langBtnHTML } from './i18n.js';
 
 const KEY = 'wesns.mock.user';
-const SITE = 'https://wes-ns.vercel.app';
+const SITE = WSNS_SITE;
 
 export function getUser() {
   try { const u = JSON.parse(localStorage.getItem(KEY) || 'null'); return u && u.email ? u : null; } catch { return null; }
