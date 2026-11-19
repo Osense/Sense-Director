@@ -4,7 +4,7 @@
 
 **바로 쓰기:** https://osense.github.io/Sense-Director/
 
-WesNS 제품 (Wes & Osense). 연결되는 WSNS 웹: https://wes-ns.vercel.app (소스 https://github.com/kwonohhwan-wes/WesNS).
+WesNS 제품 (Wes & Osense). 연결되는 WSNS 웹: https://wsns.studio (소스 https://github.com/kwonohhwan-wes/WSNS).
 
 ## 흐름
 
@@ -23,7 +23,7 @@ WesNS 제품 (Wes & Osense). 연결되는 WSNS 웹: https://wes-ns.vercel.app (�
 - 같은 브라우저에서는 디렉터 콘솔과 클라이언트 화면이 실시간으로 이어집니다.
 - 영상 파일 올리기는 서버 대신 이 브라우저(IndexedDB)에 저장합니다. 다른 기기의 클라이언트는 같은 파일을 직접 골라 연결하며, 크기가 다르면 다른 편집본일 수 있다고 알려 줍니다.
 - 다른 기기 사이에서는 링크로 주고받습니다. 클라이언트의 메시지에 든 `#r=` 링크나 HTML 파일을 디렉터 콘솔의 **가져오기**(또는 끌어 놓기)로 넣고, 디렉터의 회신 링크를 열면 클라이언트 화면에 상태와 댓글이 들어갑니다.
-- 디렉터 콘솔은 처음 열 때 WesNS 로그인 창을 띄웁니다(목업: 아무 이메일 + 8자 이상 비밀번호, 카카오·네이버 버튼). 로그인 정보는 이 브라우저의 `wesns.mock.user`에 저장되고, 한 번 로그인하면 다음부터는 건너뜁니다. WSNS 웹(https://wes-ns.vercel.app, 소스: https://github.com/kwonohhwan-wes/WesNS)과는 주소가 달라 로그인이 공유되지 않습니다(실제 서버 로그인을 붙일 때 연결). 회원가입·계정 관리·로고 링크는 WSNS 웹으로 이어집니다. 클라이언트 화면은 핀 번호만으로 들어옵니다.
+- 디렉터 콘솔은 처음 열 때 WesNS 로그인 창을 띄웁니다(목업: 아무 이메일 + 8자 이상 비밀번호, 카카오·네이버 버튼). 로그인 정보는 이 브라우저의 `wesns.mock.user`에 저장되고, 한 번 로그인하면 다음부터는 건너뜁니다. WSNS 홈페이지(https://wsns.studio, 소스: https://github.com/kwonohhwan-wes/WSNS)과는 주소가 달라 로그인이 공유되지 않습니다(실제 서버 로그인을 붙일 때 연결). 회원가입·계정 관리·로고 링크는 WSNS 웹으로 이어집니다. 클라이언트 화면은 핀 번호만으로 들어옵니다.
 - 저장소는 `assets/js/store.js` 한 곳에 모여 있어 나중에 서버로 바꾸기 쉽습니다.
 
 ## 화면비·프레임 수 자동 판단

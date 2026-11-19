@@ -196,8 +196,8 @@ export const srcKind = src => !src ? '' : src.k === 'doc' ? ({ pdf: 'PDF', pptx:
 /* ---------- WesNS 로고 마크: 하나로 이어진 선이 W(Wes)를 그리고 N(Osense)으로 이어진다 ---------- */
 /* ---------- WSNS studio 로고 (2×2 정사각형) ---------- */
 const BRAND = new URL('../brand/', import.meta.url).href;
-/** WSNS 웹 주소 — 지금은 Vercel(소스: kwonohhwan-wes/WesNS, 비공개). 도메인을 붙이면 여기 한 줄만 바꾸면 된다 */
-export const WSNS_SITE = 'https://wes-ns.vercel.app';
+/** WSNS 홈페이지 주소 (소스: kwonohhwan-wes/WSNS, 비공개). 주소가 바뀌면 여기 한 줄만 바꾸면 된다 */
+export const WSNS_SITE = 'https://wsns.studio';
 export const WSNS_HOME = () => WSNS_SITE + (lang === 'en' ? '/en/' : '/');
 let markText = '';
 // 보고서(HTML 파일)에 그대로 넣을 수 있게 마크 SVG를 미리 읽어 둔다

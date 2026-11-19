@@ -1,5 +1,5 @@
 /* WesNS 로그인 (목업) — WesNS 사이트와 같은 저장 키(wesns.mock.user)를 쓴다.
-   WSNS 웹(https://wes-ns.vercel.app, 소스 kwonohhwan-wes/WesNS)과는 주소가 달라 로그인이 공유되지 않는다.
+   WSNS 홈페이지(https://wsns.studio, 소스 kwonohhwan-wes/WSNS)과는 주소가 달라 로그인이 공유되지 않는다.
    이 브라우저에서 한 번 로그인하면 다음부터 건너뛴다. 회원가입·계정 관리는 WSNS 웹으로 연결한다. */
 import { $, esc, ic, brandHTML, themeBtnHTML, logoStacked, pronHTML, WSNS_HOME, WSNS_SITE } from './util.js';
 import { t, lang, langBtnHTML } from './i18n.js';

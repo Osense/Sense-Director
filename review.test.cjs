@@ -532,7 +532,7 @@ const pointer = (sel, pts) => ev(`(async()=>{const el=document.querySelector(${J
 
   /* 11e. 상태 버튼 스크롤 유지 · 재생 중 핀 깜빡임 · 영상 확대 · 로고 */
   await ev(CLEAR); await go(BASE); await until("document.querySelector('.hero-form input')");
-  ok(await ev("(()=>{const a=document.querySelector('.topbar .wordmark');return a && a.href.startsWith('https://wes-ns.vercel.app') && a.target==='_blank' && a.querySelector('img.mark').src.includes('brand/wsns-mark.svg') && a.textContent.includes('웨스엔에스 스튜디오') && a.textContent.includes('WSNS studio')})()"), 'logo: 2×2 WSNS mark, WSNS studio [웨스엔에스 스튜디오], links to the WSNS homepage');
+  ok(await ev("(()=>{const a=document.querySelector('.topbar .wordmark');return a && a.href.startsWith('https://wsns.studio') && a.target==='_blank' && a.querySelector('img.mark').src.includes('brand/wsns-mark.svg') && a.textContent.includes('웨스엔에스 스튜디오') && a.textContent.includes('WSNS studio')})()"), 'logo: 2×2 WSNS mark, WSNS studio [웨스엔에스 스튜디오], links to the WSNS homepage');
   await ev(`document.querySelector('.hero-form input').value=${JSON.stringify(VIDEO)};document.querySelector('.hero-form .btn').click()`);
   await until("location.hash.includes('tab=setup') && document.querySelector('.stage video') && document.querySelector('.stage video').readyState>=2", 10000);
   const zPid = await ev("location.hash.match(/p=(\\w+)/)[1]");
