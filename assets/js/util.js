@@ -196,7 +196,7 @@ export const srcKind = src => !src ? '' : src.k === 'doc' ? ({ pdf: 'PDF', pptx:
 /* ---------- WesNS 로고 마크: 하나로 이어진 선이 W(Wes)를 그리고 N(Osense)으로 이어진다 ---------- */
 /* ---------- WSNS studio 로고 (2×2 정사각형) ---------- */
 const BRAND = new URL('../brand/', import.meta.url).href;
-export const WSNS_HOME = () => 'https://osense.github.io/WesNS' + (lang === 'en' ? '/en/' : '/');
+export const WSNS_HOME = () => 'https://wes-ns.vercel.app' + (lang === 'en' ? '/en/' : '/');
 let markText = '';
 // 보고서(HTML 파일)에 그대로 넣을 수 있게 마크 SVG를 미리 읽어 둔다
 fetch(BRAND + 'wsns-mark.svg').then(r => r.ok ? r.text() : '').then(x => { markText = x; }).catch(() => {});

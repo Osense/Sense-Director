@@ -4,7 +4,7 @@ import { $, esc, ic, brandHTML, themeBtnHTML, logoStacked, pronHTML, WSNS_HOME }
 import { t, lang, langBtnHTML } from './i18n.js';
 
 const KEY = 'wesns.mock.user';
-const SITE = 'https://osense.github.io/WesNS';
+const SITE = 'https://wes-ns.vercel.app';
 
 export function getUser() {
   try { const u = JSON.parse(localStorage.getItem(KEY) || 'null'); return u && u.email ? u : null; } catch { return null; }
