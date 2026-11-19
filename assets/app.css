@@ -1100,3 +1100,80 @@ html.dark .logo-stacked .on-dark { display: block; }
   .flow { grid-template-columns: 1fr; gap: 0; }
   .flow li { grid-template-columns: 24px 1fr; column-gap: 12px; padding: 0 0 14px; }
 }
+
+/* ============ 오른쪽 작업창: 메신저 대화처럼 ============ */
+:root { --chat-bg: oklch(0.955 0.012 250); --bub-them: #fff; --bub-me-c: oklch(0.95 0.045 45); --bub-me-d: oklch(0.94 0.04 262); }
+html.dark { --chat-bg: oklch(0.2 0.012 260); --bub-them: oklch(0.27 0.01 260); --bub-me-c: oklch(0.33 0.06 40); --bub-me-d: oklch(0.31 0.06 262); }
+.list:has(.item.chat) { background: var(--chat-bg); gap: 14px; padding: 14px 12px 18px; }
+/* 카드 테두리는 없애고 말풍선이 주인공 */
+.item.chat { display: grid; gap: 6px; padding: 0; background: none; border: 0; box-shadow: none; border-radius: 0; }
+.item.chat:hover { border: 0; }
+.item.chat.note { border: 0; }
+.item.chat.sel .bubble.req, .item.chat.note.sel .bubble.req { box-shadow: 0 0 0 2px var(--ring), 0 2px 8px rgb(0 0 0 / .08); }
+.item.chat.note.sel .bubble.req { box-shadow: 0 0 0 2px var(--mark-d), 0 2px 8px rgb(0 0 0 / .08); }
+/* 날짜 띠 */
+.chat-day { display: flex; justify-content: center; padding: 2px 0 4px; }
+.chat-day span { padding: 4px 12px; border-radius: 999px; background: color-mix(in oklch, var(--text) 9%, transparent); color: var(--muted); font-size: 11.5px; font-weight: 600; }
+/* 한 줄 대화 */
+.msg { display: flex; align-items: flex-start; gap: 8px; min-width: 0; }
+.msg.me { justify-content: flex-end; }
+.msg .av { flex: none; display: grid; place-items: center; width: 34px; height: 34px; border-radius: 13px; color: #fff; font: 700 14px var(--sans, inherit); box-shadow: 0 1px 2px rgb(0 0 0 / .15); }
+.msg .av.c { background: linear-gradient(135deg, #f06a3d, var(--mark-c)); }
+.msg .av.d { background: linear-gradient(135deg, #4b83ff, var(--mark-d)); }
+.mcol { display: grid; gap: 3px; min-width: 0; max-width: calc(100% - 42px); }
+.msg.me .mcol { justify-items: end; max-width: 92%; }
+.mname { font-size: 12px; font-weight: 700; color: var(--muted); padding-left: 2px; }
+.msg.c .mname { color: var(--mark-c); } .msg.d .mname { color: var(--mark-d); }
+.mrow { display: flex; align-items: flex-end; gap: 5px; min-width: 0; }
+.msg.me .mrow { flex-direction: row-reverse; }
+.mtime { flex: none; display: grid; justify-items: end; gap: 1px; font: 500 10.5px var(--mono); color: var(--dim); white-space: nowrap; padding-bottom: 2px; }
+.msg.them .mtime { justify-items: start; }
+.mtime em { font-style: normal; font-family: var(--sans, inherit); font-weight: 600; font-size: 10.5px; color: var(--mark-c); }
+/* 말풍선 */
+.bubble { position: relative; min-width: 0; padding: 8px 11px; border-radius: 4px 16px 16px 16px; background: var(--bub-them); box-shadow: 0 1px 1.5px rgb(0 0 0 / .08); font-size: 14px; line-height: 1.55; word-break: break-word; }
+.msg.me .bubble { border-radius: 16px 4px 16px 16px; }
+.msg.me.c .bubble { background: var(--bub-me-c); }
+.msg.me.d .bubble { background: var(--bub-me-d); }
+.bubble.req { width: 100%; padding: 8px; display: grid; gap: 7px; }
+.mcol:has(> .mrow > .bubble.req) { width: 100%; }
+.mrow:has(> .bubble.req) { width: 100%; }
+.bubble .item-head { gap: 6px; }
+.bubble .snap { border-radius: 10px; }
+.bubble .tx { margin: 0 2px 1px; font-size: 14px; line-height: 1.55; white-space: pre-wrap; }
+.bubble .tx.dim { color: var(--dim); }
+.bubble textarea { min-height: 52px; background: color-mix(in oklch, var(--panel) 75%, transparent); border-color: color-mix(in oklch, var(--text) 12%, transparent); }
+.bubble.rp { padding: 7px 11px; border: 0; display: block; font-size: 13.5px; }
+.bubble.rp .said-text { white-space: pre-wrap; }
+/* 말풍선 아래 상태 (디렉터) */
+.mcol > .seg.status { margin-top: 3px; width: 100%; }
+.item.chat .seg.status .btn { min-height: 28px; font-size: 12px; }
+/* 댓글 대화 · 입력창 */
+.item.chat .thread { gap: 7px; padding-left: 42px; }
+.item.chat .thread .msg .av { width: 28px; height: 28px; border-radius: 11px; font-size: 12px; }
+.item.chat .thread .msg.them { margin-left: -42px; }
+.item.chat .thread .msg.them .mcol { max-width: calc(100% - 36px); }
+.item.chat.sent .thread, .item.chat.note .thread { padding-left: 0; }
+.item.chat.note .thread .msg.them, .item.chat.sent .thread .msg.them { margin-left: 0; }
+.chat-in { display: flex; align-items: center; gap: 4px; padding: 3px 3px 3px 12px; border-radius: 999px; background: var(--panel); border: 1px solid var(--line); }
+.chat-in:focus-within { border-color: var(--ring); }
+.chat-in input { flex: 1; min-width: 0; border: 0; background: transparent; padding: 6px 0; font-size: 13.5px; box-shadow: none !important; outline: none; }
+.send-ic { flex: none; display: grid; place-items: center; width: 30px; height: 30px; border: 0; border-radius: 50%; background: linear-gradient(135deg, var(--brand), var(--brand-2)); color: #fff; cursor: pointer; }
+.send-ic:active { transform: scale(.94); }
+/* 빠른 답은 그 대화를 보고 있을 때만 (복잡해 보이지 않게) */
+.item.chat .qchips { display: none; }
+.item.chat.sel .qchips, .item.chat:focus-within .qchips { display: flex; }
+.item.chat .waiting { justify-self: end; font-size: 11.5px; padding-right: 4px; }
+/* 내용만 보기에서도 말풍선 유지 */
+.text-only .bubble.req { gap: 4px; }
+@media (max-width: 520px) { .msg .av { width: 30px; height: 30px; border-radius: 11px; } .item.chat .thread { padding-left: 38px; } .item.chat .thread .msg.them { margin-left: -38px; } }
+.bubble.req { width: auto; flex: 1 1 auto; }
+.mrow:has(> .bubble.req) { width: 100%; }
+.mcol:has(> .mrow > .bubble.req) { width: 100%; flex: 1 1 auto; }
+.msg.them .mcol:has(> .mrow > .bubble.req) { max-width: calc(100% - 42px); }
+.msg.me .mcol:has(> .mrow > .bubble.req) { max-width: 94%; }
+.list:has(.item.chat) { overflow-x: hidden; }
+.mrow:has(> .bubble.req) { flex-direction: column; align-items: stretch; gap: 3px; }
+.msg.me .mrow:has(> .bubble.req) { flex-direction: column; }
+.mrow:has(> .bubble.req) > .mtime { display: flex; gap: 6px; align-self: flex-start; padding: 0 4px; }
+.msg.me .mrow:has(> .bubble.req) > .mtime { align-self: flex-end; }
+.list .item.chat.sel, .list .item.chat.note, .list .item.chat.note.sel, .list .item.chat:hover { border: 0; box-shadow: none; outline: 0; }

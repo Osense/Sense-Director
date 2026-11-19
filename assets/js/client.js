@@ -6,7 +6,8 @@ import { openZoom } from './zoom.js';
 import { workspaceSplitters } from './layout.js';
 import { replyLink, requestMessage, reportHTML, printHTML, shareFile, STATUS } from './exports.js';
 import { showClientTour, maybeShowClientTour } from './tour.js';
-import { t, tn, lang, fmtDateL, fmtMD, langBtnHTML } from './i18n.js';
+import { msg, replies, dayLine, composer } from './chat.js';
+import { t, tn, lang, fmtDateL, fmtMD, langBtnHTML, fmtTime } from './i18n.js';
 
 export async function renderClient(app, params) {
   let p;
@@ -112,40 +113,44 @@ export async function renderClient(app, params) {
     addItem({ s: [pts] });
   }
 
+  // 내 수정요청: 내 말(오른쪽 말풍선, 장면 사진 + 내용) → 디렉터 답(왼쪽) → 입력창
   function itemCard(it) {
     const n = numOf(it.id), sent = !!it._sent, st = it.st || 'open';
     const kind = it.x != null ? (it.s && it.s.length ? t('핀 + 그림') : t('핀')) : it.s && it.s.length ? t('그림') : t('메모');
-    return `<article class="item${it.id === selected ? ' sel' : ''}${sent ? ' sent' : ''}" data-id="${it.id}">
-      <div class="item-head">
+    const body = `<div class="item-head">
         <span class="no">${String(n).padStart(2, '0')}</span>
         <button class="tcbtn" data-seek title="${t('이 시점으로 이동')}">${tc(it.t, P.effFps())}</button>
         <span class="kind">${kind}</span><button class="icon-x tonly" data-zoom aria-label="${t('크게 보기')}" title="${t('장면과 함께 크게 보기')}">${ic('expand', 14)}</button>
         ${sent ? `<span class="tag st-${st}">${STATUS[st]}</span>` : `<button class="icon-x" data-del aria-label="${t('삭제')}" title="${t('삭제')}">${ic('trash', 15)}</button>`}
       </div>
       <div data-zoom role="button" tabindex="0" aria-label="${n}${t('번 크게 보기')}">${snapHTML(it, n, P.ar, posterOf(p.src, P.poster || p.pv), sent ? t('장면 사진 없음') : t('장면 사진은 보낼 때 자동으로 붙어요'))}</div>
-      ${sent ? saidHTML(t('나'), it.tx || t('(내용 없음)'), 'c tx') : `<textarea rows="2" placeholder="${t('어떻게 고치면 좋을지 적어 주세요')}" data-tx>${esc(it.tx)}</textarea>`}
+      ${sent ? (it.tx ? `<p class="tx">${esc(it.tx)}</p>` : `<p class="tx dim">${t('(내용 없음)')}</p>`) : `<textarea rows="2" placeholder="${t('어떻게 고치면 좋을지 적어 주세요')}" data-tx>${esc(it.tx)}</textarea>`}`;
+    return `<article class="item chat${it.id === selected ? ' sel' : ''}${sent ? ' sent' : ''}" data-id="${it.id}">
+      ${msg({ me: true, side: 'c', name: t('나'), body, at: sent ? (it._at || it.at) : it.at, cls: 'req', meta: sent ? '' : `<em>${t('보내기 전')}</em>` })}
       ${thread(it, sent)}
     </article>`;
   }
   function thread(it, sent) {
     const rp = it.rp || [];
     if (!sent) return '';
-    return `<div class="thread">${rp.map(r => saidHTML(r.by === 'd' ? (r.n || t('디렉터')) : t('나'), r.b, 'rp ' + r.by, `<time>${fmtDate(r.at)}</time>`)).join('')}
-      ${rp.some(r => r.by === 'd') ? `<form class="reply" data-reply><input placeholder="${t('디렉터에게 답글')}" aria-label="${t('답글')}"><button class="btn small" aria-label="${t('답글 보내기')}">${ic('reply', 14)}</button></form>` : t('<div class="waiting">디렉터 확인을 기다리는 중</div>')}
+    return `<div class="thread">${replies(rp, 'c', { c: t('나'), d: p.by || t('디렉터') })}
+      ${rp.some(r => r.by === 'd') ? composer(t('디렉터에게 답글'), t('답글 보내기')) : t('<div class="waiting">디렉터 확인을 기다리는 중</div>')}
     </div>`;
   }
+  // 디렉터 안내: 디렉터 말(왼쪽) → 내 답글(오른쪽) → 입력창
   function noteCard(it) {
     const n = labelOf(it), kind = it.x != null ? (it.s && it.s.length ? t('핀 + 그림') : t('핀')) : it.s && it.s.length ? t('그림') : t('메모');
-    return `<article class="item note${it.id === selected ? ' sel' : ''}" data-id="${it.id}" data-note>
-      <div class="item-head"><span class="no d">${n}</span><button class="tcbtn" data-seek title="${t('이 시점으로 이동')}">${tc(it.t, P.effFps())}</button><span class="kind">${kind}</span><button class="icon-x tonly" data-zoom aria-label="${t('크게 보기')}" title="${t('장면과 함께 크게 보기')}">${ic('expand', 14)}</button><span class="tag d">${t('디렉터 안내')}</span></div>
+    const body = `<div class="item-head"><span class="no d">${n}</span><button class="tcbtn" data-seek title="${t('이 시점으로 이동')}">${tc(it.t, P.effFps())}</button><span class="kind">${kind}</span><button class="icon-x tonly" data-zoom aria-label="${t('크게 보기')}" title="${t('장면과 함께 크게 보기')}">${ic('expand', 14)}</button></div>
       <div data-zoom role="button" tabindex="0" aria-label="${n} ${t('크게 보기')}">${snapHTML(it, n, P.ar, posterOf(p.src, P.poster || p.pv))}</div>
-      ${saidHTML(p.by || t('디렉터'), it.tx || t('(내용 없음)'), 'd tx')}
+      ${it.tx ? `<p class="tx">${esc(it.tx)}</p>` : `<p class="tx dim">${t('(내용 없음)')}</p>`}`;
+    return `<article class="item chat note${it.id === selected ? ' sel' : ''}" data-id="${it.id}" data-note>
+      ${msg({ me: false, side: 'd', name: p.by || t('디렉터'), body, at: it.at, cls: 'req' })}
       ${noteThread(it)}
     </article>`;
   }
   function noteThread(it) {
-    return `<div class="thread">${(it.rp || []).map(r => saidHTML(r.by === 'd' ? (r.n || p.by || t('디렉터')) : t('나'), r.b, 'rp ' + r.by, `<time>${r.pending ? t('보내기 전') : fmtDate(r.at)}</time>`)).join('')}
-      <form class="reply" data-reply><input placeholder="${t('디렉터에게 답글')}" aria-label="${t('답글')}"><button class="btn small" aria-label="${t('답글 보내기')}">${ic('reply', 14)}</button></form></div>`;
+    return `<div class="thread">${replies(it.rp, 'c', { c: t('나'), d: p.by || t('디렉터') }, t('보내기 전'))}
+      ${composer(t('디렉터에게 답글'), t('답글 보내기'))}</div>`;
   }
   async function noteReply(id, b) {
     const rp = { by: 'c', n: state.from || '', b, at: Date.now() };
@@ -179,7 +184,7 @@ export async function renderClient(app, params) {
         <span>${t('장면과 시간 주소(시:분:초:프레임)가 여기에 붙고, 바로 내용을 적을 수 있어요.')}</span>
         <span class="keys">${t('Space 재생 · ← → 또는 , . 한 프레임 · Shift ← → 1초 · P 핀 · D 펜 · H 손 · M 메모')}</span></div>`;
     } else {
-      list.innerHTML = state.sent.length ? state.sent.slice().reverse().map(r => `<div class="group"><div class="group-head">${fmtDate(r.at)} · ${r.items.length}${t('건 보냄')}${r.from ? ' · ' + esc(r.from) : ''}</div>${r.items.map(it => itemCard({ ...it, _sent: r.rid })).join('')}</div>`).join('')
+      list.innerHTML = state.sent.length ? state.sent.slice().reverse().map(r => `<div class="group">${dayLine(r.at, `${fmtTime(r.at)} · ${r.items.length}${t('건 보냄')}${r.from ? ' · ' + esc(r.from) : ''}`)}${r.items.map(it => itemCard({ ...it, _sent: r.rid, _at: r.at })).join('')}</div>`).join('')
         : t('<div class="empty"><b>아직 보낸 요청이 없어요</b><span>작성을 마치면 오른쪽 위 "수정요청 보내기"를 눌러 주세요.</span></div>');
     }
     V.render();

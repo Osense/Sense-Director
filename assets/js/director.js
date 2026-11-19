@@ -8,9 +8,10 @@ import { probe } from './player.js';
 import { putMedia, fmtSize } from './media.js';
 import { putDoc, docType, isDoc, resolveSource, canvaFrom } from './doc.js';
 import { showTour, maybeShowTour } from './tour.js';
+import { msg, replies, dayLine, composer } from './chat.js';
 import { clientLink, feedbackMessage, reportHTML, printHTML, shareFile, parseIncoming, STATUS, noteLabel } from './exports.js';
 import { accountBtnHTML } from './auth.js';
-import { t, tn, lang, fmtDateL, fmtMD, langBtnHTML } from './i18n.js';
+import { t, tn, lang, fmtDateL, fmtMD, langBtnHTML, fmtTime } from './i18n.js';
 
 const NOTICE_CHIPS = [t('피드백은 마감일까지 부탁드립니다.'), t('수정할 장면에서 멈추고 핀을 찍은 뒤 내용을 적어 주세요.'), t('자막·색보정·음악은 각각 따로 적어 주시면 빨라요.'), t('음악은 저작권 확인 중이라 바뀔 수 있어요.'), t('최종본이 아닌 1차 편집본입니다.')];
 const REPLY_CHIPS = [t('반영하겠습니다'), t('확인했습니다'), t('다음 버전에 반영할게요'), t('논의가 필요해요'), t('원본 의도를 유지할게요')];
@@ -539,7 +540,7 @@ function renderInbox(side, p, getSel, setSel, hooks, initialPane) {
         : inbox.length ? inbox.map(r => {
           const its = r.items.filter(it => filter === 'all' || (it.st || 'open') === filter).sort((a, b) => a.t - b.t);
           if (!its.length) return '';
-          return `<div class="group"><div class="group-head">${esc(r.from || t('클라이언트'))} · ${fmtDate(r.at)} · ${r.items.length}${t('건')}</div>${its.map(it => card(it, r, label(it), fps, poster)).join('')}</div>`;
+          return `<div class="group">${dayLine(r.at, `${esc(r.from || t('클라이언트'))} · ${fmtTime(r.at)} · ${r.items.length}${t('건')}`)}${its.map(it => card(it, r, label(it), fps, poster)).join('')}</div>`;
         }).join('') || t('<div class="empty"><b>이 상태의 요청이 없어요</b></div>') : `<div class="empty">
           <b>${t('아직 받은 수정요청이 없어요')}</b>
           <span>"${t('설정 · 공유')}"${t('에서 링크와 핀 번호를 클라이언트에게 보내 주세요.')}</span>
@@ -549,33 +550,35 @@ function renderInbox(side, p, getSel, setSel, hooks, initialPane) {
     bindMenu(side);
     if (V) V.render();
   };
+  // 받은 요청: 클라이언트 말(왼쪽 말풍선, 장면 사진 + 내용) → 상태 → 댓글 대화 → 입력창
   function card(it, r, n, fps, poster) {
-    const st = it.st || 'open', sel = getSel() === it.id;
-    return `<article class="item${sel ? ' sel' : ''} st-${st}" data-id="${it.id}" data-rid="${r.rid}">
-      <div class="item-head"><span class="no">${n}</span><button class="tcbtn" data-seek title="${t('이 시점으로')}">${tc(it.t, fps)}</button>
+    const st = it.st || 'open', sel = getSel() === it.id, who = r.from || t('클라이언트');
+    const body = `<div class="item-head"><span class="no">${n}</span><button class="tcbtn" data-seek title="${t('이 시점으로')}">${tc(it.t, fps)}</button>
         <button class="icon-x tonly" data-full aria-label="${t('크게 보기')}" title="${t('장면과 함께 크게 보기')}">${ic('expand', 14)}</button><button class="icon-x" data-loop title="${t('앞뒤 2초 반복 재생')}" aria-label="${t('앞뒤 재생')}">${ic('loop', 15)}</button></div>
       <div data-snapseek role="button" tabindex="0" aria-label="${n}${t('번 장면으로 이동')}">${snapHTML(it, n, p.ar || [16, 9], poster, undefined, { full: true })}</div>
-      ${it.tx ? saidHTML(r.from || t('클라이언트'), it.tx, 'c tx') : `<p class="tx said empty-said"><b class="who">${esc(r.from || t('클라이언트'))}</b><span class="colon">:</span> <span class="dim">${t('(내용 없음)')}</span></p>`}
-      ${statusSeg(st)}
-      ${threadHTML(it, r.from)}
+      ${it.tx ? `<p class="tx">${esc(it.tx)}</p>` : `<p class="tx dim">${t('(내용 없음)')}</p>`}`;
+    return `<article class="item chat st-${st}${sel ? ' sel' : ''}" data-id="${it.id}" data-rid="${r.rid}">
+      ${msg({ me: false, side: 'c', name: who, body, at: it.at || r.at, cls: 'req', after: statusSeg(st) })}
+      ${threadHTML(it, who)}
     </article>`;
   }
+  // 내 안내: 내 말(오른쪽 말풍선) → 클라이언트 답글
   function noteCard(it, fps, poster) {
     const n = label(it), sel = getSel() === it.id;
     const kind = it.x != null ? (it.s && it.s.length ? t('핀 + 그림') : t('핀')) : it.s && it.s.length ? t('그림') : t('메모');
-    return `<article class="item note${sel ? ' sel' : ''}" data-id="${it.id}" data-note>
-      <div class="item-head"><span class="no d">${n}</span><button class="tcbtn" data-seek title="${t('이 시점으로')}">${tc(it.t, fps)}</button><span class="kind">${kind}</span><button class="icon-x tonly" data-full aria-label="${t('크게 보기')}" title="${t('장면과 함께 크게 보기')}">${ic('expand', 14)}</button>
+    const body = `<div class="item-head"><span class="no d">${n}</span><button class="tcbtn" data-seek title="${t('이 시점으로')}">${tc(it.t, fps)}</button><span class="kind">${kind}</span><button class="icon-x tonly" data-full aria-label="${t('크게 보기')}" title="${t('장면과 함께 크게 보기')}">${ic('expand', 14)}</button>
         <button class="icon-x" data-ndel aria-label="${t('안내 삭제')}" title="${t('삭제')}">${ic('trash', 15)}</button></div>
       <div data-snapseek role="button" tabindex="0" aria-label="${n} ${t('장면으로 이동')}">${snapHTML(it, n, p.ar || [16, 9], poster, V && V.needsShare() ? t('장면 사진 없음 — 위 버튼으로 만들 수 있어요') : t('장면 사진 없음'), { full: true })}</div>
-      <div class="said d who-line"><b class="who">${esc(p.by || t('디렉터'))}</b><span class="colon">:</span></div>
-      <textarea rows="2" placeholder="${t('클라이언트에게 남길 안내를 적어 주세요')}" data-ntx>${esc(it.tx || '')}</textarea>
+      <textarea rows="2" placeholder="${t('클라이언트에게 남길 안내를 적어 주세요')}" data-ntx>${esc(it.tx || '')}</textarea>`;
+    return `<article class="item chat note${sel ? ' sel' : ''}" data-id="${it.id}" data-note>
+      ${msg({ me: true, side: 'd', name: p.by || t('디렉터'), body, at: it.at, cls: 'req' })}
       ${(it.rp || []).length ? threadHTML(it, t('클라이언트'), true) : ''}
     </article>`;
   }
   function threadHTML(it, from, noteThread = false) {
-    return `<div class="thread">${(it.rp || []).map(x => saidHTML(x.by === 'd' ? (x.n || p.by || t('디렉터')) : (x.n || from || t('클라이언트')), x.b, 'rp ' + x.by, `<time>${fmtDate(x.at)}</time>`)).join('')}
+    return `<div class="thread">${replies(it.rp, 'd', { c: from || t('클라이언트'), d: p.by || t('디렉터') })}
         ${noteThread ? '' : `<div class="qchips">${REPLY_CHIPS.map(c => `<button class="chipbtn" data-q>${esc(c)}</button>`).join('')}</div>`}
-        <form class="reply" data-reply><input placeholder="${noteThread ? t('답글') : t('댓글로 답하기')}" aria-label="${t('댓글')}"><button class="btn small" aria-label="${t('댓글 달기')}">${ic('reply', 14)}</button></form>
+        ${composer(noteThread ? t('답글') : t('댓글로 답하기'), t('댓글 달기'))}
       </div>`;
   }
   const statusSeg = st => `<div class="seg status" role="group" aria-label="${t('반영 상태')}">${['open', 'doing', 'done', 'hold'].map(k => `<button class="btn st-${k}${st === k ? ' on' : ''}" data-st="${k}">${STATUS[k]}</button>`).join('')}</div>`;
