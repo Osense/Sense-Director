@@ -14,7 +14,7 @@ function signIn(email, provider = 'email') {
   const now = new Date().toISOString(), old = getUser();
   const u = old && old.email === email ? old : {
     id: (crypto.randomUUID && crypto.randomUUID()) || String(Date.now()),
-    name: provider === 'email' ? email.split('@')[0] : provider === 'kakao' ? 'Kakao user' : 'Naver user',
+    name: provider === 'email' ? email.split('@')[0] : ({ google: 'Google user', kakao: 'Kakao user', naver: 'Naver user' })[provider] || provider,
     email, provider,
     marketing: { email: false, sms: false },
     consents: { terms: now, privacy: now, age14: now },
@@ -26,6 +26,7 @@ export function signOut() { try { localStorage.removeItem(KEY); } catch {} locat
 
 const sitePath = p => `${SITE}${lang === 'en' ? '/en' : ''}${p}`;
 const kakao = '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M12 3C6.48 3 2 6.48 2 10.78c0 2.77 1.86 5.2 4.66 6.58l-.95 3.48c-.08.3.26.54.52.37l4.13-2.73c.54.06 1.08.1 1.64.1 5.52 0 10-3.48 10-7.8S17.52 3 12 3Z"/></svg>';
+const google = '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="#4285F4" d="M23.5 12.27c0-.85-.08-1.67-.22-2.45H12v4.64h6.45a5.5 5.5 0 0 1-2.39 3.62v3h3.87c2.26-2.09 3.57-5.17 3.57-8.81Z"/><path fill="#34A853" d="M12 24c3.24 0 5.96-1.07 7.94-2.9l-3.87-3c-1.08.72-2.45 1.15-4.07 1.15-3.13 0-5.78-2.11-6.73-4.95h-4v3.1A12 12 0 0 0 12 24Z"/><path fill="#FBBC05" d="M5.27 14.3a7.2 7.2 0 0 1 0-4.6V6.6h-4a12 12 0 0 0 0 10.8l4-3.1Z"/><path fill="#EA4335" d="M12 4.75c1.76 0 3.34.6 4.59 1.8l3.43-3.43A11.5 11.5 0 0 0 12 0 12 12 0 0 0 1.27 6.6l4 3.1C6.22 6.86 8.87 4.75 12 4.75Z"/></svg>';
 const naver = '<svg viewBox="0 0 24 24" width="13" height="13" aria-hidden="true"><path fill="currentColor" d="M16.27 12.85 7.38 0H0v24h7.73V11.15L16.62 24H24V0h-7.73z"/></svg>';
 
 let pending = null;
@@ -53,6 +54,7 @@ function mount(app) {
         <p>${t('WesNS 계정으로 로그인하고 쎈스 디렉터를 시작하세요.')}</p>
       </div>
       <div class="social">
+        <button type="button" class="soc google" data-provider="google">${google}Google</button>
         <button type="button" class="soc kakao" data-provider="kakao">${kakao}${t('카카오')}</button>
         <button type="button" class="soc naver" data-provider="naver">${naver}${t('네이버')}</button>
       </div>
@@ -63,7 +65,7 @@ function mount(app) {
         <button type="button" class="btn ghost icon small" data-act="show" aria-label="${t('비밀번호 보기')}">${ic('eye', 16)}</button></span></label>
       <p class="auth-err" role="alert" hidden></p>
       <button type="submit" class="btn brand auth-submit">${t('로그인')}</button>
-      <p class="auth-mock">${t('목업 화면입니다. 아무 이메일과 8자 이상의 비밀번호로 로그인할 수 있으며, 정보는 이 브라우저에만 저장됩니다.')}</p>
+      <p class="auth-mock">${t('목업 화면입니다. 구글·카카오·네이버 버튼은 바로 로그인되고, 이메일은 아무 주소와 8자 이상의 비밀번호로 로그인할 수 있습니다. 정보는 이 브라우저에만 저장됩니다.')}</p>
       <p class="auth-foot">${t('아직 계정이 없으신가요?')} <a href="${sitePath('/signup')}" target="_blank" rel="noopener">${t('회원가입')}</a></p>
     </form>
   </div>`;

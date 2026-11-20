@@ -13,7 +13,7 @@ export default {
   "비밀번호": "Password",
   "8자 이상": "At least 8 characters",
   "비밀번호 보기": "Show password",
-  "목업 화면입니다. 아무 이메일과 8자 이상의 비밀번호로 로그인할 수 있으며, 정보는 이 브라우저에만 저장됩니다.": "This is a mockup. Log in with any email and a password of 8+ characters. Data is stored only in this browser.",
+  "목업 화면입니다. 구글·카카오·네이버 버튼은 바로 로그인되고, 이메일은 아무 주소와 8자 이상의 비밀번호로 로그인할 수 있습니다. 정보는 이 브라우저에만 저장됩니다.": "This is a mock screen. The Google, Kakao and Naver buttons sign you in right away; for email, any address and a password of 8+ characters works. Your info is stored only in this browser.",
   "아직 계정이 없으신가요?": "Don't have an account?",
   "회원가입": "Sign up",
   "올바른 이메일 주소를 입력해 주세요.": "Please enter a valid email address.",

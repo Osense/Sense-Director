@@ -686,6 +686,7 @@ const pointer = (sel, pts) => ev(`(async()=>{const el=document.querySelector(${J
   ok(await ev("!document.querySelector('.console') && !document.querySelector('.hero-form')"), 'login screen shown before the console when signed out');
   await shot('13-login');
   await ev("document.querySelector('[name=email]').value='director@example.com';document.querySelector('[name=pw]').value='short';document.querySelector('.auth-submit').click()");
+  ok(await ev("['google','kakao','naver'].every(p=>document.querySelector('[data-provider='+p+']'))"), 'login offers Google, Kakao and Naver');
   ok(await ev("!document.querySelector('.auth-err').hidden && !localStorage.getItem('wesns.mock.user')"), 'login rejects a password under 8 characters');
   await ev("document.querySelector('[name=pw]').value='password1';document.querySelector('.auth-submit').click()");
   await until("document.querySelector('.hero-form input')", 6000, 'console after login');
