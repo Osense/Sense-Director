@@ -595,14 +595,25 @@ const pointer = (sel, pts) => ev(`(async()=>{const el=document.querySelector(${J
   await ev("document.querySelector('.hero-form input').value=location.origin+'/noext/photo1 '+location.origin+'/test-media/photo2.png';document.querySelector('.hero-form .btn').click()");
   await until("document.querySelector('.doc-img') && document.querySelector('[data-dur]') && document.querySelector('[data-dur]').textContent==='2'", 12000, 'two image links');
   ok(true, 'several photo links become one set (2 pages)');
-  // 캔바
+  // 캔바 — 페이지 수는 WSNS 서버 함수(canva-pages)가 읽어 준다. 검사에서는 그 응답을 흉내 낸다
+  const STUB = r => `window.__f=window.__f||fetch;window.__canvaCalls=0;window.fetch=(u,o)=>String(u).includes('/canva-pages')?(window.__canvaCalls++,${r}):window.__f(u,o)`;
+  const STUB_OK = (n, w, h) => STUB(`Promise.resolve(new Response(JSON.stringify({pages:${n},w:${w},h:${h}}),{headers:{'Content-Type':'application/json'}}))`);
   await ev(CLEAR); await go(BASE); await until("document.querySelector('.hero-form input')");
+  await ev(STUB_OK(3, 1080, 1920));
+  await ev("document.querySelector('.hero-form input').value='https://www.canva.com/design/DAGi7rMbwQI/DL_b2qdGHZhErapcUnzRlQ/view';document.querySelector('.hero-form .btn').click()");
+  await until("document.querySelector('[data-canva=n]') && document.querySelector('[data-dur]') && document.querySelector('[data-dur]').textContent==='3'", 8000, 'canva auto pages');
+  ok(await ev("!document.querySelector('.modal [data-cn]') && window.__canvaCalls===1 && document.querySelector('[data-canva=n]').value==='3' && document.querySelector('[data-canva=ar]').value==='9:16'"), 'Canva: page count and ratio come from the design itself (no question asked)');
+  await ev(STUB_OK(5, 1920, 1080)); await ev("document.querySelector('[data-canva-sync]').click()");
+  await until("document.querySelector('[data-canva=n]') && document.querySelector('[data-canva=n]').value==='5' && document.querySelector('[data-dur]') && document.querySelector('[data-dur]').textContent==='5' && document.querySelectorAll('[data-pages] [data-page]').length===5", 8000, 'canva re-check');
+  ok(await ev("document.querySelector('[data-canva=ar]').value==='16:9'"), 'Canva: [다시 확인] picks up pages added in Canva');
+  await ev(CLEAR); await go(BASE); await until("document.querySelector('.hero-form input')");
+  await ev(STUB("Promise.reject(new TypeError('offline'))")); // 서버에 닿지 못하면 직접 묻는다
   await ev("document.querySelector('.hero-form input').value='https://canva.link/abc123';document.querySelector('.hero-form .btn').click()");
   await until("document.querySelector('.modal [data-full]')", 4000, 'short link dialog');
   ok(await nproj() === 0 && await ev("document.querySelector('.modal [data-open]').href==='https://canva.link/abc123' && document.querySelector('.modal [data-open]').target==='_blank'"), 'Canva short link: opens it in a new tab and asks for the full address');
   await ev("const i=document.querySelector('.modal [data-full]');i.value='https://www.canva.com/design/DAGi7rMbwQI/DL_b2qdGHZhErapcUnzRlQ/view?utm_content=x';i.dispatchEvent(new Event('input',{bubbles:true}));document.querySelector('.modal .foot .primary').click()");
   await until("document.querySelector('.modal [data-cn]')", 6000, 'canva page-count question');
-  ok(await ev("document.querySelector('.modal [data-cn]').value==='1'"), 'Canva: asks for the page count right away (starts at 1)');
+  ok(await ev("document.querySelector('.modal [data-cn]').value==='1'"), 'Canva: if the server cannot be reached, asks for the page count (starts at 1)');
   await ev("document.querySelector('.modal [data-cs=\"1\"]').click();document.querySelector('.modal .foot .primary').click()");
   await until("document.querySelector('[data-dur]') && document.querySelector('[data-dur]').textContent==='2'", 6000, 'canva 2 pages');
   ok(await ev("document.querySelector('[data-canva=n]').value==='2'"), 'Canva: the answer (2 pages) is used');

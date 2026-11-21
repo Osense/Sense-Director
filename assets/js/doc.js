@@ -1,7 +1,7 @@
 /* 문서 검수 — PDF·PPT(.pptx)·사진을 '페이지가 시간인 플레이어'로 다룬다.
    P.time() = 지금 페이지(0부터), P.duration() = 마지막 페이지 번호.
    그래서 핀·그림·카드·보내기·받은함·보고서는 영상과 똑같이 돌아간다. */
-import { esc, sleep, parseSource } from './util.js';
+import { esc, sleep, parseSource, WSNS_API } from './util.js';
 import { Cap } from './player.js';
 import { getMedia, putMedia, putValue, fmtSize } from './media.js';
 import { t } from './i18n.js';
@@ -42,6 +42,27 @@ export function canvaFrom(u) {
   const m = u.match(/canva\.(?:com|cn)\/design\/([\w-]+)(?:\/([\w-]+))?\/(?:view|edit|watch)/i);
   if (!m) return null;
   return { k: 'doc', dt: 'canva', id: m[1], tk: m[2] || '', url: `https://www.canva.com/design/${m[1]}${m[2] ? '/' + m[2] : ''}/view?embed`, orig: u, n: 1, ar: [16, 9] };
+}
+/** 캔바 공개 링크의 페이지 수·화면비 — 브라우저는 캔바 페이지를 읽을 수 없어(CORS) WSNS 서버 함수가 대신 읽는다.
+    { pages, ar } / 읽었지만 공개 디자인이 아님 { error } / 연결 실패 null */
+const CANVA_KNOWN = [[16, 9], [4, 3], [1, 1], [9, 16], [210, 297], [297, 210], [3, 4], [4, 5]];
+const gcd = (a, b) => b ? gcd(b, a % b) : a;
+export function ratioOf(w, h) {
+  w = Math.round(+w); h = Math.round(+h);
+  if (!(w > 0 && h > 0)) return null;
+  const near = CANVA_KNOWN.find(([a, b]) => Math.abs(a / b - w / h) / (w / h) < 0.01);
+  if (near) return near.slice();
+  const g = gcd(w, h); return [w / g, h / g];
+}
+export async function canvaInfo(src, ms = 9000) {
+  if (!src || !src.id || !src.tk) return null;
+  const ac = new AbortController(), to = setTimeout(() => ac.abort(), ms);
+  try {
+    const r = await fetch(`${WSNS_API}/canva-pages?id=${encodeURIComponent(src.id)}&tk=${encodeURIComponent(src.tk)}`, { signal: ac.signal });
+    const j = await r.json().catch(() => ({}));
+    if (r.ok && j.pages > 0) return { pages: Math.min(300, j.pages | 0), ar: ratioOf(j.w, j.h) };
+    return { error: j.error || 'failed' };
+  } catch { return null; } finally { clearTimeout(to); }
 }
 /** 정말 사진으로 열리는가 (확장자가 없는 인터넷 사진 주소가 많다) */
 export const isImageUrl = (u, ms = 8000) => new Promise(res => {

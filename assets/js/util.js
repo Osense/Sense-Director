@@ -11,6 +11,7 @@ export const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 /* ---------- 아이콘: 얇은 선, 이모지 대신 ---------- */
 const P = {
   play: '<path d="M7 5v14l12-7z" fill="currentColor" stroke="none"/>',
+  sync: '<path d="M20 11a8 8 0 0 0-14.3-4.9L4 8M4 4v4h4M4 13a8 8 0 0 0 14.3 4.9L20 16M20 20v-4h-4"/>',
   pause: '<path d="M8 5v14M16 5v14"/>',
   prev: '<path d="M6 5v14M19 5 9 12l10 7z"/>',
   next: '<path d="M18 5v14M5 5l10 7-10 7z"/>',
@@ -198,6 +199,8 @@ export const srcKind = src => !src ? '' : src.k === 'doc' ? ({ pdf: 'PDF', pptx:
 const BRAND = new URL('../brand/', import.meta.url).href;
 /** WSNS 홈페이지 주소 (소스: kwonohhwan-wes/WSNS, 비공개). 주소가 바뀌면 여기 한 줄만 바꾸면 된다 */
 export const WSNS_SITE = 'https://wsns.studio';
+/** WSNS 서버 함수 (Supabase Edge Functions, 프로젝트 WSNS) */
+export const WSNS_API = 'https://fsmygjpmriblcbpeqjgq.supabase.co/functions/v1';
 export const WSNS_HOME = () => WSNS_SITE + (lang === 'en' ? '/en/' : '/');
 let markText = '';
 // 보고서(HTML 파일)에 그대로 넣을 수 있게 마크 SVG를 미리 읽어 둔다

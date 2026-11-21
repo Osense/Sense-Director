@@ -1051,7 +1051,8 @@ html.dark .logo-stacked .on-dark { display: block; }
 
 /* ---------- 캔바 ---------- */
 .canva-frame { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; background: #fff; }
-.canva-set { display: grid; grid-template-columns: 120px 1fr; gap: 10px; margin-top: 10px; align-items: end; }
+.canva-set { display: grid; grid-template-columns: 96px 1fr auto; gap: 10px; margin-top: 10px; align-items: end; }
+.canva-set [data-canva-sync] { height: 36px; white-space: nowrap; }
 .canva-set label { display: grid; gap: 4px; font-size: 12px; font-weight: 600; color: var(--muted); }
 .canva-set .note { grid-column: 1 / -1; margin: 0; font-size: 12px; line-height: 1.55; }
 .canva-ask { display: grid; gap: 12px; margin-top: 6px; }

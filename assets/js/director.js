@@ -6,7 +6,7 @@ import { openZoom } from './zoom.js';
 import { splitter, workspaceSplitters } from './layout.js';
 import { probe } from './player.js';
 import { putMedia, fmtSize } from './media.js';
-import { putDoc, docType, isDoc, resolveSource, canvaFrom } from './doc.js';
+import { putDoc, docType, isDoc, resolveSource, canvaFrom, canvaInfo } from './doc.js';
 import { showTour, maybeShowTour } from './tour.js';
 import { msg, replies, dayLine, composer } from './chat.js';
 import { clientLink, feedbackMessage, reportHTML, printHTML, shareFile, parseIncoming, STATUS, noteLabel } from './exports.js';
@@ -163,7 +163,12 @@ async function checkSource(v) {
   if (src && src.error === 'canva-short') { const full = await canvaShortDialog(src.short); return full ? checkSource(full) : false; }
   if (src && src.error === 'mixed') { toast(t('여러 링크는 사진 주소만 한 세트로 넣을 수 있어요'), 4200); return false; }
   if (!src) { toast(t('알아볼 수 없는 링크예요. 유튜브·비메오·캔바 링크나 영상·PDF·사진 주소인지 확인해 주세요'), 4600); return false; }
-  if (src.dt === 'canva') return canvaDialog(src);
+  if (src.dt === 'canva') {
+    const slow2 = setTimeout(() => toast(t('캔바 디자인의 페이지 수를 확인하는 중…'), 3000), 400);
+    const info = await canvaInfo(src); clearTimeout(slow2);
+    if (info && info.pages) { toast(t('캔바 디자인 {n}페이지를 불러왔어요', { n: info.pages }), 2600); return { ...src, n: info.pages, ar: info.ar || src.ar, auto: 1 }; }
+    return canvaDialog(src);
+  }
   return src;
 }
 
@@ -193,13 +198,13 @@ async function canvaShortDialog(short) {
   return full;
 }
 
-/** 캔바는 페이지 수·화면비를 알려 주지 않는다 → 넣을 때 바로 묻는다 */
+/** 서버에서 페이지 수를 못 읽었을 때(비공개 디자인·연결 실패) → 넣을 때 바로 묻는다 */
 const CANVA_AR = [['16:9', '16 : 9'], ['4:3', '4 : 3'], ['1:1', '1 : 1'], ['9:16', '9 : 16'], ['210:297', 'A4 ↕'], ['297:210', 'A4 ↔']];
 async function canvaDialog(src) {
   let n = Math.max(1, +src.n || 1), ar = (src.ar || [16, 9]).join(':');
   const v = await modal({
     title: t('캔바 디자인 페이지 수'),
-    body: `<p class="note">${t('캔바는 페이지 수를 알려 주지 않아요. 디자인이 몇 페이지인지 알려 주세요. 나중에 설정에서 바꿀 수 있어요.')}</p>
+    body: `<p class="note">${t('페이지 수를 자동으로 알아내지 못했어요. 디자인이 몇 페이지인지 알려 주세요. 나중에 설정에서 바꿀 수 있어요.')}</p>
       <div class="canva-ask">
         <div class="stepper"><button type="button" class="btn icon" data-cs="-1" aria-label="${t('한 페이지 줄이기')}">${ic('minus')}</button>
           <input type="number" min="1" max="300" value="${n}" data-cn aria-label="${t('페이지 수')}"><span>${t('페이지')}</span>
@@ -366,8 +371,13 @@ function renderSetup(side, p, main) {
       <div class="meta-row" data-meta></div>
       ${p.src && p.src.dt === 'canva' ? `<div class="canva-set">
         <label><span>${t('페이지 수')}</span><input class="field-in" type="number" min="1" max="300" data-canva="n" value="${p.src.n || 10}"></label>
-        <label><span>${t('화면비')}</span><select class="field-in" data-canva="ar">${[['16:9', '16 : 9'], ['4:3', '4 : 3'], ['1:1', '1 : 1'], ['9:16', '9 : 16'], ['210:297', t('A4 세로')], ['297:210', t('A4 가로')]].map(([v, l]) => `<option value="${v}" ${(p.src.ar || [16, 9]).join(':') === v ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
-        <p class="note dim">${t('캔바는 페이지 수와 화면비를 알려 주지 않아서 직접 맞춰 주세요. 화면이 안 보이면 캔바에서 공유 → 공개 보기 링크(또는 임베드)를 켜 주세요. 장면 사진은 보낼 때 화면 공유로 한 번에 찍어요.')}</p></div>` : ''}
+        <label><span>${t('화면비')}</span><select class="field-in" data-canva="ar">${(() => {
+          const cur = (p.src.ar || [16, 9]).join(':'), list = [['16:9', '16 : 9'], ['4:3', '4 : 3'], ['1:1', '1 : 1'], ['9:16', '9 : 16'], ['3:4', '3 : 4'], ['4:5', '4 : 5'], ['210:297', t('A4 세로')], ['297:210', t('A4 가로')]];
+          if (!list.some(([v]) => v === cur)) list.unshift([cur, cur.replace(':', ' : ')]);
+          return list.map(([v, l]) => `<option value="${v}" ${cur === v ? 'selected' : ''}>${l}</option>`).join('');
+        })()}</select></label>
+        <button type="button" class="btn small" data-canva-sync title="${t('캔바에서 페이지 수와 화면비를 다시 읽어 와요')}">${ic('sync', 15)}${t('다시 확인')}</button>
+        <p class="note dim">${t('페이지 수와 화면비는 캔바 디자인에서 자동으로 맞춰요. 캔바에서 페이지를 늘리거나 줄였다면 [다시 확인]을 눌러 주세요. 화면이 안 보이면 캔바에서 공유 → 공개 보기 링크를 켜 주세요. 장면 사진은 보낼 때 화면 공유로 한 번에 찍어요.')}</p></div>` : ''}
     </div>
     <div class="card">
       <div class="card-title">${t('클라이언트 안내사항')}</div>
@@ -422,6 +432,16 @@ function renderSetup(side, p, main) {
     const src = await checkSource(e.target.value);
     if (src === false) return;
     changeSrc(src);
+  });
+  $('[data-canva-sync]', side)?.addEventListener('click', async e => {
+    const b = e.currentTarget; b.disabled = true;
+    const info = await canvaInfo(p.src); b.disabled = false;
+    if (!info || !info.pages) { toast(info ? t('공개 보기 링크가 켜진 디자인만 자동으로 확인할 수 있어요') : t('캔바에 연결하지 못했어요. 잠시 뒤 다시 눌러 주세요'), 4200); return; }
+    $('[data-canva=n]', side).value = info.pages;
+    const sel = $('[data-canva=ar]', side), v = (info.ar || p.src.ar || [16, 9]).join(':');
+    if (![...sel.options].some(o => o.value === v)) sel.add(new Option(v.replace(':', ' : '), v), 0);
+    sel.value = v; toast(t('캔바 디자인 {n}페이지를 불러왔어요', { n: info.pages }), 2600);
+    sel.dispatchEvent(new Event('change', { bubbles: true }));
   });
   side.querySelectorAll('[data-canva]').forEach(el => el.addEventListener('change', () => {
     const n = Math.max(1, Math.min(300, parseInt($('[data-canva=n]', side).value) || 1)), ar = $('[data-canva=ar]', side).value.split(':').map(Number);
