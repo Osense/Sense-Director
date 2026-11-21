@@ -690,6 +690,58 @@ const pointer = (sel, pts) => ev(`(async()=>{const el=document.querySelector(${J
   await ev("document.querySelector('[data-off]').click();document.querySelector('[data-tour=close]').click()"); await delay(150);
   ok(await ev("localStorage.getItem('sd:ctour:off')==='1'"), 'client guide: 다시 보지 않기 saved');
   await ev("sessionStorage.removeItem('t:tour')");
+  /* 11z. 프로젝트 메뉴 — ⋯ 버튼·우클릭·F2·Delete */
+  await ev(CLEAR); await go(BASE); await until("document.querySelector('.hero-form input')");
+  for (const name of ['첫 프로젝트', '둘째 프로젝트']) {
+    await ev(`document.querySelector('.hero-form input').value=${JSON.stringify(VIDEO)};document.querySelector('.hero-form .btn').click()`);
+    await until("location.hash.includes('tab=setup') && document.querySelector('[data-f=title]')", 8000, 'project for menu');
+    await ev(`(()=>{const i=document.querySelector('[data-f=title]');i.value=${JSON.stringify(name)};i.dispatchEvent(new Event('input',{bubbles:true}))})()`); await delay(150);
+    await ev("location.hash='#'"); await until("document.querySelector('.hero-form input')");
+  }
+  await until("document.querySelectorAll('.plist .prow').length===2", 5000, 'two projects');
+  const rowOf = name => `[...document.querySelectorAll('.plist .prow')].find(r=>r.textContent.includes('${name}'))`;
+  await ev(`(()=>{const r=${rowOf('첫 프로젝트')}.querySelector('.pitem'),b=r.getBoundingClientRect();r.dispatchEvent(new MouseEvent('contextmenu',{bubbles:true,cancelable:true,clientX:b.left+20,clientY:b.top+10}))})()`);
+  await until("document.querySelector('.ctx-menu')", 3000, 'context menu');
+  ok(await ev("(()=>{const l=[...document.querySelectorAll('.ctx-menu button')].map(b=>b.textContent);return ['열기','새 탭에서 열기','이름 바꾸기','복제','맨 위에 고정','검수 링크 복사','프로젝트 삭제'].every(x=>l.some(y=>y.startsWith(x)))&&document.activeElement.closest('.ctx-menu')})()"), 'project menu: right-click opens a menu (open, new tab, rename, duplicate, pin, copy link, delete)');
+  await shot('35-project-menu');
+  await ev("document.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true}))"); await delay(100);
+  ok(await ev("!document.querySelector('.ctx-menu')"), 'project menu: Esc closes it');
+  // 이름 바꾸기
+  await ev(`${rowOf('첫 프로젝트')}.querySelector('[data-pmore]').click()`); await until("document.querySelector('.ctx-menu')", 3000);
+  await ev("[...document.querySelectorAll('.ctx-menu button')].find(b=>b.textContent.startsWith('이름 바꾸기')).click()");
+  await until("document.querySelector('.modal [data-rename]')", 3000, 'rename dialog');
+  await ev("(()=>{const i=document.querySelector('.modal [data-rename]');i.value='바뀐 이름';i.dispatchEvent(new Event('input',{bubbles:true}));i.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',bubbles:true}))})()");
+  await until(`!!${rowOf('바뀐 이름')}`, 4000, 'renamed');
+  ok(true, 'project menu: ⋯ button → rename');
+  // 맨 위에 고정
+  await ev(`${rowOf('바뀐 이름')}.querySelector('[data-pmore]').click()`); await until("document.querySelector('.ctx-menu')", 3000);
+  await ev("[...document.querySelectorAll('.ctx-menu button')].find(b=>b.textContent.startsWith('맨 위에 고정')).click()");
+  await until("document.querySelector('.plist .prow').classList.contains('pinned') && document.querySelector('.plist .prow').textContent.includes('바뀐 이름')", 4000, 'pinned');
+  ok(true, 'project menu: pin to top keeps it first');
+  // 복제
+  await ev(`${rowOf('둘째 프로젝트')}.querySelector('[data-pmore]').click()`); await until("document.querySelector('.ctx-menu')", 3000);
+  await ev("[...document.querySelectorAll('.ctx-menu button')].find(b=>b.textContent.startsWith('복제')).click()");
+  await until("document.querySelectorAll('.plist .prow').length===3 && location.hash.includes('tab=setup')", 6000, 'duplicated');
+  ok(await ev(`!!${rowOf('둘째 프로젝트 사본')} && document.querySelector('[data-f=title]').value==='둘째 프로젝트 사본'`), 'project menu: duplicate opens the copy');
+  // 검수 링크 복사
+  await ev(`${rowOf('둘째 프로젝트 사본')}.querySelector('[data-pmore]').click()`); await until("document.querySelector('.ctx-menu')", 3000);
+  await ev("[...document.querySelectorAll('.ctx-menu button')].find(b=>b.textContent.startsWith('검수 링크 복사')).click()");
+  await until("document.getElementById('toast') && document.getElementById('toast').classList.contains('on') && /복사/.test(document.getElementById('toast').textContent)", 5000, 'copy toast');
+  ok(true, 'project menu: copy review link');
+  // 삭제 (지금 연 프로젝트) → 처음 화면으로
+  await ev(`${rowOf('둘째 프로젝트 사본')}.querySelector('[data-pmore]').click()`); await until("document.querySelector('.ctx-menu')", 3000);
+  await ev("[...document.querySelectorAll('.ctx-menu button')].find(b=>b.textContent.startsWith('프로젝트 삭제')).click()");
+  await until("document.querySelector('.modal .foot .danger')", 3000, 'delete confirm');
+  ok(await ev("document.querySelector('.modal').textContent.includes('둘째 프로젝트 사본')"), 'project menu: delete asks first, naming the project');
+  await ev("document.querySelector('.modal .foot .danger').click()");
+  await until("document.querySelectorAll('.plist .prow').length===2 && document.querySelector('.hero-form input')", 5000, 'deleted current');
+  ok(await nproj() === 2, 'project menu: delete removes it and returns home');
+  // Delete 키 (다른 프로젝트를 보는 중) → 지금 화면은 그대로
+  await ev(`location.hash=${rowOf('바뀐 이름')}.querySelector('.pitem').getAttribute('href')`); await until("document.querySelector('[data-main] .viewer, [data-f=title]')", 6000);
+  await ev(`(()=>{const a=${rowOf('둘째 프로젝트')}.querySelector('.pitem');a.focus();a.dispatchEvent(new KeyboardEvent('keydown',{key:'Delete',bubbles:true}))})()`);
+  await until("document.querySelector('.modal .foot .danger')", 3000); await ev("document.querySelector('.modal .foot .danger').click()");
+  await until("document.querySelectorAll('.plist .prow').length===1", 5000, 'deleted by key');
+  ok(await ev("document.querySelector('.plist .pitem.on') && document.querySelector('.plist .pitem.on').textContent.includes('바뀐 이름')"), 'project menu: Delete key removes another project and stays on the open one');
   /* 12. WesNS 로그인 (목업) */
   const HANGUL = "(()=>{const w=document.createTreeWalker(document.body,NodeFilter.SHOW_TEXT);const bad=[];let n;while(n=w.nextNode()){if(n.parentElement.closest('[data-user],textarea,input,noscript,script,style'))continue;if(/[가-힣]/.test(n.textContent))bad.push(n.textContent.trim().slice(0,40))}document.querySelectorAll('[title],[aria-label],[placeholder]').forEach(e=>['title','aria-label','placeholder'].forEach(a=>{const v=e.getAttribute(a);if(v&&/[가-힣]/.test(v)&&!/한국어/.test(v))bad.push(a+':'+v.slice(0,40))}));return bad.filter(x=>x!=='한국어')})()";
   await ev("localStorage.clear();sessionStorage.setItem('t:nouser','1');localStorage.setItem('wesns.lang','ko')");

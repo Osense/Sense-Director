@@ -8,6 +8,7 @@ import { probe } from './player.js';
 import { putMedia, fmtSize } from './media.js';
 import { putDoc, docType, isDoc, resolveSource, canvaFrom, canvaInfo } from './doc.js';
 import { showTour, maybeShowTour } from './tour.js';
+import { openMenu } from './ctxmenu.js';
 import { msg, replies, dayLine, composer } from './chat.js';
 import { clientLink, feedbackMessage, reportHTML, printHTML, shareFile, parseIncoming, STATUS, noteLabel } from './exports.js';
 import { accountBtnHTML } from './auth.js';
@@ -24,6 +25,75 @@ export async function newProject(fields = {}) {
   p.pinHash = await sha(p.salt + p.pin);
   Store.saveProject(p);
   return p;
+}
+
+/** 프로젝트 목록: ⋯ 버튼·우클릭·키보드(메뉴 키, Shift+F10)로 여는 메뉴 */
+function wireProjectMenu(list, cur) {
+  const show = (row, x, y, opener) => {
+    const p = Store.getProject(row.dataset.pid); if (!p) return;
+    row.classList.add('menu-on');
+    const el = openMenu(x, y, [
+      { label: t('열기'), icon: 'next', act: () => { location.hash = '#p=' + p.id; } },
+      { label: t('새 탭에서 열기'), icon: 'newtab', act: () => window.open(location.pathname + '#p=' + p.id, '_blank', 'noopener') },
+      '-',
+      { label: t('이름 바꾸기'), icon: 'rename', hint: 'F2', act: () => renameProject(p) },
+      { label: t('복제'), icon: 'dup', act: () => duplicateProject(p) },
+      { label: p.pinned ? t('고정 풀기') : t('맨 위에 고정'), icon: 'top', act: () => { p.pinned = !p.pinned; Store.saveProject(p); rerender(); } },
+      p.src ? { label: t('검수 링크 복사'), icon: 'link', act: async () => { const l = await clientLink(p).catch(() => ''); toast(l && await copyText(l) ? t('주소를 복사했어요') : t('복사하지 못했어요')); } } : null,
+      '-',
+      { label: t('프로젝트 삭제'), icon: 'trash', danger: true, hint: 'Del', act: () => deleteProjectAsk(p, cur && cur.id === p.id) },
+    ], { opener, label: p.title || t('제목 없음') });
+    const off = new MutationObserver(() => { if (!el.isConnected) { row.classList.remove('menu-on'); off.disconnect(); } });
+    off.observe(document.body, { childList: true });
+  };
+  list.addEventListener('contextmenu', e => {
+    const row = e.target.closest('.prow'); if (!row) return;
+    e.preventDefault(); show(row, e.clientX, e.clientY, row.querySelector('.pitem'));
+  });
+  list.addEventListener('click', e => {
+    const b = e.target.closest('[data-pmore]'); if (!b) return;
+    e.preventDefault(); const r = b.getBoundingClientRect(); show(b.closest('.prow'), r.left, r.bottom + 4, b);
+  });
+  list.addEventListener('keydown', e => {
+    const row = e.target.closest('.prow'); if (!row || !e.target.matches('.pitem')) return;
+    const p = Store.getProject(row.dataset.pid); if (!p) return;
+    if (e.key === 'ContextMenu' || (e.key === 'F10' && e.shiftKey)) { e.preventDefault(); const r = e.target.getBoundingClientRect(); show(row, r.left + 16, r.bottom, e.target); }
+    else if (e.key === 'F2') { e.preventDefault(); renameProject(p); }
+    else if (e.key === 'Delete') { e.preventDefault(); deleteProjectAsk(p, cur && cur.id === p.id); }
+  });
+}
+const rerender = () => dispatchEvent(new HashChangeEvent('hashchange'));
+async function renameProject(p) {
+  let v = p.title || '';
+  const r = await modal({
+    title: t('이름 바꾸기'),
+    body: `<input class="field-in" data-rename maxlength="80" value="${esc(v)}" aria-label="${t('프로젝트 이름')}">`,
+    actions: [{ label: t('취소'), value: null }, { label: t('바꾸기'), kind: 'primary', value: 'ok' }],
+    onOpen: w => {
+      const i = w.querySelector('[data-rename]'); i.focus(); i.select();
+      i.addEventListener('input', () => { v = i.value; });
+      i.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); v = i.value; w.querySelector('.foot .primary').click(); } });
+    },
+  });
+  if (r !== 'ok') return;
+  const fresh = Store.getProject(p.id) || p; fresh.title = v.trim(); Store.saveProject(fresh);
+  rerender(); toast(t('이름을 바꿨어요'));
+}
+async function duplicateProject(p) {
+  const { id, salt, pin, pinHash, createdAt, updatedAt, imported, pinned, ...rest } = Store.getProject(p.id) || p;
+  const c = await newProject({ ...JSON.parse(JSON.stringify(rest)), title: (p.title || t('제목 없음')) + ' ' + t('사본') });
+  location.hash = '#p=' + c.id + '&tab=setup'; toast(t('복제했어요. 받은 수정요청은 복사하지 않아요'), 3200);
+}
+async function deleteProjectAsk(p, isCur) {
+  const n = Store.inbox(p.id).flatMap(r => r.items).length;
+  const r = await modal({
+    title: t('프로젝트를 삭제할까요?'),
+    body: `<p class="note"><b>${esc(p.title || t('제목 없음'))}</b>${n ? ' · ' + t('받은 요청 {n}건', { n }) : ''}</p>${t('<p class="note">받은 수정요청과 댓글도 이 브라우저에서 함께 지워지고 되돌릴 수 없어요.</p>')}`,
+    actions: [{ label: t('취소'), value: null }, { label: t('삭제'), kind: 'danger', value: 'del' }],
+  });
+  if (r !== 'del') return;
+  Store.deleteProject(p.id); toast(t('프로젝트를 삭제했어요'));
+  if (isCur || location.hash.includes('p=' + p.id)) location.hash = '#'; else rerender();
 }
 
 export async function renderDirector(app, params) {
@@ -60,10 +130,11 @@ export async function renderDirector(app, params) {
       <div class="plist-head">${t('프로젝트')} <b>${projects.length}</b></div>
       ${projects.map(pr => {
         const inbox = Store.inbox(pr.id), all = inbox.flatMap(r => r.items), open = all.filter(it => (it.st || 'open') === 'open').length;
-        return `<a class="pitem${cur && cur.id === pr.id ? ' on' : ''}" href="#p=${pr.id}${open ? '&tab=inbox' : ''}">
-          <span class="pt">${esc(pr.title || t('제목 없음'))}</span>
+        return `<div class="prow${pr.pinned ? ' pinned' : ''}" data-pid="${pr.id}"><a class="pitem${cur && cur.id === pr.id ? ' on' : ''}" href="#p=${pr.id}${open ? '&tab=inbox' : ''}">
+          <span class="pt">${pr.pinned ? `<span class="pin-top" title="${t('맨 위에 고정됨')}">${ic('top', 12)}</span>` : ''}<span class="ptn">${esc(pr.title || t('제목 없음'))}</span></span>
           <span class="pm">${pr.due ? esc(dueLabel(pr.due)) + ' · ' : ''}${all.length ? `${t('요청')} ${all.length}` : t('요청 없음')}</span>
-          ${open ? `<i class="badge" title="${t('확인 안 한 요청')}">${open}</i>` : ''}</a>`;
+          ${open ? `<i class="badge" title="${t('확인 안 한 요청')}">${open}</i>` : ''}</a>
+          <button type="button" class="pmore" data-pmore aria-label="${t('프로젝트 메뉴')}" title="${t('프로젝트 메뉴 (우클릭)')}">${ic('more', 16)}</button></div>`;
       }).join('') || t('<div class="plist-empty">아직 프로젝트가 없어요</div>')}
     </nav>
     <div class="splitter col plist-split" aria-label="${t('프로젝트 목록 너비 조정')}"></div>
@@ -73,6 +144,7 @@ export async function renderDirector(app, params) {
   $('[data-act=new]', app).addEventListener('click', () => newDialog());
   $('[data-act=tour]', app).addEventListener('click', () => showTour());
   $('[data-act=import]', app).addEventListener('click', () => importDialog());
+  wireProjectMenu($('.plist', app), cur);
   const main = $('[data-main]', app);
   if (!cur) return renderHome(main, projects);
   renderProject(main, cur, params.tab || (Store.inbox(cur.id).length ? 'inbox' : 'setup'));
@@ -297,7 +369,7 @@ function renderProject(main, p, tab) {
     </div>`;
   workspaceSplitters(main, 'director-' + tab);
   $$('[data-tab]', main).forEach(b => b.addEventListener('click', () => { location.hash = '#p=' + p.id + '&tab=' + b.dataset.tab; }));
-  $('[data-f=title]', main).addEventListener('input', e => { p.title = e.target.value; Store.saveProject(p); const pt = $('.pitem.on .pt'); if (pt) pt.textContent = p.title || t('제목 없음'); queueLink(); });
+  $('[data-f=title]', main).addEventListener('input', e => { p.title = e.target.value; Store.saveProject(p); const pt = $('.pitem.on .ptn'); if (pt) pt.textContent = p.title || t('제목 없음'); queueLink(); });
 
   const viewerEl = $('[data-viewer]', main);
   let selected = null;
@@ -472,10 +544,7 @@ function renderSetup(side, p, main) {
   $('[data-act=copy-msg]', side).addEventListener('click', async () => { if (!link) return; toast(await copyText(shareText() + '\n' + link) ? t('안내 글과 링크를 복사했어요. 카톡에 붙여 넣어 주세요') : t('복사하지 못했어요')); });
   $('[data-act=share]', side).addEventListener('click', async () => { if (!link) return; const r = await shareOrCopy({ title: p.title, text: shareText(), url: link }); if (r === 'copied') toast(t('공유 창이 없어 복사했어요')); });
   $('[data-act=qr]', side).addEventListener('click', () => { const q = $('[data-qr]', side); q.hidden = !q.hidden; if (!q.hidden && link) drawQR(q, link); });
-  $('[data-act=delete]', side).addEventListener('click', async () => {
-    const r = await modal({ title: t('프로젝트를 삭제할까요?'), body: t('<p class="note">받은 수정요청과 댓글도 이 브라우저에서 함께 지워지고 되돌릴 수 없어요.</p>'), actions: [{ label: t('취소'), value: null }, { label: t('삭제'), kind: 'danger', value: 'del' }] });
-    if (r === 'del') { Store.deleteProject(p.id); location.hash = '#'; }
-  });
+  $('[data-act=delete]', side).addEventListener('click', () => deleteProjectAsk(p, true));
 }
 
 let qrLib = null;

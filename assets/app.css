@@ -314,7 +314,30 @@ kbd { display: inline-block; padding: 1px 6px; background: var(--raised); border
 .pitem.on::before { content: ''; position: absolute; left: -1px; top: 11px; bottom: 11px; width: 3px; border-radius: 2px; background: linear-gradient(var(--brand), var(--brand-2)); }
 .pt { font-weight: 600; font-size: 13.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .pm { font-size: 11.5px; color: var(--dim); }
-.badge { position: absolute; right: 9px; top: 50%; transform: translateY(-50%); min-width: 20px; height: 20px; padding: 0 6px; border-radius: 10px; background: var(--mark-c); color: #fff; font: 700 11px/20px var(--mono); font-style: normal; text-align: center; }
+.prow { position: relative; }
+.prow .pitem { padding-right: 36px; }
+.prow.pinned .pitem { padding-right: 36px; }
+.pin-top { display: inline-flex; vertical-align: -1px; margin-right: 4px; color: var(--brand); }
+.pmore { position: absolute; right: 5px; top: 50%; transform: translateY(-50%); width: 28px; height: 28px; display: grid; place-items: center; border: 0; border-radius: 8px; background: transparent; color: var(--muted); cursor: pointer; opacity: 0; transition: opacity .15s, background .15s; }
+.prow:hover .pmore, .prow:focus-within .pmore, .prow.menu-on .pmore { opacity: 1; }
+.pmore:hover, .prow.menu-on .pmore { background: var(--active); color: var(--text); }
+.prow:hover .badge, .prow:focus-within .badge, .prow.menu-on .badge { opacity: 0; }
+.prow.menu-on .pitem:not(.on) { background: var(--active); }
+@media (hover: none) { .pmore { opacity: 1; } .prow .badge { right: 36px; } .prow:hover .badge, .prow:focus-within .badge { opacity: 1; } .prow .pitem { padding-right: 64px; } }
+.ctx-back { position: fixed; inset: 0; z-index: 900; }
+.ctx-menu { position: fixed; z-index: 901; min-width: 196px; max-width: min(280px, calc(100vw - 16px)); display: grid; gap: 1px; padding: 5px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; box-shadow: var(--shadow-lg); animation: ctxIn .12s ease-out; }
+@keyframes ctxIn { from { opacity: 0; transform: scale(.97) translateY(-3px); } }
+.ctx-menu button { display: flex; align-items: center; gap: 9px; padding: 7px 9px; border: 0; border-radius: 7px; background: transparent; color: var(--text); font: inherit; font-size: 13px; text-align: left; cursor: pointer; }
+.ctx-menu button .ic { color: var(--muted); flex: none; }
+.ctx-menu button:hover, .ctx-menu button:focus-visible { background: var(--active); outline: none; }
+.ctx-menu button:focus { outline: none; }
+.ctx-menu button.danger, .ctx-menu button.danger .ic { color: var(--danger, #d64545); }
+.ctx-menu button.danger:hover, .ctx-menu button.danger:focus-visible { background: color-mix(in srgb, var(--danger, #d64545) 10%, transparent); }
+.ctx-l { flex: 1; }
+.ctx-menu kbd { font: 500 11px var(--mono); color: var(--dim); }
+.ctx-gap { width: 15px; }
+.ctx-sep { height: 1px; margin: 4px 6px; background: var(--div); }
+.badge { transition: opacity .15s; position: absolute; right: 9px; top: 50%; transform: translateY(-50%); min-width: 20px; height: 20px; padding: 0 6px; border-radius: 10px; background: var(--mark-c); color: #fff; font: 700 11px/20px var(--mono); font-style: normal; text-align: center; }
 .pmain { min-width: 0; min-height: 0; display: flex; flex-direction: column; }
 .hero { position: relative; isolation: isolate; margin: auto; width: min(780px, 100%); padding: 48px 24px; display: grid; gap: 18px; }
 .hero .eyebrow { display: inline-flex; justify-self: start; gap: 6px; align-items: center; padding: 3px 11px; border: 1px solid var(--line); border-radius: 999px; background: var(--panel); font-weight: 600; color: var(--muted); }
@@ -509,7 +532,8 @@ body.resizing iframe, body.resizing video { pointer-events: none; }
   .console { display: flex; flex-direction: column; }
   .plist { display: flex; overflow-x: auto; border-right: 0; border-bottom: 1px solid var(--div); padding: 6px 8px; gap: 4px; }
   .plist-head { display: none; }
-  .pitem { flex: none; max-width: 200px; }
+  .prow { flex: none; max-width: 220px; }
+  .pitem { flex: none; max-width: 220px; }
   .flow { grid-template-columns: 1fr 1fr; }
   .ptitle h1 { max-width: 60vw; }
   .tool-hint { display: none; }

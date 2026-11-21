@@ -9,7 +9,7 @@ const write = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); retu
 const K = { projects: 'sd:projects', inbox: id => 'sd:inbox:' + id, client: id => 'sd:client:' + id, me: 'sd:me' };
 
 export const Store = {
-  projects() { return Object.values(read(K.projects, {})).sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0)); },
+  projects() { return Object.values(read(K.projects, {})).sort((a, b) => (!!b.pinned - !!a.pinned) || (b.updatedAt || 0) - (a.updatedAt || 0)); },
   getProject(id) { return read(K.projects, {})[id] || null; },
   saveProject(p) { const all = read(K.projects, {}); p.updatedAt = Date.now(); all[p.id] = p; return write(K.projects, all); },
   deleteProject(id) { const all = read(K.projects, {}); delete all[id]; write(K.projects, all); localStorage.removeItem(K.inbox(id)); },
