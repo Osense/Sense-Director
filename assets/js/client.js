@@ -6,7 +6,7 @@ import { openZoom } from './zoom.js';
 import { workspaceSplitters } from './layout.js';
 import { replyLink, requestMessage, reportHTML, printHTML, shareFile, STATUS } from './exports.js';
 import { showClientTour, maybeShowClientTour } from './tour.js';
-import { msg, replies, dayLine, composer } from './chat.js';
+import { msg, replies, dayLine, composer, glide } from './chat.js';
 import { t, tn, lang, fmtDateL, fmtMD, langBtnHTML, fmtTime } from './i18n.js';
 
 export async function renderClient(app, params) {
@@ -260,7 +260,7 @@ export async function renderClient(app, params) {
     e.preventDefault();
     const f = e.target.closest('[data-reply]'); const input = $('input', f); const b = input.value.trim(); if (!b) return;
     const card = f.closest('.item');
-    if (card.hasAttribute('data-note')) await noteReply(card.dataset.id, b); else await replyTo(card.dataset.id, b);
+    await glide(list, card.dataset.id, () => card.hasAttribute('data-note') ? noteReply(card.dataset.id, b) : replyTo(card.dataset.id, b));
   });
   $$('[data-tab]', app).forEach(b => b.addEventListener('click', () => { tab = b.dataset.tab; renderList(); }));
   const autoGrow = ta => { ta.style.height = 'auto'; ta.style.height = Math.min(220, ta.scrollHeight + 2) + 'px'; };

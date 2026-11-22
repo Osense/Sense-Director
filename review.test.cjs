@@ -45,7 +45,6 @@ const pointer = (sel, pts) => ev(`(async()=>{const el=document.querySelector(${J
   ok(await ev("document.querySelectorAll('.pin-show span').length===4"), 'PIN shows 4 digits');
   await ev(`(()=>{const t=document.querySelector('[data-f=title]');t.value='단편영화 1차 편집본';t.dispatchEvent(new Event('input',{bubbles:true}));
     const n=document.querySelector('[data-f=notice]');n.value='금요일까지 의견 부탁드려요.';n.dispatchEvent(new Event('input',{bubbles:true}));
-    document.querySelector('.chipbtn').click();
     const d=document.querySelector('[data-f=due]');d.value=new Date(Date.now()+3*864e5).toISOString().slice(0,10);d.dispatchEvent(new Event('change',{bubbles:true}));
     const b=document.querySelector('[data-f=by]');b.value='OSNS 영상팀';b.dispatchEvent(new Event('input',{bubbles:true}));})()`);
   // 재생하면 프레임 수를 스스로 잰다
@@ -166,14 +165,16 @@ const pointer = (sel, pts) => ev(`(async()=>{const el=document.querySelector(${J
   await until("document.querySelectorAll('.pbody.inbox .item').length===3", 8000, 'director inbox');
   await until("document.querySelector('.stage video') && document.querySelector('.stage video').readyState>=1", 8000);
   await ev("document.querySelector('.pbody .item [data-st=done]').click()");
-  await ev("(()=>{const c=document.querySelector('.pbody .item');c.querySelector('[data-q]').click();c.querySelector('[data-reply] button').click();})()");
+  await ev("(()=>{const c=document.querySelector('.pbody .item');const i=c.querySelector('[data-reply] input');i.value='반영하겠습니다';c.querySelector('[data-reply] button').click();})()");
+  await delay(150);
+  ok(await ev("(()=>{const c=document.querySelector('.pbody .item');const m=c.querySelectorAll('.thread .msg');const last=m[m.length-1];const req=c.querySelector('.msg.them .bubble.req').getBoundingClientRect(),list=c.closest('.list').getBoundingClientRect();return last.classList.contains('me')&&last.classList.contains('msg-new')&&last.querySelector('.bubble').getBoundingClientRect().right>list.right-40&&req.left<list.left+70&&req.width<=270&&document.activeElement===c.querySelector('[data-reply] input')&&!document.querySelector('.chipbtn,.qchips')})()"), 'chat: client on the left with a small scene bubble, my reply slides in on the right, input keeps focus, no canned phrases');
   await delay(200);
   await ev("(()=>{const c=document.querySelectorAll('.pbody .item')[1];c.querySelector('[data-st=hold]').click();})()");
   await ev("(()=>{const c=document.querySelectorAll('.pbody .item')[1];const i=c.querySelector('[data-reply] input');i.value='이 부분은 의도된 연출이라 유지할게요';c.querySelector('[data-reply] button').click();})()");
   await delay(200);
   const inbox2 = await ev(`JSON.parse(localStorage.getItem('sd:inbox:${pid}'))`);
   const its = inbox2[0].items.slice().sort((a, b) => a.t - b.t);
-  ok(its[0].st === 'done' && its[0].rp[0].b === '반영하겠습니다' && its[0].rp[0].by === 'd', 'director status + quick reply saved');
+  ok(its[0].st === 'done' && its[0].rp[0].b === '반영하겠습니다' && its[0].rp[0].by === 'd', 'director status + reply saved');
   ok(await ev("document.querySelector('.inbox-stats b').textContent==='1'"), 'progress counts done items');
   await shot('07-director-inbox');
   // 썸네일을 누르면 그 장면으로 이동 (전체화면은 열리지 않음)

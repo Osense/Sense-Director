@@ -9,13 +9,11 @@ import { putMedia, fmtSize } from './media.js';
 import { putDoc, docType, isDoc, resolveSource, canvaFrom, canvaInfo } from './doc.js';
 import { showTour, maybeShowTour } from './tour.js';
 import { openMenu } from './ctxmenu.js';
-import { msg, replies, dayLine, composer } from './chat.js';
+import { msg, replies, dayLine, composer, glide } from './chat.js';
 import { clientLink, feedbackMessage, reportHTML, printHTML, shareFile, parseIncoming, STATUS, noteLabel } from './exports.js';
 import { accountBtnHTML } from './auth.js';
 import { t, tn, lang, fmtDateL, fmtMD, langBtnHTML, fmtTime } from './i18n.js';
 
-const NOTICE_CHIPS = [t('피드백은 마감일까지 부탁드립니다.'), t('수정할 장면에서 멈추고 핀을 찍은 뒤 내용을 적어 주세요.'), t('자막·색보정·음악은 각각 따로 적어 주시면 빨라요.'), t('음악은 저작권 확인 중이라 바뀔 수 있어요.'), t('최종본이 아닌 1차 편집본입니다.')];
-const REPLY_CHIPS = [t('반영하겠습니다'), t('확인했습니다'), t('다음 버전에 반영할게요'), t('논의가 필요해요'), t('원본 의도를 유지할게요')];
 const pin4 = () => String(crypto.getRandomValues(new Uint16Array(1))[0] % 10000).padStart(4, '0');
 
 let V = null; // 현재 재생 화면
@@ -454,7 +452,6 @@ function renderSetup(side, p, main) {
     <div class="card">
       <div class="card-title">${t('클라이언트 안내사항')}</div>
       <textarea class="field-in" data-f="notice" rows="5" placeholder="${t('클라이언트가 처음 열 때 보이는 안내예요. 주의사항·마감·요청 방법을 적어 주세요.')}">${esc(p.notice)}</textarea>
-      <div class="chips" data-chips>${NOTICE_CHIPS.map(c => `<button class="chipbtn" type="button">${esc(c)}</button>`).join('')}</div>
       <div class="two">
         <label class="field"><span>${t('피드백 마감')}</span><input type="date" data-f="due" value="${esc(p.due || '')}"></label>
         <label class="field"><span>${t('보내는 사람(디렉터)')}</span><input data-f="by" value="${esc(p.by || '')}" placeholder="${t('이름·팀')}" maxlength="40"></label>
@@ -523,11 +520,6 @@ function renderSetup(side, p, main) {
   $('[data-upload]', side).addEventListener('change', async e => { if (!e.target.files.length) return; const src = await uploadFile(e.target.files); if (src) changeSrc(src); });
   const bind = (k, ev = 'input') => f(k).addEventListener(ev, e => { p[k] = e.target.value; if (k === 'by') localStorage.setItem('sd:director', p.by); Store.saveProject(p); main._queueLink(); });
   bind('notice'); bind('due', 'change'); bind('by');
-  $('[data-chips]', side).addEventListener('click', e => {
-    const b = e.target.closest('.chipbtn'); if (!b) return;
-    const ta = f('notice'); ta.value = (ta.value.trim() ? ta.value.replace(/\s+$/, '') + '\n' : '') + '· ' + b.textContent;
-    p.notice = ta.value; Store.saveProject(p); main._queueLink(); ta.focus();
-  });
   const setPin = async pin => {
     p.pin = pin; p.salt = uid(6); p.pinHash = await sha(p.salt + pin); Store.saveProject(p);
     $('[data-pin]', side).innerHTML = pin.split('').map(d => `<span>${d}</span>`).join('');
@@ -666,7 +658,6 @@ function renderInbox(side, p, getSel, setSel, hooks, initialPane) {
   }
   function threadHTML(it, from, noteThread = false) {
     return `<div class="thread">${replies(it.rp, 'd', { c: from || t('클라이언트'), d: p.by || t('디렉터') })}
-        ${noteThread ? '' : `<div class="qchips">${REPLY_CHIPS.map(c => `<button class="chipbtn" data-q>${esc(c)}</button>`).join('')}</div>`}
         ${composer(noteThread ? t('답글') : t('댓글로 답하기'), t('댓글 달기'))}
       </div>`;
   }
@@ -707,7 +698,6 @@ function renderInbox(side, p, getSel, setSel, hooks, initialPane) {
         if (ta) { ta.addEventListener('input', () => { const n = noteOf(it.id); if (n) { n.tx = ta.value; saveNotes(); const c = $(`.list [data-id="${it.id}"] [data-ntx]`, side); if (c) c.value = ta.value; } }); if (!it.tx) setTimeout(() => ta.focus(), 260); }
         el.addEventListener('click', ev => {
           const stb = ev.target.closest('[data-st]'); if (stb) { update(it._rid, it.id, x => x.st = stb.dataset.st); api.refresh(); return; }
-          const q = ev.target.closest('[data-q]'); if (q) { const inp = $('[data-reply] input', el); inp.value = q.textContent; inp.focus(); return; }
           if (ev.target.closest('[data-zact=loop]')) { api.close(); setSel(it.id); V && V.loopAround(it.t); }
           if (ev.target.closest('[data-zact=ndel]')) { noteDelete(it.id); if (!visible().length) api.close(); else api.refresh(); }
         });
@@ -749,8 +739,6 @@ function renderInbox(side, p, getSel, setSel, hooks, initialPane) {
     if (isNote && e.target.closest('[data-ndel]')) { noteDelete(id); return; }
     const stb = e.target.closest('[data-st]');
     if (stb) { update(cardEl.dataset.rid, id, x => x.st = stb.dataset.st); return; }
-    const q = e.target.closest('[data-q]');
-    if (q) { const inp = $('[data-reply] input', cardEl); inp.value = q.textContent; inp.focus(); return; }
     if (e.target.closest('[data-loop]')) { setSel(id); V && V.loopAround(it.t); draw(); return; }
     if (e.target.closest('form,input,textarea')) { if (isNote) activeNote = id; return; }
     if (e.target.closest('[data-full]')) { zoom(id); return; }
@@ -761,8 +749,8 @@ function renderInbox(side, p, getSel, setSel, hooks, initialPane) {
   side.addEventListener('submit', e => {
     e.preventDefault();
     const form = e.target.closest('[data-reply]'), cardEl = form.closest('.item'), b = $('input', form).value.trim(); if (!b) return;
-    if (cardEl.hasAttribute('data-note')) { noteReply(cardEl.dataset.id, b); return; }
-    addReply(cardEl.dataset.rid, cardEl.dataset.id, b);
+    if (cardEl.hasAttribute('data-note')) { glide(side, cardEl.dataset.id, () => noteReply(cardEl.dataset.id, b)); return; }
+    glide(side, cardEl.dataset.id, () => addReply(cardEl.dataset.rid, cardEl.dataset.id, b));
     toast(t('댓글을 달았어요. 다 달았으면 "회신 보내기"로 돌려보내 주세요'));
   });
   function bindMenu(root) {
