@@ -142,12 +142,15 @@ export async function renderDirector(app, params) {
   </header>
   <div class="console">
     <nav class="plist" aria-label="${t('프로젝트')}">
-      <div class="plist-head">${t('진행 중')} <b>${active.length}</b></div>
-      ${active.map(row).join('') || t('<div class="plist-empty">진행 중인 프로젝트가 없어요</div>')}
-      ${archived.length ? `<details class="parch" data-parch ${localStorage.getItem('sd:arch-open') === '1' || (cur && cur.done) ? 'open' : ''}>
-        <summary class="plist-head">${ic('down', 13)}${t('완료 보관함')} <b>${archived.length}</b></summary>
-        ${archived.map(row).join('')}</details>` : ''}
-      <div class="plist-foot">${meterHTML(projects)}</div>
+      <div class="plist-plan">${meterHTML(projects)}</div>
+      <div class="plist-sec">
+        <div class="plist-head">${t('진행 중')} <b>${active.length}</b></div>
+        ${active.map(row).join('') || t('<div class="plist-empty">진행 중인 프로젝트가 없어요</div>')}
+      </div>
+      <details class="plist-sec parch" data-parch ${localStorage.getItem('sd:arch-open') !== '0' || (cur && cur.done) ? 'open' : ''}>
+        <summary class="plist-head">${ic('down', 13)}${t('완료된 프로젝트')} <b>${archived.length}</b></summary>
+        ${archived.map(row).join('') || t('<div class="plist-empty">완료로 보관한 프로젝트가 여기에 모여요</div>')}
+      </details>
     </nav>
     <div class="splitter col plist-split" aria-label="${t('프로젝트 목록 너비 조정')}"></div>
     <section class="pmain" data-main></section>

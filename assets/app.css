@@ -530,8 +530,9 @@ body.resizing iframe, body.resizing video { pointer-events: none; }
   .list { overflow: visible; }
   .console { display: flex; flex-direction: column; }
   .plist { display: flex; overflow-x: auto; border-right: 0; border-bottom: 1px solid var(--div); padding: 6px 8px; gap: 4px; }
-  .plist-foot { display: none; }
-  .parch { display: flex; gap: 4px; margin: 0; flex: none; }
+  .plist-plan { display: none; }
+  .plist-sec { display: contents; }
+  .parch { display: flex !important; gap: 4px; margin: 0; flex: none; padding: 0; border: 0; }
   .parch > summary { display: flex !important; padding: 0 8px; border: 1px dashed var(--line); border-radius: var(--rb); font-size: 12px; color: var(--muted); }
   .plist-head { display: none; }
   .prow { flex: none; max-width: 220px; }
@@ -1221,14 +1222,15 @@ html.dark { --chat-bg: oklch(0.2 0.012 260); --bub-them: oklch(0.27 0.01 260); -
 @media (prefers-reduced-motion: reduce) { .msg-new { animation: none; } }
 
 /* 프로젝트 목록: 완료 보관함 · 저장 공간 */
-.parch { display: grid; gap: 2px; margin-top: 8px; }
+.plist-plan { padding: 0 0 12px; }
+.plist-sec { display: grid; gap: 2px; padding: 12px 0 10px; border-top: 1px solid var(--div); }
+.parch { display: grid; gap: 2px; }
 .parch > summary { list-style: none; display: flex; align-items: center; gap: 4px; cursor: pointer; border-radius: 6px; user-select: none; }
 .parch > summary::-webkit-details-marker { display: none; }
 .parch > summary .ic { transform: rotate(-90deg); transition: transform .15s; }
 .parch[open] > summary .ic { transform: none; }
 .parch > summary:hover { color: var(--text); }
 .prow.done .ptn { color: var(--muted); }
-.plist-foot { position: sticky; bottom: -12px; margin: 10px -10px -12px; padding: 10px; background: var(--raised); border-top: 1px solid var(--div); }
 .meter-btn { width: 100%; display: grid; gap: 5px; padding: 8px 9px; border: 1px solid var(--line); border-radius: var(--rb); background: var(--panel); color: var(--text); font: inherit; text-align: left; cursor: pointer; transition: .15s; }
 .meter-btn:hover { border-color: var(--hover-line); }
 .meter-top { display: flex; justify-content: space-between; gap: 8px; font-size: 12px; }

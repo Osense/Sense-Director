@@ -744,10 +744,10 @@ const pointer = (sel, pts) => ev(`(async()=>{const el=document.querySelector(${J
   await until("document.querySelectorAll('.plist .prow').length===1", 5000, 'deleted by key');
   ok(await ev("document.querySelector('.plist .pitem.on') && document.querySelector('.plist .pitem.on').textContent.includes('바뀐 이름')"), 'project menu: Delete key removes another project and stays on the open one');
   /* 11y. 납품 — 최종본 보내기(30일 링크) · 수정 내역서 · 납품 확인서 · 완료 보관함 · 요금제 */
-  await ev(CLEAR); await go(BASE); await until("document.querySelector('[data-drop] input')");
+  await go(BASE); await delay(300); await ev(CLEAR); await go(BASE); await until("document.querySelector('[data-drop] input')");
   await setFile('[data-drop] input', path.join(__dirname, 'test-media', 'clip.mp4'));
   await until("location.hash.includes('tab=setup') && document.querySelector('[data-tab=deliver]')", 15000, 'project for delivery');
-  const dlp = await ev(`(async()=>{const {Store}=await import('/assets/js/store.js');const p=Store.projects()[0];return {id:p.id,pin:p.pin}})()`);
+  const dlp = await ev(`(async()=>{const {Store}=await import('/assets/js/store.js');const p=Store.getProject(location.hash.match(/p=(\\w+)/)[1]);return {id:p.id,pin:p.pin}})()`);
   await ev("document.querySelector('[data-tab=deliver]').click()");
   await until("document.querySelector('[data-dl-drop]')", 6000, 'delivery tab');
   ok(await ev("!!(document.querySelector('[data-doc=history-view]')&&document.querySelector('[data-doc=cert-view]')&&document.querySelector('[data-done=done]'))"), 'delivery tab: send final, revision history, delivery confirmation, finish project');
@@ -755,7 +755,7 @@ const pointer = (sel, pts) => ev(`(async()=>{const el=document.querySelector(${J
   await until("document.querySelector('.dl-card .dl-file') && document.querySelector('.keep-note')", 10000, 'final uploaded');
   ok(await ev("document.querySelector('.keep-note').textContent.includes('30일간 유지') && document.querySelector('.keep-note').textContent.includes('반드시 다운로드해 백업') && /D-30/.test(document.querySelector('.dl-file .dday').textContent)"), 'final: 30-day link with the backup warning and D-30');
   ok(await ev("/MB|KB/.test(document.querySelector('.meter-btn').textContent) && document.querySelector('.meter-btn').textContent.includes('1플랜')"), 'storage meter counts this month\'s uploads');
-  ok(await ev(`(async()=>{const {Store}=await import('/assets/js/store.js');const d=await import('/assets/js/deliver.js');const p=Store.getProject('${dlp.id}');const c=d.certificateHTML(p),h=d.historyHTML(p);return c.includes('납품 확인서')&&c.includes('clip.mp4')&&c.includes('(서명)')&&h.includes('수정 내역서')})()`), 'delivery confirmation and revision history documents');
+  ok(await ev(`(async()=>{const {Store}=await import('/assets/js/store.js');const d=await import('/assets/js/deliver.js');const p=Store.getProject('${dlp.id}');const c=d.certificateHTML(p),h=d.historyHTML(p);const r=[c.includes('납품 확인서'),c.includes('clip.mp4'),c.includes('(서명)'),h.includes('수정 내역서')];return JSON.stringify(r)})()`)==='[true,true,true,true]' || (console.error('DOCDBG', await ev(`(async()=>{const {Store}=await import('/assets/js/store.js');return JSON.stringify(Store.getProject('${dlp.id}').delivery)})()`)), false), 'delivery confirmation and revision history documents');
   const dlLink = await ev(`(async()=>{const {Store}=await import('/assets/js/store.js');const d=await import('/assets/js/deliver.js');return d.deliveryLink(Store.getProject('${dlp.id}'))})()`);
   ok(dlLink.includes('&v=dl'), 'final link built');
   await go(dlLink); await until("document.querySelector('.pin-boxes input') || document.querySelector('.dl-box')", 8000);
@@ -769,8 +769,8 @@ const pointer = (sel, pts) => ev(`(async()=>{const el=document.querySelector(${J
   await go(BASE + '#p=' + dlp.id + '&tab=deliver'); await until("document.querySelector('.dl-state')", 8000);
   ok(await ev("!!document.querySelector('.dl-state .ok') && document.querySelector('.dl-state').textContent.includes('김PD')"), 'director sees the client confirmed receipt');
   await ev("document.querySelector('[data-done=done]').click()");
-  await until("document.querySelector('.parch .prow') && document.querySelector('[data-done=reopen]')", 5000, 'archived');
-  ok(await ev("document.querySelector('.parch').open && document.querySelector('.parch .prow').textContent.includes('수령 확인') && !document.querySelector('.plist > .prow')"), 'finished project moves to the Completed archive (not deleted), with its status');
+  await until("document.querySelector('.parch .prow') && document.querySelector('[data-done=reopen]') && document.querySelector('.parch').open && document.querySelector('.parch .prow').textContent.includes('수령 확인') && !document.querySelector('.plist-sec:not(.parch) .prow') && document.querySelector('.plist').firstElementChild.matches('.plist-plan')", 8000, 'archived');
+  ok(true, 'plan on top; finished project moves to the Completed archive (not deleted), with its status');
   await shot('37-delivery-done');
   await ev("document.querySelector('.meter-btn').click()");
   await until("document.querySelector('.modal .plan-table')", 3000, 'plan dialog');
@@ -780,7 +780,7 @@ const pointer = (sel, pts) => ev(`(async()=>{const el=document.querySelector(${J
   ok(await ev("document.getElementById('toast').textContent.includes('결제')"), 'add-on: payment opens with the server');
   await ev("document.querySelector('.modal .foot .primary').click()"); await delay(200);
   await ev("document.querySelector('[data-done=reopen]').click()");
-  await until("!document.querySelector('.parch') && document.querySelector('.plist > .prow')", 5000, 'reopened');
+  await until("!document.querySelector('.parch .prow') && document.querySelector('.plist-sec:not(.parch) .prow')", 5000, 'reopened');
   ok(true, 'reopen brings it back to in progress');
   await ev("(async()=>{const m=await import('/assets/js/plans.js');window.__big=m.bigFileOk({name:'master.mov',size:2*2**30});})()");
   await until("document.querySelector('.modal .big-warn')", 3000, 'big file warning');
