@@ -1,6 +1,7 @@
 // canva-pages — 공개 캔바 보기 링크의 페이지 수와 화면 비율을 알려 준다.
 // 브라우저는 캔바 페이지를 직접 읽을 수 없어(CORS) 이 함수가 대신 읽는다.
-// GET ?id=<디자인 ID>&tk=<공유 토큰>  →  { pages, w, h }
+// GET ?id=<디자인 ID>&tk=<공유 토큰>          →  { pages, w, h, thumbs }
+// GET ?id=…&tk=…&page=<1부터>                 →  그 페이지 사진(PNG) — 화면 공유 없이 장면 사진을 만들 때
 const ALLOW = [/^https:\/\/osense\.github\.io$/, /^https:\/\/([\w-]+\.)?wsns\.studio$/, /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/];
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
 
@@ -32,7 +33,10 @@ function parse(html: string, id: string) {
   const pages = Array.isArray(d?.A) ? d.A.length : 0;
   if (!pages) return null;
   const w = Number(d?.C?.A) || 0, h = Number(d?.C?.B) || 0;
-  return { pages, w, h };
+  const imgs = Array.isArray(doc.G?.images) ? doc.G.images : [];
+  const thumbs: Record<number, string> = {};
+  for (const im of imgs) if (im && im.page && typeof im.url === 'string') thumbs[im.page] = im.url;
+  return { pages, w, h, thumbs };
 }
 
 Deno.serve(async (req: Request) => {
@@ -51,7 +55,15 @@ Deno.serve(async (req: Request) => {
     if (!r.ok) return send({ error: 'canva-' + r.status }, 502);
     const info = parse(await r.text(), id);
     if (!info) return send({ error: 'not-public' }, 404);
-    return send(info, 200, 'public, max-age=60');
+    const page = Number(q.get('page') || 0);
+    if (page) {
+      const u = info.thumbs[page];
+      if (!u || !/^https:\/\/media\.canva\.com\//.test(u)) return send({ error: 'no-thumb' }, 404);
+      const im = await fetch(u, { headers: { 'User-Agent': UA } });
+      if (!im.ok) return send({ error: 'thumb-' + im.status }, 502);
+      return new Response(im.body, { headers: { ...head, 'Content-Type': 'image/png', 'Cache-Control': 'public, max-age=300' } });
+    }
+    return send({ pages: info.pages, w: info.w, h: info.h, thumbs: Object.keys(info.thumbs).length }, 200, 'public, max-age=60');
   } catch (e) {
     return send({ error: 'fetch-failed', detail: String(e).slice(0, 120) }, 502);
   }

@@ -236,16 +236,32 @@ async function pptxRenderer(data) {
 /* 캔바: 공개 보기·임베드 링크를 페이지 번호(#3)로 연다. 다른 회사 화면이라 그림·페이지 수는 읽을 수 없다
    → 페이지 수·화면비는 디렉터가 정하고, 장면 사진은 보낼 때 화면 공유로 찍는다 */
 function canvaRenderer(src) {
-  let iframe, cur = -1, loadedAt = 0, waiters = [];
+  let iframe, cur = -1, loadedAt = 0, waiters = [], serverOK = false;
   const n = Math.max(1, Math.min(300, +src.n || 1)), ar = src.ar || [16, 9];
-  // 페이지 사진: 화면 공유로 한 번 찍어 두면 이 브라우저에 남는다 (쪽 목록·카드 사진에 바로 쓴다)
+  // 페이지 사진: WSNS 서버가 캔바의 페이지 사진을 대신 받아 온다(화면 공유 없이). 못 받으면 보낼 때 화면 공유로 찍는다
   const cache = new Map(), key = i => `canva:${src.id}:${ar.join('x')}:${i}`;
   const ready = Promise.all(Array.from({ length: n }, (_, i) => getMedia(key(i)).then(v => { if (typeof v === 'string' && v) cache.set(i, v); })));
+  const remember = (i, img) => { if (!img) return; cache.set(i, img); putValue(key(i), img); };
+  const fromServer = async i => {
+    if (!src.id || !src.tk) return '';
+    const img = await canvaPageImage(src, i + 1);
+    if (img) { serverOK = true; remember(i, img); }
+    return img;
+  };
+  // 처음 열 때 모든 페이지 사진을 새로 받아 둔다 (캔바에서 고친 내용도 따라온다)
+  const refresh = (async () => {
+    await ready;
+    if (n > 80) return;
+    const queue = Array.from({ length: n }, (_, i) => i);
+    const worker = async () => { while (queue.length) { const i = queue.shift(); if (!await fromServer(i) && i === 0) { queue.length = 0; } } };
+    await Promise.all([worker(), worker(), worker()]);
+  })();
   return {
-    count: n, size: () => ar, cache, ready,
-    get live() { return cache.size >= n; },
+    count: n, size: () => ar, cache, ready, refresh,
+    get live() { return serverOK || cache.size >= n; },
     capturable: true,
-    remember(i, img) { if (!img) return; cache.set(i, img); putValue(key(i), img); },
+    remember,
+    fromServer,
     mount(el) {
       el.innerHTML = `<iframe class="canva-frame" title="Canva" allow="fullscreen; clipboard-write" allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe>`;
       iframe = el.firstChild;
@@ -256,8 +272,18 @@ function canvaRenderer(src) {
       iframe.src = `${src.url}&sdpage=${i + 1}#${i + 1}`; // 매번 새로 열어 그 페이지가 확실히 나오게
     },
     loaded: () => new Promise(res => { const go = () => setTimeout(res, 1400); loadedAt ? go() : (waiters.push(go), setTimeout(res, 6000)); }),
-    async snap(i) { await ready; return cache.get(Math.round(i)) || ''; },
+    async snap(i) { await ready; i = Math.round(i); if (cache.has(i)) return cache.get(i); await refresh; return cache.get(i) || ''; },
   };
+}
+/** 캔바 페이지 사진 한 장 (data URL) — WSNS 서버 함수 canva-pages?page= */
+export async function canvaPageImage(src, page, ms = 12000) {
+  const ac = new AbortController(), to = setTimeout(() => ac.abort(), ms);
+  try {
+    const r = await fetch(`${WSNS_API}/canva-pages?id=${encodeURIComponent(src.id)}&tk=${encodeURIComponent(src.tk)}&page=${page}`, { signal: ac.signal });
+    if (!r.ok || !(r.headers.get('content-type') || '').startsWith('image/')) return '';
+    const b = await r.blob();
+    return await new Promise(res => { const fr = new FileReader(); fr.onload = () => res(String(fr.result || '')); fr.onerror = () => res(''); fr.readAsDataURL(b); });
+  } catch { return ''; } finally { clearTimeout(to); }
 }
 
 /** 찍은 그림이 거의 한 가지 색인가 (캔바가 아직 그리기 전) */
@@ -331,7 +357,8 @@ export async function initDoc(P, media, src, hooks) {
     async grabAt(x) {
       if (R.live !== false) return R.snap(Math.round(x));
       const have = R.cache && R.cache.get(Math.round(x)); if (have) return have;
-      // 캔바: 그 페이지를 열고 화면 공유 장면에서 찍는다 (보낼 때 한 번)
+      if (R.fromServer) { const img = await R.fromServer(Math.round(x)); if (img) return img; }
+      // 캔바(서버로 못 받을 때): 그 페이지를 열고 화면 공유 장면에서 찍는다 (보낼 때 한 번)
       if (!Cap.active) return '';
       setPage(x); await R.loaded();
       const img = await grabCanva(P, 1280);

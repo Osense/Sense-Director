@@ -305,6 +305,12 @@ function mountDoc(root, src, opts) {
     if (n < 2 && !canCap) { rail.hidden = true; return; }
     rail.hidden = false;
     if (P.renderer && P.renderer.ready) await P.renderer.ready;
+    // 캔바: 서버에서 페이지 사진을 받는 동안 잠깐 기다린다 — 받으면 화면 공유 버튼이 필요 없다
+    const rf = P.renderer && P.renderer.refresh;
+    if (rf && !P.live()) {
+      const done = await Promise.race([rf.then(() => true), new Promise(r => setTimeout(() => r(false), 4000))]);
+      if (!done && !buildRail._wait) { buildRail._wait = true; rf.then(() => { if (!P.destroyed) { thumbs.clear(); buildRail(); } }); }
+    }
     rail.innerHTML = (canCap && !P.live() ? `<button type="button" class="rail-cap" data-railcap title="${t('이 탭을 한 번 공유하면 모든 페이지를 차례로 찍어 쪽 목록에 넣어요. 사진은 이 브라우저에 남고, 카드 장면 사진에도 바로 쓰여요.')}">${ic('camera', 16)}<span>${t('페이지 사진 만들기')}</span></button>` : '') + Array.from({ length: n }, (_, i) => `<button type="button" data-page="${i}" class="${i === P.time() ? 'on' : ''}" aria-label="${tc(i, P.effFps())}"><span class="pthumb"><img alt="" hidden></span><span class="plabel">${i + 1}</span><i class="pcount" hidden></i></button>`).join('');
     railCounts();
     for (let i = 0; i < n; i++) { // 앞쪽부터 차례로 작은 그림을 만든다

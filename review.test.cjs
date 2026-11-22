@@ -598,12 +598,15 @@ const pointer = (sel, pts) => ev(`(async()=>{const el=document.querySelector(${J
   ok(true, 'several photo links become one set (2 pages)');
   // 캔바 — 페이지 수는 WSNS 서버 함수(canva-pages)가 읽어 준다. 검사에서는 그 응답을 흉내 낸다
   const STUB = r => `window.__f=window.__f||fetch;window.__canvaCalls=0;window.fetch=(u,o)=>String(u).includes('/canva-pages')?(window.__canvaCalls++,${r}):window.__f(u,o)`;
-  const STUB_OK = (n, w, h) => STUB(`Promise.resolve(new Response(JSON.stringify({pages:${n},w:${w},h:${h}}),{headers:{'Content-Type':'application/json'}}))`);
+  const PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAJCAIAAAC0SDtlAAAAGklEQVR4XmOsCDjBQApgIkUxCIxqIAaQHEoAvvgBoqqZboMAAAAASUVORK5CYII=';
+  const STUB_OK = (n, w, h) => STUB(`(String(u).includes('page=')?window.__f('${PNG}').then(r=>r.blob()).then(b=>new Response(b,{headers:{'Content-Type':'image/png'}})):Promise.resolve(new Response(JSON.stringify({pages:${n},w:${w},h:${h}}),{headers:{'Content-Type':'application/json'}})))`);
   await ev(CLEAR); await go(BASE); await until("document.querySelector('.hero-form input')");
   await ev(STUB_OK(3, 1080, 1920));
-  await ev("document.querySelector('.hero-form input').value='https://www.canva.com/design/DAGi7rMbwQI/DL_b2qdGHZhErapcUnzRlQ/view';document.querySelector('.hero-form .btn').click()");
+  await ev("document.querySelector('.hero-form input').value='https://www.canva.com/design/DAGauto0001/AutoTok0001xyz/view';document.querySelector('.hero-form .btn').click()");
   await until("document.querySelector('[data-canva=n]') && document.querySelector('[data-dur]') && document.querySelector('[data-dur]').textContent==='3'", 8000, 'canva auto pages');
-  ok(await ev("!document.querySelector('.modal [data-cn]') && window.__canvaCalls===1 && document.querySelector('[data-canva=n]').value==='3' && document.querySelector('[data-canva=ar]').value==='9:16'"), 'Canva: page count and ratio come from the design itself (no question asked)');
+  ok(await ev("!document.querySelector('.modal [data-cn]') && window.__canvaCalls>=1 && document.querySelector('[data-canva=n]').value==='3' && document.querySelector('[data-canva=ar]').value==='9:16'"), 'Canva: page count and ratio come from the design itself (no question asked)');
+  await until("document.querySelectorAll('[data-pages] [data-page] img:not([hidden])').length===3", 8000, 'canva page pictures from server');
+  ok(await ev("!document.querySelector('[data-railcap]')"), 'Canva: page pictures come from the server — no screen share needed');
   await ev(STUB_OK(5, 1920, 1080)); await ev("document.querySelector('[data-canva-sync]').click()");
   await until("document.querySelector('[data-canva=n]') && document.querySelector('[data-canva=n]').value==='5' && document.querySelector('[data-dur]') && document.querySelector('[data-dur]').textContent==='5' && document.querySelectorAll('[data-pages] [data-page]').length===5", 8000, 'canva re-check');
   ok(await ev("document.querySelector('[data-canva=ar]').value==='16:9'"), 'Canva: [다시 확인] picks up pages added in Canva');
