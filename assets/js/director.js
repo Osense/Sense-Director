@@ -9,6 +9,8 @@ import { putMedia, fmtSize } from './media.js';
 import { putDoc, docType, isDoc, resolveSource, canvaFrom, canvaInfo } from './doc.js';
 import { showTour, maybeShowTour } from './tour.js';
 import { openMenu } from './ctxmenu.js';
+import { renderDeliver, deliveryLink, expired } from './deliver.js';
+import { meterHTML, planDialog, fitsFileLimit, bigFileOk } from './plans.js';
 import { msg, replies, dayLine, composer, glide } from './chat.js';
 import { clientLink, feedbackMessage, reportHTML, printHTML, shareFile, parseIncoming, STATUS, noteLabel } from './exports.js';
 import { accountBtnHTML } from './auth.js';
@@ -38,6 +40,10 @@ function wireProjectMenu(list, cur) {
       { label: t('복제'), icon: 'dup', act: () => duplicateProject(p) },
       { label: p.pinned ? t('고정 풀기') : t('맨 위에 고정'), icon: 'top', act: () => { p.pinned = !p.pinned; Store.saveProject(p); rerender(); } },
       p.src ? { label: t('검수 링크 복사'), icon: 'link', act: async () => { const l = await clientLink(p).catch(() => ''); toast(l && await copyText(l) ? t('주소를 복사했어요') : t('복사하지 못했어요')); } } : null,
+      p.delivery && !expired(p.delivery) ? { label: t('최종본 링크 복사'), icon: 'send', act: async () => { const l = await deliveryLink(p).catch(() => ''); toast(l && await copyText(l) ? t('최종본 링크를 복사했어요') : t('복사하지 못했어요')); } } : null,
+      { label: t('납품 · 문서'), icon: 'file', act: () => { location.hash = '#p=' + p.id + '&tab=deliver'; } },
+      p.done ? { label: t('다시 진행하기'), icon: 'undo', act: () => { p.done = 0; Store.saveProject(p); toast(t('다시 진행 중으로 옮겼어요')); rerender(); } }
+        : { label: t('완료로 보관'), icon: 'check', act: () => { p.done = Date.now(); Store.saveProject(p); toast(t('완료 보관함으로 옮겼어요')); rerender(); } },
       '-',
       { label: t('프로젝트 삭제'), icon: 'trash', danger: true, hint: 'Del', act: () => deleteProjectAsk(p, cur && cur.id === p.id) },
     ], { opener, label: p.title || t('제목 없음') });
@@ -78,7 +84,7 @@ async function renameProject(p) {
   rerender(); toast(t('이름을 바꿨어요'));
 }
 async function duplicateProject(p) {
-  const { id, salt, pin, pinHash, createdAt, updatedAt, imported, pinned, ...rest } = Store.getProject(p.id) || p;
+  const { id, salt, pin, pinHash, createdAt, updatedAt, imported, pinned, done, delivery, ...rest } = Store.getProject(p.id) || p;
   const c = await newProject({ ...JSON.parse(JSON.stringify(rest)), title: (p.title || t('제목 없음')) + ' ' + t('사본') });
   location.hash = '#p=' + c.id + '&tab=setup'; toast(t('복제했어요. 받은 수정요청은 복사하지 않아요'), 3200);
 }
@@ -111,6 +117,17 @@ export async function renderDirector(app, params) {
   if (V) { V.destroy(); V = null; }
   document.title = (cur ? (cur.title || t('새 프로젝트')) + ' · ' : '') + t('쎈스 디렉터 · 디렉터 콘솔');
 
+  const active = projects.filter(pr => !pr.done), archived = projects.filter(pr => pr.done).sort((a, b) => b.done - a.done);
+  const row = pr => {
+        const inbox = Store.inbox(pr.id), all = inbox.flatMap(r => r.items), open = pr.done ? 0 : all.filter(it => (it.st || 'open') === 'open').length;
+        const dl = pr.delivery, got = Store.delivery(pr.id);
+        const doneMeta = !pr.done ? "" : `${t("완료")} ${fmtMD(new Date(pr.done))}${dl ? ' · ' + (got && got.okAt ? t('수령 확인') : expired(dl) ? t('최종본 만료') : t('최종본 전달')) : ''}`;
+        return `<div class="prow${pr.pinned ? ' pinned' : ''}${pr.done ? ' done' : ''}" data-pid="${pr.id}"><a class="pitem${cur && cur.id === pr.id ? ' on' : ''}" href="#p=${pr.id}${pr.done ? '&tab=deliver' : open ? '&tab=inbox' : ''}">
+          <span class="pt">${pr.pinned ? `<span class="pin-top" title="${t('맨 위에 고정됨')}">${ic('top', 12)}</span>` : ''}<span class="ptn">${esc(pr.title || t('제목 없음'))}</span></span>
+          <span class="pm">${pr.done ? esc(doneMeta) : `${pr.due ? esc(dueLabel(pr.due)) + ' · ' : ''}${all.length ? `${t('요청')} ${all.length}` : t('요청 없음')}${dl && !expired(dl) ? ' · ' + t('최종본 전달') : ''}`}</span>
+          ${open ? `<i class="badge" title="${t('확인 안 한 요청')}">${open}</i>` : ''}</a>
+          <button type="button" class="pmore" data-pmore aria-label="${t('프로젝트 메뉴')}" title="${t('프로젝트 메뉴 (우클릭)')}">${ic('more', 16)}</button></div>`;
+  };
   app.innerHTML = `
   <header class="topbar">
     ${brandHTML('a', t('href="#" aria-label="쎈스 디렉터 처음으로"'))}
@@ -125,15 +142,12 @@ export async function renderDirector(app, params) {
   </header>
   <div class="console">
     <nav class="plist" aria-label="${t('프로젝트')}">
-      <div class="plist-head">${t('프로젝트')} <b>${projects.length}</b></div>
-      ${projects.map(pr => {
-        const inbox = Store.inbox(pr.id), all = inbox.flatMap(r => r.items), open = all.filter(it => (it.st || 'open') === 'open').length;
-        return `<div class="prow${pr.pinned ? ' pinned' : ''}" data-pid="${pr.id}"><a class="pitem${cur && cur.id === pr.id ? ' on' : ''}" href="#p=${pr.id}${open ? '&tab=inbox' : ''}">
-          <span class="pt">${pr.pinned ? `<span class="pin-top" title="${t('맨 위에 고정됨')}">${ic('top', 12)}</span>` : ''}<span class="ptn">${esc(pr.title || t('제목 없음'))}</span></span>
-          <span class="pm">${pr.due ? esc(dueLabel(pr.due)) + ' · ' : ''}${all.length ? `${t('요청')} ${all.length}` : t('요청 없음')}</span>
-          ${open ? `<i class="badge" title="${t('확인 안 한 요청')}">${open}</i>` : ''}</a>
-          <button type="button" class="pmore" data-pmore aria-label="${t('프로젝트 메뉴')}" title="${t('프로젝트 메뉴 (우클릭)')}">${ic('more', 16)}</button></div>`;
-      }).join('') || t('<div class="plist-empty">아직 프로젝트가 없어요</div>')}
+      <div class="plist-head">${t('진행 중')} <b>${active.length}</b></div>
+      ${active.map(row).join('') || t('<div class="plist-empty">진행 중인 프로젝트가 없어요</div>')}
+      ${archived.length ? `<details class="parch" data-parch ${localStorage.getItem('sd:arch-open') === '1' || (cur && cur.done) ? 'open' : ''}>
+        <summary class="plist-head">${ic('down', 13)}${t('완료 보관함')} <b>${archived.length}</b></summary>
+        ${archived.map(row).join('')}</details>` : ''}
+      <div class="plist-foot">${meterHTML(projects)}</div>
     </nav>
     <div class="splitter col plist-split" aria-label="${t('프로젝트 목록 너비 조정')}"></div>
     <section class="pmain" data-main></section>
@@ -143,6 +157,8 @@ export async function renderDirector(app, params) {
   $('[data-act=tour]', app).addEventListener('click', () => showTour());
   $('[data-act=import]', app).addEventListener('click', () => importDialog());
   wireProjectMenu($('.plist', app), cur);
+  $$('[data-act=plan]', app).forEach(b => b.addEventListener('click', () => planDialog(Store.projects())));
+  const pa = $('[data-parch]', app); pa && pa.addEventListener('toggle', () => localStorage.setItem('sd:arch-open', pa.open ? '1' : '0'));
   const main = $('[data-main]', app);
   if (!cur) return renderHome(main, projects);
   renderProject(main, cur, params.tab || (Store.inbox(cur.id).length ? 'inbox' : 'setup'));
@@ -207,6 +223,7 @@ async function uploadFile(input) {
   else { use = [files[0]]; if (files.length > 1) toast(t('한 번에 하나씩 올려 주세요 — 사진만 여러 장을 한 세트로 올릴 수 있어요'), 4000); }
   if (!kind) { toast(t('영상·PDF·PPT(.pptx)·사진 파일을 골라 주세요')); return null; }
   const size = use.reduce((x, f) => x + f.size, 0), label = use.length > 1 ? `${use[0].name} +${use.length - 1}` : use[0].name;
+  if (kind === 'video') { if (!fitsFileLimit(size)) return null; if (!await bigFileOk(use[0])) return null; }
   let setP;
   const done = modal({
     title: kind === 'video' ? t('영상 올리는 중') : t('문서 올리는 중'), dismissible: false,
@@ -216,7 +233,7 @@ async function uploadFile(input) {
   });
   try {
     let src;
-    if (kind === 'video') { const meta = await putMedia('f' + uid(10), use[0], x => setP && setP(x)); src = { k: 'file', ...meta }; }
+    if (kind === 'video') { const meta = await putMedia('f' + uid(10), use[0], x => setP && setP(x)); src = { k: 'file', ...meta, at: Date.now() }; }
     else src = await putDoc(use, kind, x => setP && setP(x));
     setP(1, true); await done;
     toast(kind === 'video' ? t('영상을 올렸어요') : t('문서를 올렸어요'));
@@ -358,6 +375,7 @@ function renderProject(main, p, tab) {
       <div class="tabs" role="tablist">
         <button role="tab" data-tab="inbox" class="${tab === 'inbox' ? 'on' : ''}">${ic('inbox')}${t('수정요청 · 안내')} <b>${all.length}</b></button>
         <button role="tab" data-tab="setup" class="${tab === 'setup' ? 'on' : ''}">${ic('sliders')}${t('설정 · 공유')}</button>
+        <button role="tab" data-tab="deliver" class="${tab === 'deliver' ? 'on' : ''}">${ic('send')}${t('납품 · 완료')}${p.done ? `<b class="ok">${t('완료')}</b>` : ''}</button>
       </div>
     </div>
     <div class="pbody ${tab}">
@@ -398,6 +416,7 @@ function renderProject(main, p, tab) {
   }
 
   if (tab === 'setup') renderSetup($('[data-side]', main), p, main);
+  else if (tab === 'deliver') renderDeliver($('[data-side]', main), p, rerender);
   else renderInbox($('[data-side]', main), p, () => selected, id => { selected = id; }, hooks, params_pane(p));
 
   document.onkeydown = e => {

@@ -58,7 +58,7 @@ export function feedbackMessage(p, reqs, link) {
 }
 
 /** 혼자 열리는 HTML 보고서. 디렉터 콘솔에 끌어 놓으면 그대로 수신함으로 들어간다. */
-export function reportHTML({ p, reqs, role = 'client', link = '' }) {
+export function reportHTML({ p, reqs, role = 'client', link = '', kind = '' }) {
   const fps = p.fps || 30, ar = p.ar || [16, 9], ytId = p.src && p.src.k === 'yt' ? p.src.id : '', poster = posterOf(p.src, p.pv || p.poster);
   const items = reqs.flatMap(r => r.items.map(it => ({ ...it, from: r.from })));
   const notes = role === 'director' ? (p.notes || []).slice().sort((a, b) => a.t - b.t) : [];
@@ -86,7 +86,7 @@ export function reportHTML({ p, reqs, role = 'client', link = '' }) {
   </article>`).join('');
   const title = esc(p.t || p.title || t('수정요청'));
   return `<!doctype html><html lang="${lang}"><head><meta charset="utf-8"><meta name="color-scheme" content="only light"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>${title} · ${role === 'director' ? t('수정요청 회신') : t('수정요청')}</title>
+<title>${title} · ${kind === 'history' ? t('수정 내역서') : role === 'director' ? t('수정요청 회신') : t('수정요청')}</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@500;600;700&display=swap">
 <style>
@@ -117,7 +117,7 @@ footer{padding:0 clamp(16px,4vw,48px) 40px;color:var(--dim);font-size:12px}
 .lb{position:fixed;inset:0;z-index:9;display:grid;place-items:center;padding:16px;background:#0e0e14f5;cursor:zoom-out}.lb .snap{width:min(100%,calc((100vh - 32px) * var(--ar)));cursor:zoom-out}.lb .snap-zoom{display:none}.lb .pin{transform:scale(1.25)}
 @media print{.snap-zoom,.lb{display:none!important}:root{--bg:#fff}body{font-size:12px}header{padding:0 0 12px}main{padding:12px 0}.card{grid-template-columns:300px 1fr;box-shadow:none}.notice{margin:12px 0 0}.row a{display:none}footer{padding:0}@page{margin:14mm}}
 </style></head><body>
-<header><a class="wm" href="${WSNS_SITE}/" target="_blank" rel="noopener">${logoMarkInline('mk')}<span><b>${t('쎈스 디렉터')}</b><small>WSNS studio <em>[${t('웨스엔에스 스튜디오')}]</em></small></span></a><div class="grow"><div class="eb">${role === 'director' ? t('디렉터 회신') : t('수정요청')}</div><h1>${title}</h1>
+<header><a class="wm" href="${WSNS_SITE}/" target="_blank" rel="noopener">${logoMarkInline('mk')}<span><b>${t('쎈스 디렉터')}</b><small>WSNS studio <em>[${t('웨스엔에스 스튜디오')}]</em></small></span></a><div class="grow"><div class="eb">${kind === 'history' ? t('수정 내역서') : role === 'director' ? t('디렉터 회신') : t('수정요청')}</div><h1>${title}</h1>
 <div class="sum">${items.length}${t('건 ·')} ${esc(reqs.map(r => r.from).filter(Boolean).join(', ') || t('클라이언트'))} · ${fmtDate(Date.now())}${p.d ? ' · ' + esc(dueLabel(p.d)) : ''}</div></div>
 ${link ? `<a href="${esc(link)}">${role === 'director' ? t('클라이언트 화면에서 열기') : t('디렉터 수신함으로 가져오기')}</a>` : ''}</header>
 ${p.n && role === 'director' ? `<div class="notice">${esc(p.n)}</div>` : ''}

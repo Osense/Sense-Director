@@ -95,6 +95,7 @@ export function accountBtnHTML() {
     <button class="btn ghost icon acct-btn" data-act="account" aria-haspopup="menu" title="${esc(u.email)}"><span class="avatar">${init}</span></button>
     <div class="menu acct-menu" role="menu" hidden>
       <div class="acct-who"><b>${esc(u.name || '')}</b><small>${esc(u.email)}</small></div>
+      <button type="button" data-act="plan">${ic('sliders', 15)}<span><b>${t('요금제 · 저장 공간')}</b></span></button>
       <button type="button" data-href="${sitePath('/account')}">${ic('user', 15)}<span><b>${t('WesNS 계정 관리')}</b></span></button>
       <button type="button" data-act="logout">${ic('logout', 15)}<span><b>${t('로그아웃')}</b></span></button>
     </div></div>`;

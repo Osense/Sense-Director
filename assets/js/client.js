@@ -7,6 +7,7 @@ import { workspaceSplitters } from './layout.js';
 import { replyLink, requestMessage, reportHTML, printHTML, shareFile, STATUS } from './exports.js';
 import { showClientTour, maybeShowClientTour } from './tour.js';
 import { msg, replies, dayLine, composer, glide } from './chat.js';
+import { renderDelivery } from './deliver.js';
 import { t, tn, lang, fmtDateL, fmtMD, langBtnHTML, fmtTime } from './i18n.js';
 
 export async function renderClient(app, params) {
@@ -22,6 +23,7 @@ export async function renderClient(app, params) {
     sessionStorage.setItem(okKey, p.ph);
   }
 
+  if (params.v === 'dl' && p.dl) return renderDelivery(app, p);
   const state = Store.client(p.id);
   // 디렉터 회신 링크(&f=)로 들어왔으면 상태·댓글을 합친다
   if (params.f) { try { mergeFeedback(state, await unpack(params.f)); Store.saveClient(p.id, state); toast(t('디렉터 회신을 불러왔어요')); } catch {} }

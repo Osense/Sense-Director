@@ -6,13 +6,17 @@ addEventListener('storage', e => { if (e.key && e.key.startsWith('sd:')) Object.
 
 const read = (k, d) => { try { const v = JSON.parse(localStorage.getItem(k) || 'null'); return v ?? d; } catch { return d; } };
 const write = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); return true; } catch { return false; } };
-const K = { projects: 'sd:projects', inbox: id => 'sd:inbox:' + id, client: id => 'sd:client:' + id, me: 'sd:me' };
+const K = { projects: 'sd:projects', inbox: id => 'sd:inbox:' + id, client: id => 'sd:client:' + id, me: 'sd:me', dl: id => 'sd:dl:' + id };
 
 export const Store = {
   projects() { return Object.values(read(K.projects, {})).sort((a, b) => (!!b.pinned - !!a.pinned) || (b.updatedAt || 0) - (a.updatedAt || 0)); },
   getProject(id) { return read(K.projects, {})[id] || null; },
   saveProject(p) { const all = read(K.projects, {}); p.updatedAt = Date.now(); all[p.id] = p; return write(K.projects, all); },
-  deleteProject(id) { const all = read(K.projects, {}); delete all[id]; write(K.projects, all); localStorage.removeItem(K.inbox(id)); },
+  deleteProject(id) { const all = read(K.projects, {}); delete all[id]; write(K.projects, all); localStorage.removeItem(K.inbox(id)); localStorage.removeItem(K.dl(id)); },
+  /** 최종본 수령 기록 { gotAt, okAt, by } — 목업: 같은 브라우저로 주고받는다 */
+  delivery(pid) { return read(K.dl(pid), null); },
+  saveDelivery(pid, patch) { return write(K.dl(pid), { ...(read(K.dl(pid), {}) || {}), ...patch }); },
+  clearDelivery(pid) { localStorage.removeItem(K.dl(pid)); },
 
   inbox(pid) { return read(K.inbox(pid), []); },
   saveInbox(pid, list) { return write(K.inbox(pid), list); },
@@ -42,6 +46,8 @@ export const Store = {
 
   /** 다른 탭에서 바뀐 내용 알림 — 화면마다 하나의 처리기만 둔다 */
   onChange(cb, scope = 'page') { handlers[scope] = cb; },
+  /** 화면 하나에 처리기를 하나 더 (납품 탭 등) */
+  onChangeAlso(scope, cb) { handlers[scope] = cb; },
 };
 
 /* 같은 수정 포인트가 다시 들어오면 디렉터가 남긴 상태·댓글은 지키고 클라이언트 쪽 내용만 갱신 */
