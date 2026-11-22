@@ -1,6 +1,6 @@
 /* 디렉터 콘솔 — 영상 임베드, 프로젝트·안내사항·핀 설정, 링크 공유, 받은 수정요청에 댓글로 환류 */
 import { $, $$, ic, esc, uid, tc, sha, modal, toast, dueLabel, fmtDate, copyText, shareOrCopy, parseSource, safeName, fpsLabel, unpack, srcText, srcKind, STD_FPS, brandHTML, themeBtnHTML, listViewHTML, toggleListView, saidHTML } from './util.js';
-import { Store, MODE } from './store.js';
+import { Store, MODE, replyKey, mergeReplies } from './store.js';
 import { mountViewer, snapHTML, posterOf } from './viewer.js';
 import { openZoom } from './zoom.js';
 import { splitter, workspaceSplitters } from './layout.js';
@@ -12,7 +12,7 @@ import { openMenu } from './ctxmenu.js';
 import { renderDeliver, deliveryLink, expired } from './deliver.js';
 import { treeHTML, wireFolders, setNewIn, takeNewIn, pickFolder, folderPath, newFolder } from './folders.js';
 import { meterHTML, planDialog, fitsFileLimit, bigFileOk } from './plans.js';
-import { msg, replies, dayLine, composer, glide } from './chat.js';
+import { msg, replies, dayLine, composer, glide, editText, confirmDelete } from './chat.js';
 import { clientLink, feedbackMessage, reportHTML, printHTML, shareFile, parseIncoming, STATUS, noteLabel } from './exports.js';
 import { accountBtnHTML } from './auth.js';
 import { t, tn, lang, fmtDateL, fmtMD, langBtnHTML, fmtTime } from './i18n.js';
@@ -352,7 +352,7 @@ function importInto(pp, reqs) {
   for (const r of reqs) {
     r.items.forEach(it => { it.st = it.st || 'open'; it.rp = it.rp || []; });
     // 클라이언트가 디렉터 안내에 단 답글
-    for (const x of r.nr || []) { const n = (p.notes || []).find(k => k.id === x.id); if (!n) continue; n.rp = n.rp || []; for (const rp of x.rp) if (!n.rp.some(o => o.at === rp.at && o.b === rp.b)) n.rp.push(rp); n.rp.sort((a, b) => a.at - b.at); }
+    for (const x of r.nr || []) { const n = (p.notes || []).find(k => k.id === x.id); if (!n) continue; n.rp = mergeReplies(n.rp, x.rp); }
     if (Store.importRequest(p.id, r)) added++;
   }
   Store.saveProject(p);
@@ -674,7 +674,7 @@ function renderInbox(side, p, getSel, setSel, hooks, initialPane) {
       <div data-snapseek role="button" tabindex="0" aria-label="${n}${t('번 장면으로 이동')}">${snapHTML(it, n, p.ar || [16, 9], poster, undefined, { full: true })}</div>
       ${it.tx ? `<p class="tx">${esc(it.tx)}</p>` : `<p class="tx dim">${t('(내용 없음)')}</p>`}`;
     return `<article class="item chat st-${st}${sel ? ' sel' : ''}" data-id="${it.id}" data-rid="${r.rid}">
-      ${msg({ me: false, side: 'c', name: who, body, at: it.at || r.at, cls: 'req', after: statusSeg(st) })}
+      ${msg({ me: false, side: 'c', name: who, body, at: it.at || r.at, cls: 'req', after: statusSeg(st), meta: it.ed ? `<em class="edited">${t('수정됨')}</em>` : '' })}
       ${threadHTML(it, who)}
     </article>`;
   }
@@ -780,6 +780,43 @@ function renderInbox(side, p, getSel, setSel, hooks, initialPane) {
     setSel(id); if (isNote) activeNote = id;
     if (V) { V.P.pause(); V.P.seek(it.t); if (it.th) V.P.showFreeze(it.th, it.t); const st = V.P.stage.getBoundingClientRect(); if (st.bottom < 0 || st.top > innerHeight) V.P.stage.scrollIntoView({ block: 'start', behavior: 'smooth' }); }
     $$('.item', side).forEach(c => c.classList.toggle('sel', c.dataset.id === id)); V && V.render();
+  });
+  // 말풍선 우클릭 — 내 댓글은 고치기·지우기, 상대 말은 복사, 받은 요청은 상태 바꾸기, 내 안내는 고치기·지우기
+  side.addEventListener('contextmenu', e => {
+    const m = e.target.closest('.msg'), cardEl = e.target.closest('.item');
+    if (!m || !cardEl || e.target.closest('textarea, input')) return;
+    e.preventDefault();
+    const id = cardEl.dataset.id, rid = cardEl.dataset.rid, isNote = cardEl.hasAttribute('data-note');
+    const getIt = () => isNote ? noteOf(id) : (Store.inbox(p.id).find(x => x.rid === rid) || { items: [] }).items.find(x => x.id === id);
+    const it = getIt(); if (!it) return;
+    const copy = txt => ({ label: t('복사'), icon: 'dup', act: async () => toast(await copyText(txt) ? t('복사했어요') : t('복사하지 못했어요')) });
+    const changeReply = (rk, f) => {
+      if (isNote) { const n = noteOf(id); const r = n && (n.rp || []).find(x => replyKey(x) === rk); if (r) { f(r); saveNotes(); draw(); } }
+      else update(rid, id, x => { const r = (x.rp || []).find(y => replyKey(y) === rk); if (r) f(r); });
+    };
+    let items = [];
+    if (m.dataset.rk) {
+      const r = (it.rp || []).find(x => replyKey(x) === m.dataset.rk); if (!r || r.del) return;
+      items = [copy(r.b)];
+      if (r.by === 'd') items.push('-',
+        { label: t('메시지 고치기'), icon: 'rename', act: async () => { const nb = await editText(t('메시지 고치기'), r.b); if (nb && nb !== r.b) { changeReply(m.dataset.rk, x => { x.b = nb; x.ed = Date.now(); }); toast(t('고쳤어요. "회신 보내기"를 하면 클라이언트에게도 바뀌어 보여요'), 3400); } } },
+        { label: t('메시지 삭제'), icon: 'trash', danger: true, act: async () => { if (await confirmDelete(t('메시지를 삭제할까요?'), t('클라이언트 화면에는 "삭제된 메시지예요"로 보여요.'))) changeReply(m.dataset.rk, x => { x.del = true; x.b = ''; x.ed = Date.now(); }); } });
+    } else if (isNote) {
+      items = [
+        { label: t('안내 고치기'), icon: 'rename', act: () => { const ta = $(`.list [data-id="${id}"] [data-ntx]`, side); if (ta) { ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length); } } },
+        copy(it.tx || ''),
+        '-',
+        { label: t('안내 삭제'), icon: 'trash', danger: true, act: () => noteDelete(id) },
+      ];
+    } else {
+      items = [
+        copy(it.tx || ''),
+        { label: t('이 장면으로 이동'), icon: 'next', act: () => { setSel(id); if (V) { V.P.pause(); V.P.seek(it.t); if (it.th) V.P.showFreeze(it.th, it.t); } draw(); } },
+        '-',
+        ...['done', 'doing', 'hold', 'open'].filter(k => (it.st || 'open') !== k).map(k => ({ label: t('{s}(으)로 표시', { s: STATUS[k] }), icon: k === 'done' ? 'check' : 'sliders', act: () => update(rid, id, x => x.st = k) })),
+      ];
+    }
+    openMenu(e.clientX, e.clientY, items, { opener: cardEl });
   });
   side.addEventListener('submit', e => {
     e.preventDefault();

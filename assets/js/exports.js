@@ -29,7 +29,7 @@ export function requestMessage(p, req, link) {
   const dn = (p.dn || p.notes || []).slice().sort((a, b) => a.t - b.t);
   if (req.nr && req.nr.length) {
     lines.push(t('[디렉터 안내에 남긴 답글]'));
-    req.nr.forEach(x => { const k = dn.findIndex(n => n.id === x.id); if (k < 0) return; lines.push(`D${k + 1}  ${tc(dn[k].t, fps)}`); x.rp.forEach(r => lines.push(t('답글: ') + r.b)); lines.push(''); });
+    req.nr.forEach(x => { const k = dn.findIndex(n => n.id === x.id); if (k < 0) return; lines.push(`D${k + 1}  ${tc(dn[k].t, fps)}`); x.rp.filter(r => !r.del).forEach(r => lines.push(t('답글: ') + r.b)); lines.push(''); });
   }
   if (link) lines.push(t('디렉터 수신함으로 바로 가져오기:'), link);
   return lines.join('\n');
@@ -50,7 +50,7 @@ export function feedbackMessage(p, reqs, link) {
   all.forEach((it, i) => {
     lines.push(`${pad2(i + 1)}  ${tc(it.t, fps)}  [${STATUS[it.st || 'open']}]`);
     if (it.tx) lines.push(t('요청: ') + it.tx);
-    (it.rp || []).filter(r => r.by === 'd').forEach(r => lines.push(t('디렉터: ') + r.b));
+    (it.rp || []).filter(r => r.by === 'd' && !r.del).forEach(r => lines.push(t('디렉터: ') + r.b));
     lines.push('');
   });
   if (link) lines.push(t('확인 링크 (핀 번호 필요):'), link);
@@ -71,7 +71,7 @@ export function reportHTML({ p, reqs, role = 'client', link = '', kind = '' }) {
       <div class="row"><span class="no d">D${k + 1}</span><b class="tc">${tc(it.t, fps)}</b><span class="tag dn">${t('디렉터 안내')}</span>${ytLink(it.t) ? `<a href="${ytLink(it.t)}" target="_blank" rel="noopener">${t('이 시점 보기')}</a>` : ''}</div>
       <div class="pos">${esc(pinTxt(it))}</div>
       <p class="tx">${esc(it.tx || t('(내용 없음)'))}</p>
-      ${(it.rp || []).map(r => `<div class="rp ${r.by === 'd' ? 'd' : 'c'}"><b>${r.by === 'd' ? t('디렉터') : esc(r.n || t('클라이언트'))}</b><span>${esc(r.b)}</span><time>${fmtDate(r.at)}</time></div>`).join('')}
+      ${(it.rp || []).filter(r => !r.del).map(r => `<div class="rp ${r.by === 'd' ? 'd' : 'c'}"><b>${r.by === 'd' ? t('디렉터') : esc(r.n || t('클라이언트'))}</b><span>${esc(r.b)}</span><time>${fmtDate(r.at)}</time></div>`).join('')}
     </div>
   </article>`).join('');
   const cards = items.map((it, i) => `
@@ -81,7 +81,7 @@ export function reportHTML({ p, reqs, role = 'client', link = '', kind = '' }) {
       <div class="row"><span class="no">${pad2(i + 1)}</span><b class="tc">${tc(it.t, fps)}</b><span class="tag st-${it.st || 'open'}">${STATUS[it.st || 'open']}</span>${ytLink(it.t) ? `<a href="${ytLink(it.t)}" target="_blank" rel="noopener">${t('이 시점 보기')}</a>` : ''}</div>
       <div class="pos">${esc(pinTxt(it))}${it.from ? ' · ' + esc(it.from) : ''}</div>
       <p class="tx">${esc(it.tx || t('(내용 없음)'))}</p>
-      ${(it.rp || []).map(r => `<div class="rp ${r.by === 'd' ? 'd' : 'c'}"><b>${r.by === 'd' ? t('디렉터') : esc(r.n || t('클라이언트'))}</b><span>${esc(r.b)}</span><time>${fmtDate(r.at)}</time></div>`).join('')}
+      ${(it.rp || []).filter(r => !r.del).map(r => `<div class="rp ${r.by === 'd' ? 'd' : 'c'}"><b>${r.by === 'd' ? t('디렉터') : esc(r.n || t('클라이언트'))}</b><span>${esc(r.b)}</span><time>${fmtDate(r.at)}</time></div>`).join('')}
     </div>
   </article>`).join('');
   const title = esc(p.t || p.title || t('수정요청'));

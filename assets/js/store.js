@@ -53,7 +53,8 @@ export const Store = {
   async submit(pid, req) {
     const list = read(K.inbox(pid), []);
     const i = list.findIndex(r => r.rid === req.rid);
-    if (i >= 0) list[i] = { ...list[i], ...req, items: mergeItems(list[i].items, req.items) }; else list.push(req);
+    if (i >= 0) list[i] = { ...list[i], ...req, items: mergeItems(list[i].items, req.items) };
+    else { const items = (req.items || []).filter(x => !x.del); if (!items.length && (req.items || []).length) return { delivered: MODE }; list.push({ ...req, items }); }
     const ok = write(K.inbox(pid), list);
     if (!ok) { // 용량 초과: 스냅샷 없이 다시 시도
       const slim = list.map(r => ({ ...r, items: r.items.map(({ th, ...it }) => it) }));
@@ -83,12 +84,22 @@ export const Store = {
 function mergeItems(oldItems = [], newItems = [], keepThumb = false) {
   const map = new Map(oldItems.map(it => [it.id, it]));
   for (const it of newItems) {
+    if (it.del) { map.delete(it.id); continue; } // 클라이언트가 취소한 요청
     const o = map.get(it.id);
     if (!o) { map.set(it.id, it); continue; }
-    const rp = [...(o.rp || [])];
-    for (const r of it.rp || []) if (!rp.some(x => x.at === r.at && x.b === r.b)) rp.push(r);
-    map.set(it.id, { ...o, ...it, th: it.th || (keepThumb ? o.th : o.th), st: o.st || it.st, rp: rp.sort((a, b) => a.at - b.at) });
+    map.set(it.id, { ...o, ...it, th: it.th || (keepThumb ? o.th : o.th), st: o.st || it.st, rp: mergeReplies(o.rp, it.rp) });
   }
   return [...map.values()].sort((a, b) => a.t - b.t);
+}
+/* 댓글 하나는 (보낸 쪽, 처음 보낸 시각)으로 알아본다. 고치면 ed(고친 시각)가, 지우면 del이 붙고 — 더 최근 것이 이긴다.
+   DB에서는 replies 표의 id 하나로 같은 일을 한다. */
+export const replyKey = r => (r.by || '') + ':' + r.at;
+export function mergeReplies(a = [], b = []) {
+  const m = new Map();
+  for (const r of [...(a || []), ...(b || [])]) {
+    const k = replyKey(r), o = m.get(k);
+    if (!o || (r.ed || r.at) >= (o.ed || o.at)) m.set(k, r);
+  }
+  return [...m.values()].sort((x, y) => x.at - y.at);
 }
 export { mergeItems };

@@ -833,6 +833,46 @@ const pointer = (sel, pts) => ev(`(async()=>{const el=document.querySelector(${J
     ok(true, 'Alt+arrow moves a project up/down');
   }
   await shot('40-folders-reorder');
+  /* 11w. 말풍선 우클릭 — 보낸 메시지 고치기·지우기 (디렉터 · 클라이언트) */
+  await go(BASE); await delay(300); await ev(CLEAR); await go(BASE); await until("document.querySelector('.hero-form input')");
+  await ev(`document.querySelector('.hero-form input').value=${JSON.stringify(VIDEO)};document.querySelector('.hero-form .btn').click()`);
+  await until("location.hash.includes('tab=setup')", 8000, 'project for edit test');
+  const ed = await ev(`(async()=>{const {Store}=await import('/assets/js/store.js');const p=Store.getProject(location.hash.match(/p=(\\w+)/)[1]);const at=Date.now()-60000;
+    const req={rid:'r1',from:'김PD',at,items:[{id:'i1',t:1,x:.5,y:.5,tx:'로고를 키워 주세요',st:'open',rp:[],at},{id:'i2',t:2,x:.3,y:.3,tx:'자막 오타',st:'open',rp:[],at}]};
+    await Store.submit(p.id, JSON.parse(JSON.stringify(req)));
+    Store.saveClient(p.id,{from:'김PD',draft:[],sent:[JSON.parse(JSON.stringify(req))]});
+    const {clientLink}=await import('/assets/js/exports.js');return {id:p.id,pin:p.pin,link:await clientLink(p)}})()`);
+  await go(BASE + '#p=' + ed.id + '&tab=inbox'); await until("document.querySelector('.item[data-id=i1] [data-reply] input')", 8000, 'inbox for edit');
+  await ev("(()=>{const c=document.querySelector('.item[data-id=i1]');c.querySelector('[data-reply] input').value='오타가 있는 답';c.querySelector('[data-reply] button').click()})()");
+  await until("document.querySelector('.item[data-id=i1] .msg.me[data-rk]')", 4000, 'director reply');
+  const rclick = sel => ev(`(()=>{const el=document.querySelector(${JSON.stringify(sel)}),r=el.getBoundingClientRect();el.dispatchEvent(new MouseEvent('contextmenu',{bubbles:true,cancelable:true,clientX:r.left+10,clientY:r.top+8}))})()`);
+  const pickMenu = async label => { await until("document.querySelector('.ctx-menu')", 3000, 'msg menu'); await ev(`[...document.querySelectorAll('.ctx-menu button')].find(b=>b.textContent.startsWith(${JSON.stringify(label)})).click()`); };
+  const editTo = async v => { await until("document.querySelector('.modal [data-edit]')", 3000, 'edit dialog'); await ev(`(()=>{const ta=document.querySelector('.modal [data-edit]');ta.value=${JSON.stringify(v)};ta.dispatchEvent(new Event('input',{bubbles:true}));document.querySelector('.modal .foot .primary').click()})()`); };
+  await rclick('.item[data-id=i1] .msg.me[data-rk] .bubble'); await pickMenu('메시지 고치기'); await editTo('반영할게요, 로고 1.5배');
+  await until("document.querySelector('.item[data-id=i1] .msg.me[data-rk]').textContent.includes('로고 1.5배')", 4000, 'edited');
+  ok(await ev("document.querySelector('.item[data-id=i1] .msg.me[data-rk] .edited')!==null"), 'director: right-click → edit my message (marked edited)');
+  await rclick('.item[data-id=i1] .msg.me[data-rk] .bubble'); await pickMenu('메시지 삭제');
+  await until("document.querySelector('.modal .foot .danger')", 3000); await ev("document.querySelector('.modal .foot .danger').click()");
+  await until("document.querySelector('.item[data-id=i1] .msg.me[data-gone]')", 4000, 'deleted');
+  ok(await ev("document.querySelector('.item[data-id=i1] .msg.me[data-gone]').textContent.includes('삭제된 메시지예요')"), 'director: right-click → delete my message (shows deleted)');
+  await rclick('.item[data-id=i2] .bubble.req'); await until("document.querySelector('.ctx-menu')", 3000);
+  ok(await ev("(()=>{const l=[...document.querySelectorAll('.ctx-menu button')].map(b=>b.textContent);return l.some(x=>x.startsWith('복사'))&&l.some(x=>x.includes('반영'))&&!l.some(x=>x.includes('고치기'))})()"), 'director: client request menu has copy and status, no editing');
+  await pickMenu('반영');
+  await until("document.querySelector('.item[data-id=i2] [data-st=done].on')", 4000, 'status by menu');
+  ok(true, 'director: mark status from the menu');
+  await shot('41-msg-edit');
+  // 클라이언트
+  await go(ed.link); await until("document.querySelector('.pin-boxes input')", 8000); await typePin(ed.pin);
+  await until("document.querySelector('[data-tab=sent]')", 8000, 'client');
+  await ev("document.querySelector('[data-tab=sent]').click()"); await until("document.querySelector('.item.sent[data-id=i2]')", 5000, 'sent list');
+  ok(await ev("!!document.querySelector('.item[data-id=i1] [data-gone]')"), 'client sees the director\'s deleted message as deleted');
+  await rclick('.item.sent[data-id=i2] .bubble.req'); await pickMenu('요청 내용 고치기'); await editTo('자막 2번째 줄 오타 — "됬" → "됐"');
+  await until("document.querySelector('.item.sent[data-id=i2] .tx').textContent.includes('됐')", 4000, 'client edited');
+  ok(await ev(`(async()=>{const {Store}=await import('/assets/js/store.js');const it=Store.inbox('${ed.id}')[0].items.find(x=>x.id==='i2');return it.tx.includes('됐')&&!!it.ed&&it.st==='done'})()`), 'client: edit a sent request — director inbox updates, status kept');
+  await rclick('.item.sent[data-id=i1] .bubble.req'); await pickMenu('요청 취소');
+  await until("document.querySelector('.modal .foot .danger')", 3000); await ev("document.querySelector('.modal .foot .danger').click()");
+  await until("!document.querySelector('.item[data-id=i1]')", 4000, 'client canceled');
+  ok(await ev(`(async()=>{const {Store}=await import('/assets/js/store.js');return Store.inbox('${ed.id}')[0].items.map(x=>x.id).join()==='i2'})()`), 'client: cancel a sent request — removed from the director inbox too');
   /* 11y. 납품 — 최종본 보내기(30일 링크) · 수정 내역서 · 납품 확인서 · 완료 보관함 · 요금제 */
   await go(BASE); await delay(300); await ev(CLEAR); await go(BASE); await until("document.querySelector('[data-drop] input')");
   await setFile('[data-drop] input', path.join(__dirname, 'test-media', 'clip.mp4'));

@@ -1,12 +1,13 @@
 /* 클라이언트 화면 — 핀 번호로 들어와 핀·펜으로 수정요청을 남기고 디렉터에게 보낸다 */
 import { $, $$, ic, esc, uid, tc, sha, unpack, modal, toast, dueLabel, fmtDate, copyText, shareOrCopy, safeName, fpsLabel, brandHTML, themeBtnHTML, listViewHTML, toggleListView, logoStacked, pronHTML, WSNS_HOME, saidHTML } from './util.js';
-import { Store, MODE } from './store.js';
+import { Store, MODE, replyKey, mergeReplies } from './store.js';
+import { openMenu } from './ctxmenu.js';
 import { mountViewer, snapHTML, posterOf } from './viewer.js';
 import { openZoom } from './zoom.js';
 import { workspaceSplitters } from './layout.js';
 import { replyLink, requestMessage, reportHTML, printHTML, shareFile, STATUS } from './exports.js';
 import { showClientTour, maybeShowClientTour } from './tour.js';
-import { msg, replies, dayLine, composer, glide } from './chat.js';
+import { msg, replies, dayLine, composer, glide, editText, confirmDelete } from './chat.js';
 import { renderDelivery } from './deliver.js';
 import { t, tn, lang, fmtDateL, fmtMD, langBtnHTML, fmtTime } from './i18n.js';
 
@@ -74,9 +75,7 @@ export async function renderClient(app, params) {
   const notes = () => {
     const sp = Store.getProject(p.id), base = (sp && sp.notes) || p.dn || [];
     return base.map(n => {
-      const rp = [...(n.rp || [])];
-      for (const x of state.nr[n.id] || []) if (!rp.some(o => o.at === x.at && o.b === x.b)) rp.push(x);
-      return { ...n, by: 'd', rp: rp.sort((a, b) => a.at - b.at) };
+      return { ...n, by: 'd', rp: mergeReplies(n.rp, state.nr[n.id]) };
     }).sort((a, b) => a.t - b.t);
   };
   const labelOf = it => it.by === 'd' ? 'D' + (notes().findIndex(n => n.id === it.id) + 1) : String(numOf(it.id)).padStart(2, '0');
@@ -128,7 +127,7 @@ export async function renderClient(app, params) {
       <div data-zoom role="button" tabindex="0" aria-label="${n}${t('번 크게 보기')}">${snapHTML(it, n, P.ar, posterOf(p.src, P.poster || p.pv), sent ? t('장면 사진 없음') : t('장면 사진은 보낼 때 자동으로 붙어요'))}</div>
       ${sent ? (it.tx ? `<p class="tx">${esc(it.tx)}</p>` : `<p class="tx dim">${t('(내용 없음)')}</p>`) : `<textarea rows="2" placeholder="${t('어떻게 고치면 좋을지 적어 주세요')}" data-tx>${esc(it.tx)}</textarea>`}`;
     return `<article class="item chat${it.id === selected ? ' sel' : ''}${sent ? ' sent' : ''}" data-id="${it.id}">
-      ${msg({ me: true, side: 'c', name: t('나'), body, at: sent ? (it._at || it.at) : it.at, cls: 'req', meta: sent ? '' : `<em>${t('보내기 전')}</em>` })}
+      ${msg({ me: true, side: 'c', name: t('나'), body, at: sent ? (it._at || it.at) : it.at, cls: 'req', meta: sent ? (it.ed ? `<em class="edited">${t('수정됨')}</em>` : '') : `<em>${t('보내기 전')}</em>` })}
       ${thread(it, sent)}
     </article>`;
   }
@@ -211,6 +210,61 @@ export async function renderClient(app, params) {
     if (it.th) P.showFreeze(it.th, it.t);
     $$('.item', list).forEach(c => c.classList.toggle('sel', c.dataset.id === id));
     V.render();
+  });
+  // 말풍선 우클릭 — 내 요청·답글은 고치기·지우기, 디렉터 말은 복사
+  const sentReqOf = id => state.sent.find(r => r.items.some(it => it.id === id));
+  const changeNoteReply = (nid, rk, f) => {
+    const sp = Store.getProject(p.id), n = sp && (sp.notes || []).find(x => x.id === nid);
+    let hit = false;
+    if (n) { const r = (n.rp || []).find(x => replyKey(x) === rk); if (r) { f(r); Store.saveProject(sp); hit = true; } }
+    const mine = (state.nr[nid] || []).find(x => replyKey(x) === rk);
+    if (mine) { f(mine); if (!n) mine.pending = true; save(); hit = true; }
+    else if (!n) { const base = (p.dn || []).find(x => x.id === nid), r = base && (base.rp || []).find(x => replyKey(x) === rk); if (r) { const c = { ...r }; f(c); state.nr[nid] = [...(state.nr[nid] || []), { ...c, pending: true }]; save(); hit = true; } }
+    return hit;
+  };
+  list.addEventListener('contextmenu', e => {
+    const m = e.target.closest('.msg'), card = e.target.closest('.item');
+    if (!m || !card || e.target.closest('textarea, input')) return;
+    e.preventDefault();
+    const id = card.dataset.id, isNote = card.hasAttribute('data-note');
+    const copy = txt => ({ label: t('복사'), icon: 'dup', act: async () => toast(await copyText(txt) ? t('복사했어요') : t('복사하지 못했어요')) });
+    let items = [];
+    if (m.dataset.rk) {
+      const rk = m.dataset.rk, all = isNote ? (notes().find(n => n.id === id) || {}).rp || [] : (allItems().find(x => x.id === id) || {}).rp || [];
+      const r = all.find(x => replyKey(x) === rk); if (!r || r.del) return;
+      items = [copy(r.b)];
+      if (r.by === 'c') {
+        const apply = async f => {
+          if (isNote) changeNoteReply(id, rk, f);
+          else { const req = sentReqOf(id), it = req && req.items.find(x => x.id === id), x = it && (it.rp || []).find(y => replyKey(y) === rk); if (!x) return; f(x); save(); await Store.submit(p.id, req); }
+          renderList();
+        };
+        items.push('-',
+          { label: t('답글 고치기'), icon: 'rename', act: async () => { const nb = await editText(t('답글 고치기'), r.b); if (nb && nb !== r.b) { await apply(x => { x.b = nb; x.ed = Date.now(); }); toast(t('고쳤어요')); } } },
+          { label: t('답글 삭제'), icon: 'trash', danger: true, act: async () => { if (await confirmDelete(t('답글을 삭제할까요?'), t('디렉터 화면에는 "삭제된 메시지예요"로 보여요.'))) { await apply(x => { x.del = true; x.b = ''; x.ed = Date.now(); }); toast(t('삭제했어요')); } } });
+      }
+    } else if (isNote) {
+      const n = notes().find(x => x.id === id); items = [copy((n && n.tx) || '')];
+    } else if (card.classList.contains('sent')) {
+      const req = sentReqOf(id), it = req && req.items.find(x => x.id === id); if (!it) return;
+      items = [copy(it.tx || ''), '-',
+        { label: t('요청 내용 고치기'), icon: 'rename', act: async () => {
+          const nb = await editText(t('요청 내용 고치기'), it.tx || '', t('어떻게 고치면 좋을지 적어 주세요'));
+          if (nb == null || nb === (it.tx || '')) return;
+          it.tx = nb; it.ed = Date.now(); save(); await Store.submit(p.id, req); renderList();
+          toast(MODE === 'mock' ? t('고쳤어요. 디렉터 화면에도 바뀐 내용이 보여요') : t('고쳤어요'));
+        } },
+        { label: t('요청 취소(삭제)'), icon: 'trash', danger: true, act: async () => {
+          if (!await confirmDelete(t('이 요청을 취소할까요?'), t('디렉터의 수신함에서도 지워지고, 이 요청에 달린 댓글도 함께 사라져요.'))) return;
+          req.items = req.items.filter(x => x.id !== id); save();
+          await Store.submit(p.id, { ...req, items: [{ id, del: true }] });
+          if (selected === id) selected = null; renderList(); toast(t('요청을 취소했어요'));
+        } }];
+    } else {
+      const it = state.draft.find(x => x.id === id);
+      items = [copy((it && it.tx) || ''), '-', { label: t('삭제'), icon: 'trash', danger: true, act: () => { const b = $('[data-del]', card); b && b.click(); } }];
+    }
+    openMenu(e.clientX, e.clientY, items, { opener: card });
   });
   list.addEventListener('keydown', e => { if ((e.key === 'Enter' || e.key === ' ') && e.target.matches('[data-zoom]')) { e.preventDefault(); zoom(e.target.closest('.item').dataset.id); } });
 
