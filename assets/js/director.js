@@ -10,6 +10,7 @@ import { putDoc, docType, isDoc, resolveSource, canvaFrom, canvaInfo } from './d
 import { showTour, maybeShowTour } from './tour.js';
 import { openMenu } from './ctxmenu.js';
 import { renderDeliver, deliveryLink, expired } from './deliver.js';
+import { treeHTML, wireFolders, setNewIn, takeNewIn, pickFolder, folderPath } from './folders.js';
 import { meterHTML, planDialog, fitsFileLimit, bigFileOk } from './plans.js';
 import { msg, replies, dayLine, composer, glide } from './chat.js';
 import { clientLink, feedbackMessage, reportHTML, printHTML, shareFile, parseIncoming, STATUS, noteLabel } from './exports.js';
@@ -21,7 +22,8 @@ const pin4 = () => String(crypto.getRandomValues(new Uint16Array(1))[0] % 10000)
 let V = null; // 현재 재생 화면
 
 export async function newProject(fields = {}) {
-  const p = { id: uid(8), salt: uid(6), pin: pin4(), title: '', notice: '', due: '', by: localStorage.getItem('sd:director') || '', src: null, ar: [16, 9], fps: 0, createdAt: Date.now(), ...fields };
+  const folderId = 'folderId' in fields ? fields.folderId : takeNewIn();
+  const p = { id: uid(8), salt: uid(6), pin: pin4(), title: '', notice: '', due: '', by: localStorage.getItem('sd:director') || '', src: null, ar: [16, 9], fps: 0, createdAt: Date.now(), ...fields, folderId: folderId || null };
   p.pinHash = await sha(p.salt + p.pin);
   Store.saveProject(p);
   return p;
@@ -38,6 +40,10 @@ function wireProjectMenu(list, cur) {
       '-',
       { label: t('이름 바꾸기'), icon: 'rename', hint: 'F2', act: () => renameProject(p) },
       { label: t('복제'), icon: 'dup', act: () => duplicateProject(p) },
+      !p.done ? { label: t('폴더로 이동…'), icon: 'folder', act: async () => {
+        const to = await pickFolder({ current: p.folderId || null }); if (to === null) return;
+        Store.moveProject(p.id, to || null); toast(to ? t('"{f}" 폴더로 옮겼어요', { f: Store.getFolder(to).name }) : t('폴더 밖으로 꺼냈어요')); rerender();
+      } } : null,
       { label: p.pinned ? t('고정 풀기') : t('맨 위에 고정'), icon: 'top', act: () => { p.pinned = !p.pinned; Store.saveProject(p); rerender(); } },
       p.src ? { label: t('검수 링크 복사'), icon: 'link', act: async () => { const l = await clientLink(p).catch(() => ''); toast(l && await copyText(l) ? t('주소를 복사했어요') : t('복사하지 못했어요')); } } : null,
       p.delivery && !expired(p.delivery) ? { label: t('최종본 링크 복사'), icon: 'send', act: async () => { const l = await deliveryLink(p).catch(() => ''); toast(l && await copyText(l) ? t('최종본 링크를 복사했어요') : t('복사하지 못했어요')); } } : null,
@@ -121,7 +127,7 @@ export async function renderDirector(app, params) {
   const row = pr => {
         const inbox = Store.inbox(pr.id), all = inbox.flatMap(r => r.items), open = pr.done ? 0 : all.filter(it => (it.st || 'open') === 'open').length;
         const dl = pr.delivery, got = Store.delivery(pr.id);
-        const doneMeta = !pr.done ? "" : `${t("완료")} ${fmtMD(new Date(pr.done))}${dl ? ' · ' + (got && got.okAt ? t('수령 확인') : expired(dl) ? t('최종본 만료') : t('최종본 전달')) : ''}`;
+        const doneMeta = !pr.done ? "" : `${pr.folderId && Store.getFolder(pr.folderId) ? folderPath(pr.folderId) + ' · ' : ''}${t("완료")} ${fmtMD(new Date(pr.done))}${dl ? ' · ' + (got && got.okAt ? t('수령 확인') : expired(dl) ? t('최종본 만료') : t('최종본 전달')) : ''}`;
         return `<div class="prow${pr.pinned ? ' pinned' : ''}${pr.done ? ' done' : ''}" data-pid="${pr.id}"><a class="pitem${cur && cur.id === pr.id ? ' on' : ''}" href="#p=${pr.id}${pr.done ? '&tab=deliver' : open ? '&tab=inbox' : ''}">
           <span class="pt">${pr.pinned ? `<span class="pin-top" title="${t('맨 위에 고정됨')}">${ic('top', 12)}</span>` : ''}<span class="ptn">${esc(pr.title || t('제목 없음'))}</span></span>
           <span class="pm">${pr.done ? esc(doneMeta) : `${pr.due ? esc(dueLabel(pr.due)) + ' · ' : ''}${all.length ? `${t('요청')} ${all.length}` : t('요청 없음')}${dl && !expired(dl) ? ' · ' + t('최종본 전달') : ''}`}</span>
@@ -144,8 +150,8 @@ export async function renderDirector(app, params) {
     <nav class="plist" aria-label="${t('프로젝트')}">
       <div class="plist-plan">${meterHTML(projects)}</div>
       <div class="plist-sec">
-        <div class="plist-head">${t('진행 중')} <b>${active.length}</b></div>
-        ${active.map(row).join('') || t('<div class="plist-empty">진행 중인 프로젝트가 없어요</div>')}
+        <div class="plist-head" data-root-drop title="${t('여기에 놓으면 폴더 밖으로 꺼내요')}">${t('진행 중')} <b>${active.length}</b><button type="button" class="fnew" data-newfolder aria-label="${t('새 폴더')}" title="${t('새 폴더')}">${ic('folderPlus', 16)}</button></div>
+        ${treeHTML(active, row, cur && cur.id) || t('<div class="plist-empty">진행 중인 프로젝트가 없어요</div>')}
       </div>
       <details class="plist-sec parch" data-parch ${localStorage.getItem('sd:arch-open') !== '0' || (cur && cur.done) ? 'open' : ''}>
         <summary class="plist-head">${ic('down', 13)}${t('완료된 프로젝트')} <b>${archived.length}</b></summary>
@@ -160,6 +166,7 @@ export async function renderDirector(app, params) {
   $('[data-act=tour]', app).addEventListener('click', () => showTour());
   $('[data-act=import]', app).addEventListener('click', () => importDialog());
   wireProjectMenu($('.plist', app), cur);
+  wireFolders($('.plist', app), { onChange: rerender, onNewIn: fid => newDialog(fid) });
   $$('[data-act=plan]', app).forEach(b => b.addEventListener('click', () => planDialog(Store.projects())));
   const pa = $('[data-parch]', app); pa && pa.addEventListener('toggle', () => localStorage.setItem('sd:arch-open', pa.open ? '1' : '0'));
   const main = $('[data-main]', app);
@@ -203,16 +210,18 @@ function wireSourcePicker(root, before = () => {}) {
 }
 
 /** 새 프로젝트 — 첫 화면처럼 팝업에서 영상·문서를 바로 넣는다 */
-function newDialog() {
+function newDialog(folderId = null) {
   if (document.querySelector('.modal.new-dlg')) return;
+  setNewIn(folderId);
+  const fpath = folderId && Store.getFolder(folderId) ? folderPath(folderId) : '';
   modal({
     title: t('새 프로젝트'),
-    body: `<p class="note dim new-lead">${t('영상 링크를 붙여 넣거나 파일을 올리면 검수 링크가 바로 만들어져요.')}</p>
+    body: `${fpath ? `<p class="new-in">${ic('folder', 14)}<span>${esc(fpath)}</span>${t('폴더에 만들어요')}</p>` : ''}<p class="note dim new-lead">${t('영상 링크를 붙여 넣거나 파일을 올리면 검수 링크가 바로 만들어져요.')}</p>
       <form class="hero-form" data-hero><input placeholder="${t('유튜브 · 비메오 · 캔바 링크, 영상 · PDF · 사진 주소')}" aria-label="${t('영상 링크')}" autofocus><button class="btn brand">${ic('plus')}${t('만들기')}</button></form>
       <label class="drop-file" data-drop>${ic('import', 18)}<span><b>${t('파일 올리기')}</b><small>${t('영상 · PDF · PPT(.pptx) · 사진 — 끌어 놓거나 눌러서 고르기')}</small></span><input type="file" accept="${ACC}" multiple hidden></label>`,
     actions: [{ label: t('나중에 넣기'), kind: 'ghost', value: 'later' }, { label: t('닫기'), value: null }],
     onOpen: (w, close) => { w.classList.add('new-dlg'); wireSourcePicker(w, () => close('go')); },
-  }).then(v => { if (v === 'later') startNew(); });
+  }).then(v => { if (v === 'later') startNew(); else if (v == null) setNewIn(null); });
 }
 
 /** 영상·문서 올리기 — 시험 버전: 서버 대신 이 브라우저에 저장. 사진은 여러 장을 한 세트로 */

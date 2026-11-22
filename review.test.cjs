@@ -743,6 +743,58 @@ const pointer = (sel, pts) => ev(`(async()=>{const el=document.querySelector(${J
   await until("document.querySelector('.modal .foot .danger')", 3000); await ev("document.querySelector('.modal .foot .danger').click()");
   await until("document.querySelectorAll('.plist .prow').length===1", 5000, 'deleted by key');
   ok(await ev("document.querySelector('.plist .pitem.on') && document.querySelector('.plist .pitem.on').textContent.includes('바뀐 이름')"), 'project menu: Delete key removes another project and stays on the open one');
+  /* 11x. 폴더 — 만들기 · 폴더로 이동 · 하위 폴더 · 끌어 놓기 · 이 폴더에 새 프로젝트 · 접기 · 삭제(안의 것은 위로) */
+  await go(BASE); await delay(300); await ev(CLEAR); await go(BASE); await until("document.querySelector('.hero-form input')");
+  for (const name of ['가 프로젝트', '나 프로젝트']) {
+    await ev(`document.querySelector('.hero-form input').value=${JSON.stringify(VIDEO)};document.querySelector('.hero-form .btn').click()`);
+    await until("location.hash.includes('tab=setup') && document.querySelector('[data-f=title]')", 8000, 'project for folders');
+    await ev(`(()=>{const i=document.querySelector('[data-f=title]');i.value=${JSON.stringify(name)};i.dispatchEvent(new Event('input',{bubbles:true}))})()`); await delay(150);
+    await ev("location.hash='#'"); await until("document.querySelector('.hero-form input')");
+  }
+  const nameIt = async v => { await until("document.querySelector('.modal [data-name]')", 3000, 'name dialog'); await ev(`(()=>{const i=document.querySelector('.modal [data-name]');i.value=${JSON.stringify(v)};i.dispatchEvent(new Event('input',{bubbles:true}));i.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',bubbles:true}))})()`); };
+  const prow = n => `[...document.querySelectorAll('.plist .prow')].find(r=>r.textContent.includes('${n}'))`;
+  const fold = n => `[...document.querySelectorAll('.plist .fold')].find(f=>f.querySelector(':scope>.fhead .fname').textContent==='${n}')`;
+  const menuPick = async label => { await until("document.querySelector('.ctx-menu')", 3000, 'menu'); await ev(`[...document.querySelectorAll('.ctx-menu button')].find(b=>b.textContent.startsWith('${label}')).click()`); };
+  await ev("document.querySelector('[data-newfolder]').click()"); await nameIt('제3회 예술행사');
+  await until(`!!${fold('제3회 예술행사')}`, 4000, 'folder made');
+  ok(await ev(`${fold('제3회 예술행사')}.querySelector('.fempty')!==null`), 'folders: new folder appears (empty hint)');
+  await ev(`${prow('가 프로젝트')}.querySelector('[data-pmore]').click()`); await menuPick('폴더로 이동');
+  await until("document.querySelector('.modal .fpick')", 3000, 'folder picker');
+  await ev("[...document.querySelectorAll('.modal .fpick')].find(b=>b.textContent.includes('제3회 예술행사')).click()");
+  await until(`${fold('제3회 예술행사')} && ${fold('제3회 예술행사')}.querySelector('.fbody').textContent.includes('가 프로젝트')`, 4000, 'moved into folder');
+  ok(true, 'folders: move a project into a folder from its menu');
+  await ev(`${fold('제3회 예술행사')}.querySelector('[data-fmore]').click()`); await menuPick('하위 폴더 만들기'); await nameIt('1차 편집 내역');
+  await until(`${fold('제3회 예술행사')} && ${fold('제3회 예술행사')}.querySelector('.fbody .fold')`, 4000, 'subfolder');
+  ok(await ev(`${fold('1차 편집 내역')}.parentElement.closest('.fold')===${fold('제3회 예술행사')}`), 'folders: subfolder nests inside');
+  // 끌어 놓기: 나 프로젝트 → 1차 편집 내역
+  await ev(`(()=>{const dt=new DataTransfer();const a=${prow('나 프로젝트')}.querySelector('.pitem');a.dispatchEvent(new DragEvent('dragstart',{bubbles:true,dataTransfer:dt}));const h=${fold('1차 편집 내역')}.querySelector('.fhead');h.dispatchEvent(new DragEvent('dragover',{bubbles:true,cancelable:true,dataTransfer:dt}));h.dispatchEvent(new DragEvent('drop',{bubbles:true,cancelable:true,dataTransfer:dt}));a.dispatchEvent(new DragEvent('dragend',{bubbles:true,dataTransfer:dt}))})()`);
+  await until(`${fold('1차 편집 내역')} && ${fold('1차 편집 내역')}.textContent.includes('나 프로젝트')`, 4000, 'dragged into subfolder');
+  ok(await ev(`${fold('제3회 예술행사')}.querySelector(':scope>.fhead .fcount').textContent==='2'`), 'folders: drag a project onto a folder; counts include subfolders');
+  await shot('39-folders');
+  // 접기 — 새로 고쳐도 유지
+  await ev(`${fold('제3회 예술행사')}.querySelector('.fhead').click()`);
+  ok(await ev(`${fold('제3회 예술행사')}.classList.contains('closed')`), 'folders: click to fold');
+  await go(BASE); await until(`!!${fold('제3회 예술행사')}`, 5000);
+  ok(await ev(`${fold('제3회 예술행사')}.classList.contains('closed')`), 'folders: folded state is remembered');
+  await ev(`${fold('제3회 예술행사')}.querySelector('.fhead').click()`);
+  // 이 폴더에 새 프로젝트
+  await ev(`${fold('1차 편집 내역')}.querySelector('[data-fmore]').click()`); await menuPick('이 폴더에 새 프로젝트');
+  await until("document.querySelector('.modal.new-dlg .new-in')", 3000, 'new in folder');
+  ok(await ev("document.querySelector('.modal .new-in').textContent.includes('제3회 예술행사 / 1차 편집 내역')"), 'folders: new project dialog shows the target folder path');
+  await ev(`(()=>{const m=document.querySelector('.modal.new-dlg');m.querySelector('.hero-form input').value=${JSON.stringify(VIDEO)};m.querySelector('.hero-form .btn').click()})()`);
+  await until("location.hash.includes('tab=setup')", 8000, 'created in folder');
+  ok(await ev(`(async()=>{const {Store}=await import('/assets/js/store.js');const p=Store.getProject(location.hash.match(/p=(\\w+)/)[1]);return Store.getFolder(p.folderId).name==='1차 편집 내역'})()`), 'folders: the new project lands in that folder');
+  // 폴더 삭제 — 안의 것은 지우지 않고 위로
+  await ev(`${fold('제3회 예술행사')}.querySelector('[data-fmore]').click()`); await menuPick('폴더 삭제');
+  await until("document.querySelector('.modal .foot .danger')", 3000);
+  ok(await ev("document.querySelector('.modal').textContent.includes('지워지지 않고')"), 'folders: delete explains that contents move up');
+  await ev("document.querySelector('.modal .foot .danger').click()");
+  await until(`!${fold('제3회 예술행사')} && !!${fold('1차 편집 내역')}`, 4000, 'folder deleted');
+  ok(await ev(`document.querySelectorAll('.plist .prow').length===3 && !${fold('1차 편집 내역')}.parentElement.closest('.fold') && !${prow('가 프로젝트')}.closest('.fold')`), 'folders: deleting keeps projects and lifts the subfolder');
+  // 머리글에 놓으면 폴더 밖으로
+  await ev(`(()=>{const dt=new DataTransfer();const a=${prow('나 프로젝트')}.querySelector('.pitem');a.dispatchEvent(new DragEvent('dragstart',{bubbles:true,dataTransfer:dt}));const h=document.querySelector('[data-root-drop]');h.dispatchEvent(new DragEvent('dragover',{bubbles:true,cancelable:true,dataTransfer:dt}));h.dispatchEvent(new DragEvent('drop',{bubbles:true,cancelable:true,dataTransfer:dt}));a.dispatchEvent(new DragEvent('dragend',{bubbles:true,dataTransfer:dt}))})()`);
+  await until(`!${prow('나 프로젝트')}.closest('.fold')`, 4000, 'dragged out');
+  ok(true, 'folders: drop on the "In progress" header to take it out');
   /* 11y. 납품 — 최종본 보내기(30일 링크) · 수정 내역서 · 납품 확인서 · 완료 보관함 · 요금제 */
   await go(BASE); await delay(300); await ev(CLEAR); await go(BASE); await until("document.querySelector('[data-drop] input')");
   await setFile('[data-drop] input', path.join(__dirname, 'test-media', 'clip.mp4'));

@@ -531,6 +531,10 @@ body.resizing iframe, body.resizing video { pointer-events: none; }
   .console { display: flex; flex-direction: column; }
   .plist { display: flex; overflow-x: auto; border-right: 0; border-bottom: 1px solid var(--div); padding: 6px 8px; gap: 4px; }
   .plist-plan { display: none; }
+  .fold, .fbody { display: contents; }
+  .fold.closed > .fbody { display: none; }
+  .fhead { flex: none; padding: 4px 34px 4px 8px; border: 1px solid var(--line); border-radius: var(--rb); }
+  .fempty, .fnew { display: none; }
   .plist-sec { display: contents; }
   .parch { display: flex !important; gap: 4px; margin: 0; flex: none; padding: 0; border: 0; }
   .parch > summary { display: flex !important; padding: 0 8px; border: 1px dashed var(--line); border-radius: var(--rb); font-size: 12px; color: var(--muted); }
@@ -1296,3 +1300,38 @@ html.dark { --chat-bg: oklch(0.2 0.012 260); --bub-them: oklch(0.27 0.01 260); -
 .btn.big { min-height: 48px; font-size: 15px; justify-content: center; }
 .dl-confirm { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; padding-top: 4px; border-top: 1px solid var(--div); }
 .dl-confirm .field-in { flex: 1; min-width: 120px; }
+
+/* 폴더 */
+.plist-head[data-root-drop] { display: flex; align-items: center; gap: 4px; }
+.fnew { margin-left: auto; width: 26px; height: 26px; display: grid; place-items: center; border: 0; border-radius: 7px; background: transparent; color: var(--muted); cursor: pointer; }
+.fnew:hover { background: var(--active); color: var(--text); }
+.plist-head.drop-on { background: color-mix(in oklch, var(--brand) 10%, transparent); border-radius: 7px; color: var(--brand); }
+.fold { display: grid; gap: 2px; border-radius: 9px; }
+.fhead { position: relative; display: flex; align-items: center; gap: 6px; min-height: 34px; padding: 4px 36px 4px 6px; border-radius: 8px; cursor: pointer; user-select: none; font-size: 13.5px; font-weight: 600; color: var(--text); }
+.fhead:hover, .fold.menu-on > .fhead { background: var(--active); }
+.fhead:focus-visible { outline: 2px solid var(--brand); outline-offset: -2px; }
+.fhead > .ic:first-child { color: var(--dim); transition: transform .15s; flex: none; }
+.fold.closed > .fhead > .ic:first-child { transform: rotate(-90deg); }
+.fhead > .ic:nth-child(2) { color: var(--brand); flex: none; }
+.fname { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fcount { font: 600 11px var(--mono); color: var(--dim); }
+.fhead .pmore { opacity: 0; }
+.fhead:hover .pmore, .fhead:focus-within .pmore, .fold.menu-on > .fhead .pmore { opacity: 1; }
+.fhead:hover .fcount, .fold.menu-on > .fhead .fcount { opacity: 0; }
+.fbody { display: grid; gap: 2px; margin-left: 13px; padding-left: 8px; border-left: 1px solid var(--div); }
+.fold.closed > .fbody { display: none; }
+.fempty { padding: 6px 4px; font-size: 11.5px; color: var(--dim); line-height: 1.5; }
+.fold.drop-on > .fhead { background: color-mix(in oklch, var(--brand) 12%, transparent); box-shadow: inset 0 0 0 1.5px var(--brand); }
+.fold.drop-on > .fbody { border-left-color: var(--brand); }
+.prow.is-drag, .fold.is-drag { opacity: .45; }
+@media (hover: none) { .fhead .pmore { opacity: 1; } .fhead .fcount { display: none; } }
+.fpicks { display: grid; gap: 2px; max-height: 50vh; overflow: auto; margin-bottom: 10px; padding: 4px; border: 1px solid var(--line); border-radius: var(--rb); }
+.fpick { display: flex; align-items: center; gap: 8px; padding: 8px 10px 8px calc(10px + var(--d, 0) * 18px); border: 0; border-radius: 7px; background: transparent; color: var(--text); font: inherit; font-size: 13.5px; text-align: left; cursor: pointer; }
+.fpick:hover, .fpick:focus-visible { background: var(--active); outline: none; }
+.fpick .ic { color: var(--brand); flex: none; }
+.fpick span { flex: 1; }
+.fpick em { font-style: normal; font-size: 11.5px; color: var(--dim); }
+.fpick.on { font-weight: 600; }
+.new-in { display: flex; align-items: center; gap: 6px; margin: -4px 0 6px; font-size: 13px; color: var(--muted); }
+.new-in .ic { color: var(--brand); }
+.new-in span { font-weight: 600; color: var(--text); }

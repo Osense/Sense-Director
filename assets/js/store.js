@@ -6,13 +6,36 @@ addEventListener('storage', e => { if (e.key && e.key.startsWith('sd:')) Object.
 
 const read = (k, d) => { try { const v = JSON.parse(localStorage.getItem(k) || 'null'); return v ?? d; } catch { return d; } };
 const write = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); return true; } catch { return false; } };
-const K = { projects: 'sd:projects', inbox: id => 'sd:inbox:' + id, client: id => 'sd:client:' + id, me: 'sd:me', dl: id => 'sd:dl:' + id };
+const K = { projects: 'sd:projects', inbox: id => 'sd:inbox:' + id, client: id => 'sd:client:' + id, me: 'sd:me', dl: id => 'sd:dl:' + id, folders: 'sd:folders' };
 
 export const Store = {
   projects() { return Object.values(read(K.projects, {})).sort((a, b) => (!!b.pinned - !!a.pinned) || (b.updatedAt || 0) - (a.updatedAt || 0)); },
   getProject(id) { return read(K.projects, {})[id] || null; },
   saveProject(p) { const all = read(K.projects, {}); p.updatedAt = Date.now(); all[p.id] = p; return write(K.projects, all); },
   deleteProject(id) { const all = read(K.projects, {}); delete all[id]; write(K.projects, all); localStorage.removeItem(K.inbox(id)); localStorage.removeItem(K.dl(id)); },
+  /* 폴더 — DB의 folders 표와 같은 모양으로 둔다 (server/schema.sql 참고)
+     { id, name, parentId: 폴더 id | null(맨 위), sort, createdAt, updatedAt }
+     프로젝트는 folderId 하나로 폴더에 들어간다(없으면 맨 위). */
+  folders() { return Object.values(read(K.folders, {})).sort((a, b) => (a.sort || 0) - (b.sort || 0) || String(a.name).localeCompare(String(b.name), 'ko', { numeric: true })); },
+  getFolder(id) { return id ? read(K.folders, {})[id] || null : null; },
+  saveFolder(f) { const all = read(K.folders, {}); f.updatedAt = Date.now(); f.createdAt = f.createdAt || f.updatedAt; all[f.id] = f; return write(K.folders, all); },
+  /** 폴더 삭제 — 안의 하위 폴더와 프로젝트는 지우지 않고 한 단계 위로 옮긴다 */
+  deleteFolder(id) {
+    const all = read(K.folders, {}), f = all[id]; if (!f) return;
+    const up = f.parentId || null;
+    Object.values(all).forEach(x => { if (x.parentId === id) x.parentId = up; });
+    delete all[id]; write(K.folders, all);
+    const ps = read(K.projects, {});
+    Object.values(ps).forEach(p => { if (p.folderId === id) p.folderId = up; });
+    write(K.projects, ps);
+  },
+  /** 폴더 옮기기 — 순서(수정 시각)는 그대로 둔다. folderId: 폴더 id | null */
+  moveProject(pid, folderId) { const all = read(K.projects, {}); if (!all[pid]) return false; all[pid].folderId = folderId || null; return write(K.projects, all); },
+  moveFolder(id, parentId) {
+    const all = read(K.folders, {}); if (!all[id]) return false;
+    for (let x = parentId; x; x = all[x] && all[x].parentId) if (x === id) return false; // 자기 안으로는 못 옮김
+    all[id].parentId = parentId || null; all[id].updatedAt = Date.now(); return write(K.folders, all);
+  },
   /** 최종본 수령 기록 { gotAt, okAt, by } — 목업: 같은 브라우저로 주고받는다 */
   delivery(pid) { return read(K.dl(pid), null); },
   saveDelivery(pid, patch) { return write(K.dl(pid), { ...(read(K.dl(pid), {}) || {}), ...patch }); },

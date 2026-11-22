@@ -32,7 +32,7 @@ addEventListener('hashchange', route);
 route();
 
 // 디렉터 콘솔: 받은 HTML 파일을 화면에 끌어 놓으면 수신함으로
-addEventListener('dragover', e => { if (document.body.dataset.view === 'director') { e.preventDefault(); document.body.classList.add('dragging'); } });
+addEventListener('dragover', e => { if (document.body.dataset.view === 'director' && [...e.dataTransfer.types].includes('Files')) { e.preventDefault(); document.body.classList.add('dragging'); } });
 addEventListener('dragleave', e => { if (!e.relatedTarget) document.body.classList.remove('dragging'); });
 addEventListener('drop', async e => {
   if (document.body.dataset.view !== 'director') return;
