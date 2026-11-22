@@ -10,7 +10,7 @@ import { putDoc, docType, isDoc, resolveSource, canvaFrom, canvaInfo } from './d
 import { showTour, maybeShowTour } from './tour.js';
 import { openMenu } from './ctxmenu.js';
 import { renderDeliver, deliveryLink, expired } from './deliver.js';
-import { treeHTML, wireFolders, setNewIn, takeNewIn, pickFolder, folderPath } from './folders.js';
+import { treeHTML, wireFolders, setNewIn, takeNewIn, pickFolder, folderPath, newFolder } from './folders.js';
 import { meterHTML, planDialog, fitsFileLimit, bigFileOk } from './plans.js';
 import { msg, replies, dayLine, composer, glide } from './chat.js';
 import { clientLink, feedbackMessage, reportHTML, printHTML, shareFile, parseIncoming, STATUS, noteLabel } from './exports.js';
@@ -43,6 +43,10 @@ function wireProjectMenu(list, cur) {
       !p.done ? { label: t('폴더로 이동…'), icon: 'folder', act: async () => {
         const to = await pickFolder({ current: p.folderId || null }); if (to === null) return;
         Store.moveProject(p.id, to || null); toast(to ? t('"{f}" 폴더로 옮겼어요', { f: Store.getFolder(to).name }) : t('폴더 밖으로 꺼냈어요')); rerender();
+      } } : null,
+      !p.done ? { label: t('새 폴더 만들어 넣기'), icon: 'folderPlus', act: async () => {
+        const f = await newFolder(p.folderId || null); if (!f) return;
+        Store.moveProject(p.id, f.id); toast(t('"{f}" 폴더로 옮겼어요', { f: f.name })); rerender();
       } } : null,
       { label: p.pinned ? t('고정 풀기') : t('맨 위에 고정'), icon: 'top', act: () => { p.pinned = !p.pinned; Store.saveProject(p); rerender(); } },
       p.src ? { label: t('검수 링크 복사'), icon: 'link', act: async () => { const l = await clientLink(p).catch(() => ''); toast(l && await copyText(l) ? t('주소를 복사했어요') : t('복사하지 못했어요')); } } : null,

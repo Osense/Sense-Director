@@ -795,6 +795,44 @@ const pointer = (sel, pts) => ev(`(async()=>{const el=document.querySelector(${J
   await ev(`(()=>{const dt=new DataTransfer();const a=${prow('나 프로젝트')}.querySelector('.pitem');a.dispatchEvent(new DragEvent('dragstart',{bubbles:true,dataTransfer:dt}));const h=document.querySelector('[data-root-drop]');h.dispatchEvent(new DragEvent('dragover',{bubbles:true,cancelable:true,dataTransfer:dt}));h.dispatchEvent(new DragEvent('drop',{bubbles:true,cancelable:true,dataTransfer:dt}));a.dispatchEvent(new DragEvent('dragend',{bubbles:true,dataTransfer:dt}))})()`);
   await until(`!${prow('나 프로젝트')}.closest('.fold')`, 4000, 'dragged out');
   ok(true, 'folders: drop on the "In progress" header to take it out');
+  // 빈 곳 우클릭 → 새 폴더
+  await ev("(()=>{const l=document.querySelector('.plist'),r=l.getBoundingClientRect();l.dispatchEvent(new MouseEvent('contextmenu',{bubbles:true,cancelable:true,clientX:r.left+60,clientY:r.bottom-40}))})()");
+  await until("document.querySelector('.ctx-menu')", 3000, 'empty-area menu');
+  ok(await ev("(()=>{const l=[...document.querySelectorAll('.ctx-menu button')].map(b=>b.textContent);return ['새 프로젝트','새 폴더','폴더 모두 펼치기','폴더 모두 접기'].every(x=>l.some(y=>y.startsWith(x)))})()"), 'right-click on empty list: new project, new folder, expand/collapse all');
+  await menuPick('새 폴더'); await nameIt('도교육청 행사');
+  await until(`!!${fold('도교육청 행사')}`, 4000, 'folder via right-click');
+  // 프로젝트 우클릭 → 새 폴더 만들어 넣기
+  await ev(`(()=>{const a=${prow('가 프로젝트')}.querySelector('.pitem'),b=a.getBoundingClientRect();a.dispatchEvent(new MouseEvent('contextmenu',{bubbles:true,cancelable:true,clientX:b.left+20,clientY:b.top+10}))})()`);
+  await menuPick('새 폴더 만들어 넣기'); await nameIt('체육행사');
+  await until(`${fold('체육행사')} && ${fold('체육행사')}.textContent.includes('가 프로젝트')`, 4000, 'new folder with project');
+  ok(true, 'project right-click: put it in a new folder');
+  // 폴더 순서 바꾸기: 체육행사를 도교육청 행사 안으로, 그다음 1차 편집 내역을 도교육청 행사 위로
+  const dragTo = (src, dst, pos) => `(()=>{const dt=new DataTransfer();const s=${src};s.dispatchEvent(new DragEvent('dragstart',{bubbles:true,dataTransfer:dt}));const d=${dst},r=d.getBoundingClientRect();const y=${pos}==='top'?r.top+2:${pos}==='bottom'?r.bottom-2:r.top+r.height/2;const o={bubbles:true,cancelable:true,dataTransfer:dt,clientX:r.left+30,clientY:y};d.dispatchEvent(new DragEvent('dragover',o));d.dispatchEvent(new DragEvent('drop',o));s.dispatchEvent(new DragEvent('dragend',{bubbles:true,dataTransfer:dt}))})()`;
+  await ev(dragTo(`${fold('체육행사')}.querySelector('.fhead')`, `${fold('도교육청 행사')}.querySelector('.fhead')`, "'mid'"));
+  await until(`${fold('체육행사')} && ${fold('체육행사')}.parentElement.closest('.fold')===${fold('도교육청 행사')}`, 4000, 'folder into folder');
+  ok(true, 'drag a folder into another folder');
+  const order = () => ev("[...document.querySelectorAll('.plist-sec:not(.parch) > .fold > .fhead .fname')].map(x=>x.textContent).join('|')");
+  const fOrder0 = await order();
+  await ev(dragTo(`${fold('도교육청 행사')}.querySelector('.fhead')`, `${fold('1차 편집 내역')}.querySelector('.fhead')`, "'top'"));
+  await until(`[...document.querySelectorAll('.plist-sec:not(.parch) > .fold > .fhead .fname')].map(x=>x.textContent)[0]==='도교육청 행사'`, 4000, 'folder reordered');
+  ok(fOrder0 !== await order(), 'drag a folder above another to reorder');
+  // 프로젝트 순서 바꾸기 (맨 위 목록)
+  const roots = () => ev("[...document.querySelectorAll('.plist-sec:not(.parch) > .prow')].map(r=>r.querySelector('.ptn').textContent).join('|')");
+  await ev(dragTo(`${prow('가 프로젝트')}.querySelector('.pitem')`, `document.querySelector('[data-root-drop]')`, "'mid'"));
+  await until(`!${prow('가 프로젝트')}.closest('.fold')`, 4000, 'ga to root');
+  const r0 = (await roots()).split('|');
+  ok(r0.length >= 2, 'two projects at the top level for reordering');
+  if (r0.length >= 2) {
+    await ev(dragTo(`[...document.querySelectorAll('.plist-sec:not(.parch) > .prow')][1].querySelector('.pitem')`, `[...document.querySelectorAll('.plist-sec:not(.parch) > .prow')][0]`, "'top'"));
+    await until(`[...document.querySelectorAll('.plist-sec:not(.parch) > .prow')].map(r=>r.querySelector('.ptn').textContent).join('|')===${JSON.stringify([r0[1], r0[0], ...r0.slice(2)].join('|'))}`, 4000, 'project reordered');
+    ok(true, 'drag a project above another to reorder');
+    await go(BASE); await until("document.querySelector('.plist-sec:not(.parch) > .prow')", 5000);
+    ok((await roots()) === [r0[1], r0[0], ...r0.slice(2)].join('|'), 'project order is kept after reload');
+    await ev("(()=>{const a=[...document.querySelectorAll('.plist-sec:not(.parch) > .prow')][0].querySelector('.pitem');a.focus();a.dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowDown',altKey:true,bubbles:true}))})()");
+    await until(`[...document.querySelectorAll('.plist-sec:not(.parch) > .prow')].map(r=>r.querySelector('.ptn').textContent).join('|')===${JSON.stringify(r0.join('|'))}`, 4000, 'alt+down');
+    ok(true, 'Alt+arrow moves a project up/down');
+  }
+  await shot('40-folders-reorder');
   /* 11y. 납품 — 최종본 보내기(30일 링크) · 수정 내역서 · 납품 확인서 · 완료 보관함 · 요금제 */
   await go(BASE); await delay(300); await ev(CLEAR); await go(BASE); await until("document.querySelector('[data-drop] input')");
   await setFile('[data-drop] input', path.join(__dirname, 'test-media', 'clip.mp4'));

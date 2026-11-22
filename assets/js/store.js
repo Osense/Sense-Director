@@ -31,6 +31,12 @@ export const Store = {
   },
   /** 폴더 옮기기 — 순서(수정 시각)는 그대로 둔다. folderId: 폴더 id | null */
   moveProject(pid, folderId) { const all = read(K.projects, {}); if (!all[pid]) return false; all[pid].folderId = folderId || null; return write(K.projects, all); },
+  /** 손으로 정한 순서 — ids 순서대로 sort를 매긴다(수정 시각은 그대로). kind: 'p' 프로젝트 | 'f' 폴더 */
+  reorder(kind, ids) {
+    const key = kind === 'f' ? K.folders : K.projects, all = read(key, {});
+    ids.forEach((id, i) => { if (all[id]) all[id].sort = (i + 1) * 10; });
+    return write(key, all);
+  },
   moveFolder(id, parentId) {
     const all = read(K.folders, {}); if (!all[id]) return false;
     for (let x = parentId; x; x = all[x] && all[x].parentId) if (x === id) return false; // 자기 안으로는 못 옮김

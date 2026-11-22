@@ -30,7 +30,9 @@ export function treeHTML(projects, row, curId) {
   // 지금 연 프로젝트가 든 폴더는 펼쳐 둔다
   const cur = curId && projects.find(p => p.id === curId);
   for (let x = cur && map[cur.folderId]; x; x = map[x.parentId]) closed.delete(x.id);
-  const inFolder = id => projects.filter(p => (map[p.folderId] ? p.folderId : null) === id);
+  const ord = p => (p.sort > 0 ? p.sort : Infinity);
+  const inFolder = id => projects.filter(p => (map[p.folderId] ? p.folderId : null) === id)
+    .sort((a, b) => (!!b.pinned - !!a.pinned) || (ord(a) - ord(b)) || (b.updatedAt || 0) - (a.updatedAt || 0));
   const count = id => inFolder(id).length + folders.filter(f => f.parentId === id).reduce((n, f) => n + count(f.id), 0);
   const kids = id => folders.filter(f => (map[f.parentId] ? f.parentId : null) === id);
   const draw = (id, d) => kids(id).map(f => {
@@ -40,7 +42,7 @@ export function treeHTML(projects, row, curId) {
         ${ic('down', 13)}${ic('folder', 15)}<span class="fname">${esc(f.name)}</span><span class="fcount">${count(f.id)}</span>
         <button type="button" class="pmore" data-fmore aria-label="${t('폴더 메뉴')}" title="${t('폴더 메뉴 (우클릭)')}">${ic('more', 16)}</button>
       </div>
-      <div class="fbody">${inner || `<div class="fempty">${t('비어 있어요 · 프로젝트를 끌어다 놓거나 메뉴의 "폴더로 이동"을 쓰세요')}</div>`}</div>
+      <div class="fbody">${inner || `<div class="fempty">${t('비어 있어요 · 프로젝트를 끌어다 놓으세요')}</div>`}</div>
     </div>`;
   }).join('');
   return draw(null, 0) + inFolder(null).map(row).join('');
@@ -66,7 +68,8 @@ export async function newFolder(parentId = null) {
   if (parentId && depthOf(parentId) >= MAX_DEPTH) { toast(t('폴더는 {n}단계까지 만들 수 있어요', { n: MAX_DEPTH })); return null; }
   const name = await promptName(parentId ? t('하위 폴더 만들기') : t('새 폴더'));
   if (!name) return null;
-  const f = { id: uid(8), name, parentId: parentId || null, sort: 0 };
+  const sibs = Store.folders().filter(x => (x.parentId || null) === (parentId || null));
+  const f = { id: uid(8), name, parentId: parentId || null, sort: (Math.max(0, ...sibs.map(x => x.sort || 0)) + 10) };
   Store.saveFolder(f);
   if (parentId) { const c = closedSet(); c.delete(parentId); saveClosed(c); }
   return f;
@@ -109,7 +112,8 @@ export function wireFolders(list, { onChange, onNewIn }) {
     fold.classList.add('menu-on');
     const el = openMenu(x, y, [
       { label: t('이 폴더에 새 프로젝트'), icon: 'plus', act: () => onNewIn(f.id) },
-      depthOf(f.id) < MAX_DEPTH ? { label: t('하위 폴더 만들기'), icon: 'folder', act: async () => { if (await newFolder(f.id)) onChange(); } } : null,
+      depthOf(f.id) < MAX_DEPTH ? { label: t('하위 폴더 만들기'), icon: 'folderPlus', act: async () => { if (await newFolder(f.id)) onChange(); } } : null,
+      { label: t('새 폴더 (같은 위치)'), icon: 'folder', act: async () => { if (await newFolder(f.parentId || null)) onChange(); } },
       '-',
       { label: t('이름 바꾸기'), icon: 'rename', hint: 'F2', act: () => renameFolder(f, onChange) },
       { label: t('다른 폴더로 이동'), icon: 'next', act: async () => {
@@ -145,9 +149,10 @@ export function wireFolders(list, { onChange, onNewIn }) {
     else if (e.key === 'ContextMenu' || (e.key === 'F10' && e.shiftKey)) { e.preventDefault(); const r = h.getBoundingClientRect(); menu(fold, r.left + 16, r.bottom, h); }
   });
 
-  // 끌어 놓기: 프로젝트·폴더를 폴더 위로, "진행 중" 머리글 위로 놓으면 폴더 밖으로
+  // 끌어 놓기 — 프로젝트·폴더를 폴더 안으로, 다른 항목 위·아래로(순서 바꾸기), "진행 중" 머리글 위로(폴더 밖으로)
   const TYPE = 'application/x-sd-item';
-  let dragging = null;
+  let dragging = null, spot = null;
+  const clear = () => $$('.drop-on, .drop-before, .drop-after', list).forEach(x => x.classList.remove('drop-on', 'drop-before', 'drop-after'));
   list.addEventListener('dragstart', e => {
     const row = e.target.closest('.prow'), fh = e.target.closest('[data-fhead]');
     if (row && !row.classList.contains('done')) dragging = { k: 'p', id: row.dataset.pid };
@@ -157,30 +162,103 @@ export function wireFolders(list, { onChange, onNewIn }) {
     e.dataTransfer.effectAllowed = 'move';
     (row || fh.closest('.fold')).classList.add('is-drag');
   });
-  list.addEventListener('dragend', () => { dragging = null; $$('.is-drag, .drop-on', list).forEach(x => x.classList.remove('is-drag', 'drop-on')); });
-  const target = e => e.target.closest('.fold') || e.target.closest('[data-root-drop]');
-  list.addEventListener('dragover', e => {
-    if (!dragging && ![...e.dataTransfer.types].includes(TYPE)) return;
-    const tg = target(e); if (!tg) return;
-    if (dragging && dragging.k === 'f' && tg.dataset.fid && (tg.dataset.fid === dragging.id || tg.closest(`.fold[data-fid="${dragging.id}"]`))) return;
-    e.preventDefault(); e.dataTransfer.dropEffect = 'move';
-    $$('.drop-on', list).forEach(x => x !== tg && x.classList.remove('drop-on')); tg.classList.add('drop-on');
-  });
-  list.addEventListener('dragleave', e => { const tg = target(e); if (tg && !tg.contains(e.relatedTarget)) tg.classList.remove('drop-on'); });
-  list.addEventListener('drop', e => {
-    const tg = target(e); let it = dragging;
-    try { it = it || JSON.parse(e.dataTransfer.getData(TYPE) || 'null'); } catch { /* 무시 */ }
-    if (!tg || !it) return;
-    e.preventDefault(); tg.classList.remove('drop-on');
-    const to = tg.dataset.fid || null;
-    if (it.k === 'p') {
-      const p = Store.getProject(it.id); if (!p || (p.folderId || null) === to) return;
-      Store.moveProject(it.id, to); toast(to ? t('"{f}" 폴더로 옮겼어요', { f: Store.getFolder(to).name }) : t('폴더 밖으로 꺼냈어요'));
-    } else {
-      if (to && depthOf(to) + subDepth(it.id) > MAX_DEPTH) { toast(t('폴더는 {n}단계까지 만들 수 있어요', { n: MAX_DEPTH })); return; }
-      if (!Store.moveFolder(it.id, to)) return;
+  list.addEventListener('dragend', () => { dragging = null; spot = null; clear(); $$('.is-drag', list).forEach(x => x.classList.remove('is-drag')); });
+  /** 지금 놓으면 어디로 가는지: { el, pos: 'in'|'before'|'after'|'root' } */
+  const where = e => {
+    if (e.target.closest('[data-root-drop]')) return { el: e.target.closest('[data-root-drop]'), pos: 'root' };
+    const row = e.target.closest('.prow');
+    if (row && !row.classList.contains('done') && list.contains(row)) {
+      if (dragging.k === 'f') { const f = row.closest('.fold'); return f ? { el: f, pos: 'in' } : { el: $('[data-root-drop]', list), pos: 'root' }; }
+      const r = row.getBoundingClientRect(); return { el: row, pos: e.clientY < r.top + r.height / 2 ? 'before' : 'after' };
     }
+    const fh = e.target.closest('[data-fhead]');
+    if (fh) {
+      const fold = fh.closest('.fold');
+      if (dragging.k === 'p') return { el: fold, pos: 'in' };
+      const r = fh.getBoundingClientRect(), y = (e.clientY - r.top) / r.height;
+      return { el: fold, pos: y < .3 ? 'before' : y > .7 ? 'after' : 'in' };
+    }
+    const fb = e.target.closest('.fold'); if (fb) return { el: fb, pos: 'in' };
+    return null;
+  };
+  const allowed = s => {
+    if (!s || !dragging) return false;
+    if (dragging.k === 'p' && s.el.dataset && s.el.dataset.pid === dragging.id) return false;
+    if (dragging.k === 'f') {
+      const me = $(`.fold[data-fid="${dragging.id}"]`, list);
+      if (me && (s.el === me || me.contains(s.el))) return false;
+    }
+    return true;
+  };
+  list.addEventListener('dragover', e => {
+    if (!dragging) return;
+    const s = where(e); if (!allowed(s)) { clear(); spot = null; return; }
+    e.preventDefault(); e.dataTransfer.dropEffect = 'move';
+    if (!spot || spot.el !== s.el || spot.pos !== s.pos) { clear(); s.el.classList.add(s.pos === 'before' ? 'drop-before' : s.pos === 'after' ? 'drop-after' : 'drop-on'); }
+    spot = s;
+  });
+  list.addEventListener('dragleave', e => { if (!list.contains(e.relatedTarget)) { clear(); spot = null; } });
+  list.addEventListener('drop', e => {
+    if (!dragging) return;
+    const s = where(e); if (!allowed(s)) return;
+    e.preventDefault(); clear();
+    const it = dragging; dragging = null;
+    if (it.k === 'p') dropProject(it.id, s); else dropFolder(it.id, s);
     onChange();
+  });
+  const folderOfEl = el => { const f = el && el.closest('.fold'); return f ? f.dataset.fid : null; };
+  const dropProject = (pid, s) => {
+    const p = Store.getProject(pid); if (!p) return;
+    if (s.pos === 'root' || s.pos === 'in') {
+      const to = s.pos === 'root' ? null : s.el.dataset.fid;
+      if ((p.folderId || null) !== to) { Store.moveProject(pid, to); toast(to ? t('"{f}" 폴더로 옮겼어요', { f: Store.getFolder(to).name }) : t('폴더 밖으로 꺼냈어요')); }
+      return;
+    }
+    // 다른 프로젝트 위·아래 → 그 프로젝트가 있는 곳으로, 그 순서에
+    const box = s.el.parentElement, to = folderOfEl(box);
+    const ids = [...box.children].filter(x => x.matches('.prow') && x.dataset.pid !== pid).map(x => x.dataset.pid);
+    ids.splice(ids.indexOf(s.el.dataset.pid) + (s.pos === 'after' ? 1 : 0), 0, pid);
+    if ((p.folderId || null) !== to) Store.moveProject(pid, to);
+    Store.reorder('p', ids);
+  };
+  const dropFolder = (fid, s) => {
+    let parent, ids = null;
+    if (s.pos === 'root') parent = null;
+    else if (s.pos === 'in') parent = s.el.dataset.fid;
+    else {
+      const box = s.el.parentElement; parent = folderOfEl(box);
+      ids = [...box.children].filter(x => x.matches('.fold') && x.dataset.fid !== fid).map(x => x.dataset.fid);
+      ids.splice(ids.indexOf(s.el.dataset.fid) + (s.pos === 'after' ? 1 : 0), 0, fid);
+    }
+    if (parent && depthOf(parent) + subDepth(fid) > MAX_DEPTH) { toast(t('폴더는 {n}단계까지 만들 수 있어요', { n: MAX_DEPTH })); return; }
+    const f = Store.getFolder(fid);
+    if ((f.parentId || null) !== (parent || null) && !Store.moveFolder(fid, parent)) return;
+    if (ids) Store.reorder('f', ids);
+  };
+
+  // 키보드로 순서 바꾸기: 프로젝트에서 Alt+↑/↓
+  list.addEventListener('keydown', e => {
+    if (!e.altKey || (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') || !e.target.matches('.pitem')) return;
+    const row = e.target.closest('.prow'); if (row.classList.contains('done')) return;
+    e.preventDefault();
+    const box = row.parentElement, ids = [...box.children].filter(x => x.matches('.prow')).map(x => x.dataset.pid);
+    const i = ids.indexOf(row.dataset.pid), j = i + (e.key === 'ArrowUp' ? -1 : 1);
+    if (j < 0 || j >= ids.length) return;
+    [ids[i], ids[j]] = [ids[j], ids[i]]; Store.reorder('p', ids); onChange();
+    requestAnimationFrame(() => { const a = $(`.prow[data-pid="${row.dataset.pid}"] .pitem`); a && a.focus(); });
+  });
+
+  // 빈 곳 우클릭: 새 프로젝트 · 새 폴더 · 모두 펼치기/접기
+  list.addEventListener('contextmenu', e => {
+    if (e.target.closest('.prow, [data-fhead], .meter-btn, .parch > summary')) return;
+    e.preventDefault();
+    openMenu(e.clientX, e.clientY, [
+      { label: t('새 프로젝트'), icon: 'plus', act: () => onNewIn(null) },
+      { label: t('새 폴더'), icon: 'folderPlus', act: async () => { if (await newFolder(null)) onChange(); } },
+      Store.folders().length ? '-' : null,
+      Store.folders().length ? { label: t('폴더 모두 펼치기'), icon: 'down', act: () => { saveClosed(new Set()); onChange(); } } : null,
+      Store.folders().length ? { label: t('폴더 모두 접기'), icon: 'next', act: () => { saveClosed(new Set(Store.folders().map(f => f.id))); onChange(); } } : null,
+    ], { label: t('프로젝트 목록') });
   });
 }
 /** 폴더 아래로 몇 단계가 더 있는지 (자기 포함) */

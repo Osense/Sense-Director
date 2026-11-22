@@ -1335,3 +1335,11 @@ html.dark { --chat-bg: oklch(0.2 0.012 260); --bub-them: oklch(0.27 0.01 260); -
 .new-in { display: flex; align-items: center; gap: 6px; margin: -4px 0 6px; font-size: 13px; color: var(--muted); }
 .new-in .ic { color: var(--brand); }
 .new-in span { font-weight: 600; color: var(--text); }
+
+/* 끌어 놓기 — 놓일 자리를 선으로 */
+.prow.drop-before::before, .prow.drop-after::after, .fold.drop-before::before, .fold.drop-after::after { content: ''; position: absolute; left: 4px; right: 4px; height: 2px; border-radius: 2px; background: var(--brand); box-shadow: 0 0 0 2px color-mix(in oklch, var(--brand) 20%, transparent); pointer-events: none; z-index: 2; }
+.prow.drop-before::before, .fold.drop-before::before { top: -2px; }
+.prow.drop-after::after { bottom: -2px; }
+.fold { position: relative; }
+.fold.drop-after::after { bottom: -2px; }
+.prow .pitem, .fhead { -webkit-user-drag: element; }
