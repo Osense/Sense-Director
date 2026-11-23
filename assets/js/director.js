@@ -390,6 +390,7 @@ function renderProject(main, p, tab) {
   main.innerHTML = `
     <div class="phead">
       <input class="ptitle-in" data-f="title" value="${esc(p.title)}" placeholder="${t('프로젝트 이름')}" aria-label="${t('프로젝트 이름')}" spellcheck="false">
+      <div class="ver-slot" data-verslot></div><div class="grow"></div>
       <div class="tabs" role="tablist">
         <button role="tab" data-tab="inbox" class="${tab === 'inbox' ? 'on' : ''}">${ic('inbox')}${t('수정요청 · 안내')} <b>${all.length}</b></button>
         <button role="tab" data-tab="setup" class="${tab === 'setup' ? 'on' : ''}">${ic('sliders')}${t('설정 · 공유')}</button>
@@ -414,9 +415,9 @@ function renderProject(main, p, tab) {
   const jump = jumpTo; jumpTo = null;
   const hooks = {};
   if (p.src) {
-    viewerEl.innerHTML = verbarHTML(vers, curN, { add: true }) + '<div class="vmount"></div>';
-    wireVerbar(viewerEl, p, vers);
-    V = mountViewer($('.vmount', viewerEl), M.src, {
+    const slot = $('[data-verslot]', main); slot.innerHTML = verbarHTML(vers, curN, { add: true });
+    wireVerbar(slot, p, vers);
+    V = mountViewer(viewerEl, M.src, {
       items: tab === 'inbox' ? items : null,
       selected: () => selected,
       // 디렉터도 핀·펜으로 클라이언트에게 안내를 남긴다

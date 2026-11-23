@@ -36,7 +36,7 @@ export async function renderClient(app, params) {
   app.innerHTML = `
   <header class="topbar">
     ${brandHTML('span', t('aria-label="쎈스 디렉터"'))}
-    <div class="ptitle"><div class="eyebrow">${t('수정요청')}${p.by ? ' · ' + esc(p.by) : ''}</div><h1>${esc(p.t || t('제목 없는 프로젝트'))}</h1></div>
+    <div class="ptitle"><div class="eyebrow">${t('수정요청')}${p.by ? ' · ' + esc(p.by) : ''}</div><h1>${esc(p.t || t('제목 없는 프로젝트'))}</h1></div><div class="ver-slot" data-verslot></div>
     ${p.d ? `<span class="chip due" title="${t('피드백 마감')}">${ic('clock', 13)}${esc(dueLabel(p.d))}</span>` : ''}
     <div class="grow"></div>
     ${p.n ? `<button class="btn ghost" data-act="notice" aria-label="${t('안내사항')}">${ic('note')}<span class="bl">${t('안내사항')}</span></button>` : ''}
@@ -94,9 +94,9 @@ export async function renderClient(app, params) {
   const save = () => Store.saveClient(p.id, state);
 
   const viewerEl = $('[data-viewer]', app);
-  viewerEl.innerHTML = verbarHTML(vers, curN) + '<div class="vmount"></div>';
+  $('[data-verslot]', app).innerHTML = verbarHTML(vers, curN);
   const jump = jumpTo; jumpTo = null;
-  const V = mountViewer($('.vmount', viewerEl), src, {
+  const V = mountViewer(viewerEl, src, {
     tools: true,
     items: () => [...allItems(), ...notes()].filter(here),
     label: it => labelOf(it),
@@ -114,7 +114,7 @@ export async function renderClient(app, params) {
   const ar = vw ? vw.ar : p.ar, fps = vw ? vw.fps : p.fps;
   if (ar) P.setMeta({ ar });
   if (fps) P.setMeta({ fps, how: (vw ? vw.fpsHow : p.fh) || 'measured' });
-  viewerEl.querySelector('.verbar')?.addEventListener('click', e => { const b = e.target.closest('[data-ver]'); if (b) { setViewed(p.id, +b.dataset.ver, lastN); renderClient(app, params); } });
+  $('[data-verslot]', app).querySelector('.verbar')?.addEventListener('click', e => { const b = e.target.closest('[data-ver]'); if (b) { setViewed(p.id, +b.dataset.ver, lastN); renderClient(app, params); } });
 
   async function addItem({ x = null, y = null, s = [] }) {
     if (!P.ready()) return;
