@@ -10,6 +10,9 @@ import { showClientTour, maybeShowClientTour } from './tour.js';
 import { msg, replies, dayLine, composer, glide, editText, confirmDelete } from './chat.js';
 import { renderDelivery } from './deliver.js';
 import { t, tn, lang, fmtDateL, fmtMD, langBtnHTML, fmtTime } from './i18n.js';
+import { versOf, itemVer, verName, viewedVer, setViewed, verbarHTML, verLine, withVerLines } from './versions.js';
+
+let jumpTo = null; // 다른 차수 카드를 눌러 차수를 바꾼 뒤 그 장면으로
 
 export async function renderClient(app, params) {
   let p;
@@ -67,6 +70,13 @@ export async function renderClient(app, params) {
 
   workspaceSplitters(app, 'client');
   let tab = 'draft', selected = null, activeId = null;
+  // 수정본: 같은 브라우저면 디렉터 콘솔의 최신 목록, 아니면 링크에 담겨 온 목록
+  const vers = (() => { const sp = Store.getProject(p.id); return versOf(sp && sp.src ? sp : p); })();
+  const vw = viewedVer(p.id, vers), lastN = vers.length ? vers[vers.length - 1].n : 1, curN = vw ? vw.n : 1;
+  const src = vw ? vw.src : p.src;
+  const here = it => itemVer(it) === curN;
+  const goVer = it => { jumpTo = { id: it.id, t: it.t, th: it.th }; setViewed(p.id, itemVer(it), lastN); renderClient(app, params); };
+  const verTag = it => vers.length > 1 ? `<span class="vtag${here(it) ? ' on' : ''}" title="${esc(t('{v} 영상에 남긴 표시', { v: verName(itemVer(it)) }))}">${esc(verName(itemVer(it)))}</span>` : '';
   const allItems = () => [...state.sent.flatMap(r => r.items.map(it => ({ ...it, _sent: r.rid }))), ...state.draft].sort((a, b) => a.t - b.t);
   const numOf = id => allItems().findIndex(it => it.id === id) + 1;
   /* 디렉터 안내: 같은 브라우저면 디렉터 콘솔 저장본, 아니면 링크에 담겨 온 것 */
@@ -83,26 +93,34 @@ export async function renderClient(app, params) {
   if (notes().length && !state.draft.length && !state.sent.length) tab = 'notes';
   const save = () => Store.saveClient(p.id, state);
 
-  const V = mountViewer($('[data-viewer]', app), p.src, {
+  const viewerEl = $('[data-viewer]', app);
+  viewerEl.innerHTML = verbarHTML(vers, curN) + '<div class="vmount"></div>';
+  const jump = jumpTo; jumpTo = null;
+  const V = mountViewer($('.vmount', viewerEl), src, {
     tools: true,
-    items: () => [...allItems(), ...notes()],
+    items: () => [...allItems(), ...notes()].filter(here),
     label: it => labelOf(it),
     selected: () => selected,
     onPin: ({ x, y }) => addItem({ x, y }),
     onStroke: pts => addStroke(pts),
     onMemo: () => addItem({}),
     onMeta: () => renderList(),
-    onReady: () => { V.renderMarks(); },
+    onReady: () => {
+      V.renderMarks();
+      if (jump) { selected = jump.id; P.pause(); P.seek(jump.t); if (jump.th) P.showFreeze(jump.th, jump.t); renderList(); const c = $(`[data-list] [data-id="${jump.id}"]`, app); c && c.scrollIntoView({ block: 'nearest' }); }
+    },
   });
   const P = V.P;
-  if (p.ar) P.setMeta({ ar: p.ar });
-  if (p.fps) P.setMeta({ fps: p.fps, how: p.fh || 'measured' });
+  const ar = vw ? vw.ar : p.ar, fps = vw ? vw.fps : p.fps;
+  if (ar) P.setMeta({ ar });
+  if (fps) P.setMeta({ fps, how: (vw ? vw.fpsHow : p.fh) || 'measured' });
+  viewerEl.querySelector('.verbar')?.addEventListener('click', e => { const b = e.target.closest('[data-ver]'); if (b) { setViewed(p.id, +b.dataset.ver, lastN); renderClient(app, params); } });
 
   async function addItem({ x = null, y = null, s = [] }) {
     if (!P.ready()) return;
     P.pause();
     const snap = await P.snapshot(); // 영상 주소·파일은 바로 찍히고, 유튜브·비메오는 보낼 때 한 번에 찍는다
-    const it = { id: uid(6), t: snap.t, x, y, s, tx: '', th: snap.img, st: 'open', rp: [], at: Date.now(), ...(snap.ar ? { ar: snap.ar } : {}) };
+    const it = { id: uid(6), t: snap.t, x, y, s, tx: '', th: snap.img, st: 'open', rp: [], at: Date.now(), ...(snap.ar ? { ar: snap.ar } : {}), ...(curN > 1 ? { v: curN } : {}) };
     state.draft.push(it); state.draft.sort((a, b) => a.t - b.t);
     activeId = it.id; selected = it.id; tab = 'draft';
     save(); renderList(); V.render();
@@ -121,7 +139,7 @@ export async function renderClient(app, params) {
     const body = `<div class="item-head">
         <span class="no">${String(n).padStart(2, '0')}</span>
         <button class="tcbtn" data-seek title="${t('이 시점으로 이동')}">${tc(it.t, P.effFps())}</button>
-        <span class="kind">${kind}</span><button class="icon-x tonly" data-zoom aria-label="${t('크게 보기')}" title="${t('장면과 함께 크게 보기')}">${ic('expand', 14)}</button>
+        ${verTag(it)}<span class="kind">${kind}</span><button class="icon-x tonly" data-zoom aria-label="${t('크게 보기')}" title="${t('장면과 함께 크게 보기')}">${ic('expand', 14)}</button>
         ${sent ? `<span class="tag st-${st}">${STATUS[st]}</span>` : `<button class="icon-x" data-del aria-label="${t('삭제')}" title="${t('삭제')}">${ic('trash', 15)}</button>`}
       </div>
       <div data-zoom role="button" tabindex="0" aria-label="${n}${t('번 크게 보기')}">${snapHTML(it, n, P.ar, posterOf(p.src, P.poster || p.pv), sent ? t('장면 사진 없음') : t('장면 사진은 보낼 때 자동으로 붙어요'))}</div>
@@ -141,7 +159,7 @@ export async function renderClient(app, params) {
   // 디렉터 안내: 디렉터 말(왼쪽) → 내 답글(오른쪽) → 입력창
   function noteCard(it) {
     const n = labelOf(it), kind = it.x != null ? (it.s && it.s.length ? t('핀 + 그림') : t('핀')) : it.s && it.s.length ? t('그림') : t('메모');
-    const body = `<div class="item-head"><span class="no d">${n}</span><button class="tcbtn" data-seek title="${t('이 시점으로 이동')}">${tc(it.t, P.effFps())}</button><span class="kind">${kind}</span><button class="icon-x tonly" data-zoom aria-label="${t('크게 보기')}" title="${t('장면과 함께 크게 보기')}">${ic('expand', 14)}</button></div>
+    const body = `<div class="item-head"><span class="no d">${n}</span><button class="tcbtn" data-seek title="${t('이 시점으로 이동')}">${tc(it.t, P.effFps())}</button>${verTag(it)}<span class="kind">${kind}</span><button class="icon-x tonly" data-zoom aria-label="${t('크게 보기')}" title="${t('장면과 함께 크게 보기')}">${ic('expand', 14)}</button></div>
       <div data-zoom role="button" tabindex="0" aria-label="${n} ${t('크게 보기')}">${snapHTML(it, n, P.ar, posterOf(p.src, P.poster || p.pv))}</div>
       ${it.tx ? `<p class="tx">${esc(it.tx)}</p>` : `<p class="tx dim">${t('(내용 없음)')}</p>`}`;
     return `<article class="item chat note${it.id === selected ? ' sel' : ''}" data-id="${it.id}" data-note>
@@ -176,7 +194,7 @@ export async function renderClient(app, params) {
     $$('[data-tab]', app).forEach(b => b.classList.toggle('on', b.dataset.tab === tab));
     const list = $('[data-list]', app);
     if (tab === 'notes') {
-      list.innerHTML = `<p class="note-hint">${ic('pin', 14)}<span>${t('디렉터가 영상에 남긴 안내예요. 파란 표시가 그 위치예요. 궁금한 점은 답글로 남겨 주세요.')}</span></p>` + ns.map(noteCard).join('');
+      list.innerHTML = `<p class="note-hint">${ic('pin', 14)}<span>${t('디렉터가 영상에 남긴 안내예요. 파란 표시가 그 위치예요. 궁금한 점은 답글로 남겨 주세요.')}</span></p>` + (vers.length > 1 ? vers.map(v => (v.n > 1 ? verLine(v) : '') + ns.filter(it => itemVer(it) === v.n).map(noteCard).join('')).join('') : ns.map(noteCard).join(''));
     } else if (tab === 'draft') {
       const draft = items.filter(it => !it._sent);
       list.innerHTML = draft.length ? draft.map(itemCard).join('') : `<div class="empty">
@@ -185,7 +203,7 @@ export async function renderClient(app, params) {
         <span>${t('장면과 시간 주소(시:분:초:프레임)가 여기에 붙고, 바로 내용을 적을 수 있어요.')}</span>
         <span class="keys">${t('Space 재생 · ← → 또는 , . 한 프레임 · Shift ← → 1초 · P 핀 · D 펜 · H 손 · M 메모')}</span></div>`;
     } else {
-      list.innerHTML = state.sent.length ? state.sent.slice().reverse().map(r => `<div class="group">${dayLine(r.at, `${fmtTime(r.at)} · ${r.items.length}${t('건 보냄')}${r.from ? ' · ' + esc(r.from) : ''}`)}${r.items.map(it => itemCard({ ...it, _sent: r.rid, _at: r.at })).join('')}</div>`).join('')
+      list.innerHTML = state.sent.length ? withVerLines(state.sent.map(r => ({ at: r.at, html: `<div class="group">${dayLine(r.at, `${fmtTime(r.at)} · ${r.items.length}${t('건 보냄')}${r.from ? ' · ' + esc(r.from) : ''}`)}${r.items.map(it => itemCard({ ...it, _sent: r.rid, _at: r.at })).join('')}</div>` })), vers)
         : t('<div class="empty"><b>아직 보낸 요청이 없어요</b><span>작성을 마치면 오른쪽 위 "수정요청 보내기"를 눌러 주세요.</span></div>');
     }
     V.render();
@@ -205,6 +223,7 @@ export async function renderClient(app, params) {
     if (e.target.closest('textarea,input,form')) return;
     if (e.target.closest('[data-zoom]')) { zoom(id); return; }
     const it = allItems().find(x => x.id === id) || notes().find(x => x.id === id); if (!it) return;
+    if (!here(it)) { goVer(it); return; }
     selected = id; activeId = it._sent || it.by === 'd' ? null : id;
     P.pause(); P.seek(it.t);
     if (it.th) P.showFreeze(it.th, it.t);
@@ -297,7 +316,7 @@ export async function renderClient(app, params) {
         const f = $('[data-reply]', el);
         f && f.addEventListener('submit', async ev => { ev.preventDefault(); const b = $('input', f).value.trim(); if (!b) return; if (it.by === 'd') await noteReply(it.id, b); else await replyTo(it.id, b); api.refresh(); });
       },
-      onClose: it => { if (it) { selected = it.id; P.pause(); P.seek(it.t); if (it.th) P.showFreeze(it.th, it.t); renderList(); } },
+      onClose: it => { if (it && !here(it)) { goVer(it); return; } if (it) { selected = it.id; P.pause(); P.seek(it.t); if (it.th) P.showFreeze(it.th, it.t); renderList(); } },
     });
   }
   async function replyTo(id, b) {
@@ -347,7 +366,7 @@ export async function renderClient(app, params) {
   }
   /** 보내기 직전: 장면 사진이 없는 항목을 한 번에 찍는다 */
   async function ensureThumbs(items) {
-    const need = items.filter(it => !it.th);
+    const need = items.filter(it => !it.th && here(it));
     if (!need.length) return { made: 0, skipped: 0 };
     if (V.needsShare()) {
       if (!V.canShare()) return { made: 0, skipped: need.length, reason: 'unsupported' };
@@ -462,10 +481,14 @@ export async function renderClient(app, params) {
   // 같은 브라우저 디렉터 콘솔의 회신을 실시간 반영
   Store.onChange(k => {
     if (k === 'sd:inbox:' + p.id) { syncFromInbox(state, p.id); save(); renderList(); }
+    else if (k === 'sd:projects' && versOf(Store.getProject(p.id) || p).length !== vers.length) { const nv = versOf(Store.getProject(p.id)); setViewed(p.id, 0); toast(t('{n}차 수정본이 올라왔어요', { n: nv[nv.length - 1].n }), 3600); renderClient(app, params); }
     else if (k === 'sd:projects') { const before = $('[data-n=notes]', app).textContent; renderList(); if (notes().length > +before) toast(t('디렉터가 새 안내를 남겼어요')); }
   });
 
   renderList();
+  const seenKey = 'sd:seenv:' + p.id, seenV = +(localStorage.getItem(seenKey) || 0);
+  if (vers.length > 1 && seenV && seenV < lastN) toast(t('{n}차 수정본이 올라왔어요. 위 단추로 이전 수정본도 볼 수 있어요', { n: lastN }), 4200);
+  try { localStorage.setItem(seenKey, lastN); } catch {}
   // 처음 열면: 안내사항 → 사용 안내(애니메이션) 순서로
   const firstNotice = (p.n || notes().length) && !sessionStorage.getItem('sd:seen:' + p.id);
   if (firstNotice) sessionStorage.setItem('sd:seen:' + p.id, '1');

@@ -920,6 +920,61 @@ const pointer = (sel, pts) => ev(`(async()=>{const el=document.querySelector(${J
   ok(await ev("document.querySelector('.modal .big-warn').textContent.includes('용량이 큰 파일은 클라이언트 확인 시 끊길 가능성이 있어요!')"), 'large upload: warns it may stutter for the client');
   await ev("document.querySelector('.modal .foot button').click()");
   ok(await ev("window.__big.then(v=>v===false)"), 'large upload: can cancel');
+  /* 11-2. 수정본(차수): 같은 프로젝트에 2차 영상 올리기 · 1차로 돌아가기 · 채팅 구분선 */
+  await go(BASE); await until("document.querySelector('[data-act=new]') || document.querySelector('.hero-form input')", 8000, 'ver home');
+  if (!(await ev("!!document.querySelector('.hero-form input')"))) { await ev("document.querySelector('[data-act=new]').click()"); await until("document.querySelector('.modal .hero-form input')", 4000); }
+  await ev(`document.querySelector('.hero-form input').value=${JSON.stringify(VIDEO)};document.querySelector('.hero-form .btn').click()`);
+  await until("location.hash.includes('tab=setup') && document.querySelector('[data-link]') && document.querySelector('[data-link]').value.includes('#c=')", 10000, 'ver project');
+  await until("document.querySelector('.stage video') && document.querySelector('.stage video').readyState>=2", 10000, 'ver video 1');
+  const vPid = await ev("location.hash.match(/p=([^&]+)/)[1]"), vPin = await ev("[...document.querySelectorAll('.pin-show span')].map(s=>s.textContent).join('')");
+  ok(await ev("!!document.querySelector('.verbar [data-act=add-ver]') && !document.querySelector('.verbar .vers')"), 'versions: one video shows only the "new revision" button');
+  await ev("document.querySelector('[data-tab=inbox]').click()"); await until("document.querySelector('.toolbar') && document.querySelector('.stage video').readyState>=2", 8000);
+  await pointer('.overlay', [[0.3, 0.3], [0.3, 0.3]]); await delay(500);
+  ok(await ev(`JSON.parse(localStorage.getItem('sd:projects'))[${JSON.stringify(vPid)}].notes.length===1`), 'versions: director note on 1st cut');
+  await ev("document.querySelector('.verbar [data-act=add-ver]').click()"); await until("document.querySelector('.modal.ver-dlg .hero-form input')", 4000, 'ver dialog');
+  ok(await ev("document.querySelector('.modal.ver-dlg').textContent.includes('2차 수정본 올리기')"), 'versions: dialog offers the 2nd cut');
+  await ev(`document.querySelector('.ver-dlg .hero-form input').value=${JSON.stringify(VIDEO + '?v=2')};document.querySelector('.ver-dlg .hero-form .btn').click()`);
+  await until("document.querySelectorAll('.verbar .vers [data-ver]').length===2", 10000, 'two versions');
+  await until("document.querySelector('.stage video') && document.querySelector('.stage video').readyState>=2", 10000, 'ver video 2');
+  ok(await ev("document.querySelector('.stage video').src.includes('?v=2') && document.querySelector('.verbar .vers .on').dataset.ver==='2'"), 'versions: 2nd cut uploaded and shown');
+  ok(await ev(`(()=>{const p=JSON.parse(localStorage.getItem('sd:projects'))[${JSON.stringify(vPid)}];return p.vers.length===2 && p.src.url.includes('?v=2') && !p.vers[0].src.url.includes('?v=2')})()`), 'versions: 1st cut kept, project points at the newest');
+  ok(await ev("[...document.querySelectorAll('.ver-line')].some(l=>l.textContent.includes('2차 수정본이 업로드되었습니다.'))"), 'versions: chat shows "2차 수정본이 업로드되었습니다." divider');
+  ok(await ev("document.querySelector('.list .item .vtag').textContent==='1차'"), 'versions: note card is tagged 1st cut');
+  ok(await ev("document.querySelectorAll('.overlay .pin').length===0"), 'versions: 1st-cut pins hidden on the 2nd cut');
+  await shot('11b-versions-director');
+  await ev("document.querySelector('.verbar .vers [data-ver=\"1\"]').click()");
+  await until("document.querySelector('.verbar .ver-old') && document.querySelector('.stage video') && !document.querySelector('.stage video').src.includes('?v=2')", 8000, 'back to v1');
+  ok(true, 'versions: button goes back to the 1st cut');
+  await until("document.querySelector('.stage video').readyState>=2", 8000);
+  await delay(300);
+  ok(await ev("document.querySelectorAll('.overlay .pin').length===1"), 'versions: 1st-cut pin shows on the 1st cut');
+  await ev("document.querySelector('.verbar .ver-old + [data-ver]').click()");
+  await until("!document.querySelector('.verbar .ver-old') && document.querySelector('.stage video') && document.querySelector('.stage video').src.includes('?v=2')", 8000, 'latest again');
+  ok(true, 'versions: "latest" button returns to the newest cut');
+  // 3차도
+  await ev("document.querySelector('.verbar [data-act=add-ver]').click()"); await until("document.querySelector('.modal.ver-dlg .hero-form input')", 4000);
+  await ev(`document.querySelector('.ver-dlg .hero-form input').value=${JSON.stringify(VIDEO + '?v=3')};document.querySelector('.ver-dlg .hero-form .btn').click()`);
+  await until("document.querySelectorAll('.verbar .vers [data-ver]').length===3", 10000, 'three versions');
+  ok(await ev("[...document.querySelectorAll('.ver-line')].map(l=>l.textContent).join('|').includes('3차 수정본이 업로드되었습니다.')"), 'versions: 3rd cut divider');
+  // 클라이언트
+  const vLink = await (async () => { await ev("document.querySelector('[data-tab=setup]').click()"); await until("document.querySelector('[data-link]') && document.querySelector('[data-link]').value.includes('#c=')", 8000); return ev("document.querySelector('[data-link]').value"); })();
+  ok(await ev(`(async()=>{const {unpack}=await import('/assets/js/util.js');const p=await unpack(${JSON.stringify(vLink.split('#c=')[1])});return p.vs && p.vs.length===3 && p.src.url.includes('?v=3')})()`), 'versions: client link carries every cut');
+  await go(vLink); await until("document.querySelector('.pin-boxes input')");
+  await ev(`(()=>{const b=[...document.querySelectorAll('.pin-boxes input')];${JSON.stringify(vPin)}.split('').forEach((c,i)=>{b[i].value=c;b[i].dispatchEvent(new Event('input',{bubbles:true}))});})()`);
+  await until("document.querySelector('.viewer .stage')", 8000, 'ver client');
+  await ev("document.querySelectorAll('.modal .foot .btn').forEach(b=>b.click())"); await delay(300);
+  await until("document.querySelector('.stage video') && document.querySelector('.stage video').readyState>=2", 8000);
+  ok(await ev("document.querySelectorAll('.verbar .vers [data-ver]').length===3 && document.querySelector('.verbar .vers .on').dataset.ver==='3' && !document.querySelector('.verbar [data-act=add-ver]')"), 'versions: client sees 1st-3rd cut buttons, newest selected');
+  await pointer('.overlay', [[0.5, 0.5], [0.5, 0.5]]); await delay(500);
+  ok(await ev(`JSON.parse(localStorage.getItem('sd:client:'+${JSON.stringify(vPid)})).draft[0].v===3`), 'versions: client pin is recorded on the 3rd cut');
+  await ev("document.querySelector('[data-tab=notes]').click()"); await delay(200);
+  ok(await ev("[...document.querySelectorAll('.ver-line')].length===2"), 'versions: client notes show cut dividers');
+  await shot('11c-versions-client');
+  await ev("document.querySelector('.verbar .vers [data-ver=\"1\"]').click()");
+  await until("document.querySelector('.stage video') && !document.querySelector('.stage video').src.includes('?v=') && document.querySelector('.verbar .ver-old')", 8000, 'client v1');
+  ok(true, 'versions: client can go back to the 1st cut');
+  await ev("sessionStorage.removeItem('sd:cv:'+" + JSON.stringify(vPid) + ")");
+
   /* 12. WesNS 로그인 (목업) */
   const HANGUL = "(()=>{const w=document.createTreeWalker(document.body,NodeFilter.SHOW_TEXT);const bad=[];let n;while(n=w.nextNode()){if(n.parentElement.closest('[data-user],textarea,input,noscript,script,style'))continue;if(/[가-힣]/.test(n.textContent))bad.push(n.textContent.trim().slice(0,40))}document.querySelectorAll('[title],[aria-label],[placeholder]').forEach(e=>['title','aria-label','placeholder'].forEach(a=>{const v=e.getAttribute(a);if(v&&/[가-힣]/.test(v)&&!/한국어/.test(v))bad.push(a+':'+v.slice(0,40))}));return bad.filter(x=>x!=='한국어')})()";
   await ev("localStorage.clear();sessionStorage.setItem('t:nouser','1');localStorage.setItem('wesns.lang','ko')");

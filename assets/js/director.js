@@ -15,11 +15,13 @@ import { meterHTML, planDialog, fitsFileLimit, bigFileOk } from './plans.js';
 import { msg, replies, dayLine, composer, glide, editText, confirmDelete } from './chat.js';
 import { clientLink, feedbackMessage, reportHTML, printHTML, shareFile, parseIncoming, STATUS, noteLabel } from './exports.js';
 import { accountBtnHTML } from './auth.js';
+import { versOf, addVersion, dropLatest, itemVer, verName, viewedVer, setViewed, verbarHTML, verLine, withVerLines } from './versions.js';
 import { t, tn, lang, fmtDateL, fmtMD, langBtnHTML, fmtTime } from './i18n.js';
 
 const pin4 = () => String(crypto.getRandomValues(new Uint16Array(1))[0] % 10000).padStart(4, '0');
 
 let V = null; // 현재 재생 화면
+let jumpTo = null; // 다른 차수의 카드를 눌러 차수를 바꾼 뒤 그 장면으로
 
 export async function newProject(fields = {}) {
   const folderId = 'folderId' in fields ? fields.folderId : takeNewIn();
@@ -197,16 +199,16 @@ function renderHome(main) {
 }
 
 /** 링크 붙여 넣기 · 파일 올리기 — 첫 화면과 '새 프로젝트' 팝업이 함께 쓴다 */
-function wireSourcePicker(root, before = () => {}) {
+function wireSourcePicker(root, before = () => {}, onSrc = src => startNew('', src)) {
   $('[data-hero]', root).addEventListener('submit', e => {
     e.preventDefault();
     const v = $('[data-hero] input', root).value.trim();
     if (!v) { toast(t('링크를 붙여 넣거나 파일을 올려 주세요')); return; }
     const btn = $('[data-hero] .btn', root); btn.disabled = true;
-    checkSource(v).then(src => { btn.disabled = false; if (src) { before(); startNew('', src); } });
+    checkSource(v).then(src => { btn.disabled = false; if (src) { before(); onSrc(src); } });
   });
   const drop = $('[data-drop]', root);
-  const take = async files => { if (!files.length) return; before(); const src = await uploadFile(files); if (src) startNew('', src); };
+  const take = async files => { if (!files.length) return; before(); const src = await uploadFile(files); if (src) onSrc(src); };
   $('input', drop).addEventListener('change', e => take([...e.target.files]));
   drop.addEventListener('dragover', e => { e.preventDefault(); e.stopPropagation(); drop.classList.add('over'); });
   drop.addEventListener('dragleave', () => drop.classList.remove('over'));
@@ -345,7 +347,7 @@ async function startNew(url = '', given = null) {
 function importInto(pp, reqs) {
   let p = Store.getProject(pp.id);
   if (!p) { // 다른 기기에서 만든 프로젝트: 링크 정보로 다시 만든다
-    p = { id: pp.id, title: pp.t, notice: pp.n, due: pp.d, src: pp.src, ar: pp.ar, fps: pp.fps, fpsHow: pp.fh, poster: pp.pv || '', notes: (pp.dn || []).map(n => ({ ...n, by: 'd', rp: n.rp || [] })), pinHash: pp.ph, salt: pp.s, by: pp.by, pin: '', createdAt: Date.now(), imported: true };
+    p = { id: pp.id, title: pp.t, notice: pp.n, due: pp.d, src: pp.src, ar: pp.ar, fps: pp.fps, fpsHow: pp.fh, poster: pp.pv || '', notes: (pp.dn || []).map(n => ({ ...n, by: 'd', rp: n.rp || [] })), pinHash: pp.ph, salt: pp.s, by: pp.by, pin: '', createdAt: Date.now(), imported: true, vers: pp.vs ? pp.vs.map(v => ({ ...v })) : undefined };
     Store.saveProject(p);
   }
   let added = 0;
@@ -405,10 +407,16 @@ function renderProject(main, p, tab) {
 
   const viewerEl = $('[data-viewer]', main);
   let selected = null;
-  const items = () => [...Store.inbox(p.id).flatMap(r => r.items), ...(p.notes || [])].sort((a, b) => a.t - b.t);
+  // 수정본: 보고 있는 차수(M) — 최신이면 프로젝트 자신, 이전 차수면 p.vers 안의 그 차수
+  const vers = versOf(p), vw = viewedVer(p.id, vers), lastN = vers.length ? vers[vers.length - 1].n : 1, curN = vw ? vw.n : 1;
+  const M = !vw || curN === lastN ? p : vw;
+  const items = () => [...Store.inbox(p.id).flatMap(r => r.items), ...(p.notes || [])].filter(it => itemVer(it) === curN).sort((a, b) => a.t - b.t);
+  const jump = jumpTo; jumpTo = null;
   const hooks = {};
   if (p.src) {
-    V = mountViewer(viewerEl, p.src, {
+    viewerEl.innerHTML = verbarHTML(vers, curN, { add: true }) + '<div class="vmount"></div>';
+    wireVerbar(viewerEl, p, vers);
+    V = mountViewer($('.vmount', viewerEl), M.src, {
       items: tab === 'inbox' ? items : null,
       selected: () => selected,
       // 디렉터도 핀·펜으로 클라이언트에게 안내를 남긴다
@@ -417,23 +425,26 @@ function renderProject(main, p, tab) {
       onPin: a => hooks.pin && hooks.pin(a), onStroke: s => hooks.stroke && hooks.stroke(s), onMemo: () => hooks.memo && hooks.memo(),
       onMeta: m => { // 알아서 알아낸 화면비·프레임 수를 저장 → 클라이언트 링크에도 들어간다
         let ch = false;
-        if (m.ar && (m.ar[0] !== (p.ar || [])[0] || m.ar[1] !== (p.ar || [])[1])) { p.ar = m.ar; ch = true; }
-        if (m.fps && m.fpsHow === 'measured' && p.fpsHow !== 'set' && (m.fps !== p.fps || p.fpsHow !== 'measured')) { p.fps = m.fps; p.fpsHow = 'measured'; ch = true; }
+        if (m.ar && (m.ar[0] !== (M.ar || [])[0] || m.ar[1] !== (M.ar || [])[1])) { M.ar = m.ar; ch = true; }
+        if (m.fps && m.fpsHow === 'measured' && M.fpsHow !== 'set' && (m.fps !== M.fps || M.fpsHow !== 'measured')) { M.fps = m.fps; M.fpsHow = 'measured'; ch = true; }
         if (m.title && !p.title) { p.title = m.title; $('[data-f=title]', main).value = m.title; ch = true; }
-        if (m.poster && m.poster !== p.poster) { p.poster = m.poster; ch = true; }
+        if (m.poster && m.poster !== M.poster) { M.poster = m.poster; ch = true; }
         if (ch) { Store.saveProject(p); queueLink(); renderMeta(); }
       },
-      onReady: info => { p.duration = info.duration; if (!p.title && info.title) { p.title = info.title; $('[data-f=title]', main).value = info.title; } Store.saveProject(p); renderMeta(); },
+      onReady: info => {
+        M.duration = info.duration; if (!p.title && info.title) { p.title = info.title; $('[data-f=title]', main).value = info.title; } Store.saveProject(p); renderMeta();
+        if (jump) { selected = jump.id; V.P.pause(); V.P.seek(jump.t); if (jump.th) V.P.showFreeze(jump.th, jump.t); V.render(); const c = $(`.list [data-id="${jump.id}"]`, main); if (c) { c.classList.add('sel'); c.scrollIntoView({ block: 'nearest' }); } }
+      },
     });
-    if (p.ar) V.P.setMeta({ ar: p.ar });
-    if (p.fps) V.P.setMeta({ fps: p.fps, how: p.fpsHow || 'measured' });
+    if (M.ar) V.P.setMeta({ ar: M.ar });
+    if (M.fps) V.P.setMeta({ fps: M.fps, how: M.fpsHow || 'measured' });
   } else {
     viewerEl.innerHTML = `<div class="viewer"><div class="stage empty-stage"><div><b>${t('영상을 넣어 주세요')}</b><span>${t('오른쪽')} "${t('영상')}" ${t('칸에 유튜브·비메오 링크나 mp4 주소를 붙여 넣거나 영상 파일을 올리면 여기서 바로 재생돼요.')}</span></div></div></div>`;
   }
 
   if (tab === 'setup') renderSetup($('[data-side]', main), p, main);
   else if (tab === 'deliver') renderDeliver($('[data-side]', main), p, rerender);
-  else renderInbox($('[data-side]', main), p, () => selected, id => { selected = id; }, hooks, params_pane(p));
+  else renderInbox($('[data-side]', main), p, () => selected, id => { selected = id; }, hooks, params_pane(p), { vers, curN, lastN });
 
   document.onkeydown = e => {
     if (document.querySelector('.modal.open')) return;
@@ -446,15 +457,15 @@ function renderProject(main, p, tab) {
   function renderMeta() {
     const el = $('[data-meta]', main); if (!el || !V) return;
     const P = V.P;
-    if (P.doc) { el.innerHTML = `<span class="chip">${srcKind(p.src)}</span>${P.ready() ? `<span class="chip">${t(p.src.dt === 'pptx' || p.src.dt === 'canva' ? '슬라이드 {n}장' : p.src.dt === 'img' ? '사진 {n}장' : '총 {n}쪽', { n: P.duration() + 1 })}</span>` : ''}`; return; }
+    if (P.doc) { const src = M.src; el.innerHTML = `<span class="chip">${srcKind(src)}</span>${P.ready() ? `<span class="chip">${t(src.dt === 'pptx' || src.dt === 'canva' ? '슬라이드 {n}장' : src.dt === 'img' ? '사진 {n}장' : '총 {n}쪽', { n: P.duration() + 1 })}</span>` : ''}`; return; }
     const how = P.fpsHow === 'measured' ? t('측정됨') : P.fpsHow === 'title' ? t('영상 정보') : P.fpsHow === 'set' ? t('직접 지정') : P.live() ? t('재생하면 측정') : t('기본값');
-    el.innerHTML = `<span class="chip">${srcKind(p.src)}</span><span class="chip">${P.ar[0]}:${P.ar[1]}${P.ar[0] < P.ar[1] ? t(' 세로') : ''}</span>
+    el.innerHTML = `<span class="chip">${srcKind(M.src)}</span><span class="chip">${P.ar[0]}:${P.ar[1]}${P.ar[0] < P.ar[1] ? t(' 세로') : ''}</span>
       <label class="chip fps-pick ${P.fpsHow === 'measured' ? 'measured' : ''}" title="${t('프레임 수 — 시간 주소의 프레임 번호 기준')}">
         <select data-fps-pick aria-label="${t('프레임 수')}">${['', ...STD_FPS].map(f => `<option value="${f}" ${(f === '' ? !P.fps : f === P.fps) ? 'selected' : ''}>${f === '' ? t('30fps (기본)') : fpsLabel(f)}</option>`).join('')}</select><span>${how}</span></label>
-      ${p.duration ? `<span class="chip">${tc(p.duration, P.effFps())}</span>` : ''}`;
+      ${M.duration ? `<span class="chip">${tc(M.duration, P.effFps())}</span>` : ''}`;
     $('[data-fps-pick]', el).addEventListener('change', e => {
       const f = +e.target.value || 0;
-      p.fps = f; p.fpsHow = f ? 'set' : ''; Store.saveProject(p); queueLink();
+      M.fps = f; M.fpsHow = f ? 'set' : ''; Store.saveProject(p); queueLink();
       if (f) V.P.setMeta({ fps: f, how: 'set', force: true }); else { V.P.fps = 0; V.P.fpsHow = ''; }
       renderMeta(); V.render();
     });
@@ -470,10 +481,11 @@ function renderSetup(side, p, main) {
   const isFile = p.src && (p.src.k === 'file' || (p.src.k === 'doc' && !p.src.url));
   side.innerHTML = `
     <div class="card">
-      <div class="card-title">${isDoc(p.src) ? t('검수 문서') : t('영상')}</div>
+      <div class="card-title">${isDoc(p.src) ? t('검수 문서') : t('영상')}${p.src ? `<span class="card-sub">${esc(t('최신 {v}', { v: verName(versOf(p).slice(-1)[0].n) }))}</span><button class="btn small" data-act="add-ver">${ic('plus', 14)}${t('새 수정본')}</button>` : ''}</div>
       <div class="linkbox"><input class="field-in" data-f="src" value="${esc(isFile ? '' : srcText(p.src))}" placeholder="${isFile ? esc(p.src.name + ' · ' + fmtSize(p.src.size || 0)) : t('유튜브 · 비메오 · 캔바 링크, 영상 · PDF · 사진 주소')}" aria-label="${t('영상 링크')}" spellcheck="false">
         <label class="btn" title="${t('영상·문서 파일 올리기')}">${ic('import')}${t('파일')}<input type="file" data-upload accept="video/*,.mp4,.mov,.m4v,.webm,.mkv,application/pdf,.pdf,.pptx,image/*" multiple hidden></label></div>
       <div class="meta-row" data-meta></div>
+      ${p.src ? `<p class="note dim">${t('다른 링크나 파일을 넣으면 지금 영상은 이전 차수로 남고 다음 수정본으로 올라가요. 받은 요청과 안내도 차수별로 그대로 남아요.')}</p>` : ''}
       ${p.src && p.src.dt === 'canva' ? `<div class="canva-set">
         <label><span>${t('페이지 수')}</span><input class="field-in" type="number" min="1" max="300" data-canva="n" value="${p.src.n || 10}"></label>
         <label><span>${t('화면비')}</span><select class="field-in" data-canva="ar">${(() => {
@@ -527,9 +539,10 @@ function renderSetup(side, p, main) {
   refreshLink();
 
   const changeSrc = async src => {
+    if (p.src && src) { await uploadVersion(p, src); return; }
     p.src = src; p.fps = 0; p.fpsHow = ''; p.poster = ''; p.ar = src && src.k === 'yt' && src.short ? [9, 16] : [16, 9]; p.duration = 0;
     if (src) { const m = await probe(src); p.ar = m.ar || p.ar; p.fps = m.fps || 0; p.fpsHow = m.fps ? 'title' : ''; p.poster = m.poster || ''; if (!p.title) p.title = m.title; }
-    if (Store.inbox(p.id).length) toast(t('영상을 바꿨어요. 이미 받은 요청은 이전 영상 기준 시간이에요'), 4200);
+    Store.saveProject(p);
     const h = '#p=' + p.id + '&tab=setup'; if (location.hash === h) dispatchEvent(new HashChangeEvent('hashchange')); else location.hash = h;
   };
   f('src').addEventListener('change', async e => {
@@ -572,6 +585,56 @@ function renderSetup(side, p, main) {
   $('[data-act=share]', side).addEventListener('click', async () => { if (!link) return; const r = await shareOrCopy({ title: p.title, text: shareText(), url: link }); if (r === 'copied') toast(t('공유 창이 없어 복사했어요')); });
   $('[data-act=qr]', side).addEventListener('click', () => { const q = $('[data-qr]', side); q.hidden = !q.hidden; if (!q.hidden && link) drawQR(q, link); });
   $('[data-act=delete]', side).addEventListener('click', () => deleteProjectAsk(p, true));
+  $('[data-act=add-ver]', side)?.addEventListener('click', () => addVersionDialog(p));
+}
+
+/* ---------- 수정본(차수) ---------- */
+/** 새 수정본 올리기 — 링크를 붙여 넣거나 파일을 올린다 */
+function addVersionDialog(p) {
+  if (document.querySelector('.modal.ver-dlg')) return;
+  const next = versOf(p).slice(-1)[0].n + 1;
+  modal({
+    title: t('{n}차 수정본 올리기', { n: next }),
+    body: `<p class="note dim new-lead">${t('같은 프로젝트에 다음 차수 영상을 올려요. 지금 영상은 이전 차수로 남고, 받은 요청과 안내도 차수별로 그대로 볼 수 있어요.')}</p>
+      <form class="hero-form" data-hero><input placeholder="${t('유튜브 · 비메오 · 캔바 링크, 영상 · PDF · 사진 주소')}" aria-label="${t('영상 링크')}" autofocus><button class="btn brand">${ic('plus')}${t('올리기')}</button></form>
+      <label class="drop-file" data-drop>${ic('import', 18)}<span><b>${t('파일 올리기')}</b><small>${t('영상 · PDF · PPT(.pptx) · 사진 — 끌어 놓거나 눌러서 고르기')}</small></span><input type="file" accept="${ACC}" multiple hidden></label>`,
+    actions: [{ label: t('닫기'), value: null }],
+    onOpen: (w, close) => { w.classList.add('ver-dlg'); wireSourcePicker(w, () => close('go'), src => uploadVersion(p, src)); },
+  });
+}
+async function uploadVersion(p, src) {
+  const m = await probe(src).catch(() => ({}));
+  const v = addVersion(p, src, m || {});
+  if (!p.title && m && m.title) p.title = m.title;
+  Store.saveProject(p); setViewed(p.id, 0);
+  toast(t('{n}차 수정본을 올렸어요. 클라이언트 링크도 새 수정본으로 바뀌었어요', { n: v.n }), 4200);
+  rerender();
+}
+/** 영상 위 차수 단추: 누르면 그 차수로, 최신 차수 우클릭은 지우기 */
+function wireVerbar(root, p, vers) {
+  const bar = $('.verbar', root); if (!bar) return;
+  const last = vers[vers.length - 1].n;
+  bar.addEventListener('click', e => {
+    const b = e.target.closest('[data-ver]'); if (b) { setViewed(p.id, +b.dataset.ver, last); rerender(); return; }
+    if (e.target.closest('[data-act=add-ver]')) addVersionDialog(p);
+  });
+  bar.addEventListener('contextmenu', e => {
+    const b = e.target.closest('.vers [data-ver]'); if (!b) return;
+    e.preventDefault();
+    const n = +b.dataset.ver;
+    openMenu(e.clientX, e.clientY, [
+      { label: t('{v} 보기', { v: verName(n) }), icon: 'eye', act: () => { setViewed(p.id, n, last); rerender(); } },
+      n === last && vers.length > 1 ? '-' : null,
+      n === last && vers.length > 1 ? { label: t('이 수정본 지우기'), icon: 'trash', danger: true, act: async () => {
+        if (!await confirmDelete(t('{v} 수정본을 지울까요?', { v: verName(n) }), t('영상만 지워지고, 이 차수에 남긴 요청과 안내는 바로 앞 차수로 옮겨져요.'))) return;
+        dropLatest(p, (from, to) => {
+          (p.notes || []).forEach(x => { if (itemVer(x) === from) x.v = to > 1 ? to : undefined; });
+          const inbox = Store.inbox(p.id); inbox.forEach(r => r.items.forEach(x => { if (itemVer(x) === from) x.v = to > 1 ? to : undefined; })); Store.saveInbox(p.id, inbox);
+        });
+        Store.saveProject(p); setViewed(p.id, 0); toast(t('수정본을 지웠어요')); rerender();
+      } } : null,
+    ].filter(Boolean), { opener: b });
+  });
 }
 
 let qrLib = null;
@@ -583,7 +646,7 @@ function drawQR(el, text) {
 }
 
 /* ---------- 받은 수정요청 ---------- */
-function renderInbox(side, p, getSel, setSel, hooks, initialPane) {
+function renderInbox(side, p, getSel, setSel, hooks, initialPane, vi = { vers: versOf(p), curN: 1, lastN: 1 }) {
   let filter = 'all', pane = initialPane || 'req', activeNote = null;
   const notes = () => (p.notes || (p.notes = [])).slice().sort((a, b) => a.t - b.t);
   const saveNotes = () => { Store.saveProject(p); side.closest('.pmain')?._queueLink?.(); };
@@ -595,7 +658,7 @@ function renderInbox(side, p, getSel, setSel, hooks, initialPane) {
     if (!V || !V.P.ready()) return;
     V.P.pause();
     const snap = await V.P.snapshot();
-    const it = { id: 'd' + uid(6), by: 'd', t: snap.t, x, y, s, tx: '', th: snap.img, rp: [], at: Date.now(), ...(snap.ar ? { ar: snap.ar } : {}) };
+    const it = { id: 'd' + uid(6), by: 'd', t: snap.t, x, y, s, tx: '', th: snap.img, rp: [], at: Date.now(), ...(snap.ar ? { ar: snap.ar } : {}), ...(vi.curN > 1 ? { v: vi.curN } : {}) };
     (p.notes || (p.notes = [])).push(it);
     activeNote = it.id; setSel(it.id); pane = 'notes'; saveNotes(); draw();
     const ta = $(`[data-id="${it.id}"] [data-ntx]`, side); if (ta) { ta.focus(); ta.closest('.item').scrollIntoView({ block: 'nearest', behavior: 'smooth' }); }
@@ -620,7 +683,8 @@ function renderInbox(side, p, getSel, setSel, hooks, initialPane) {
     const inbox = Store.inbox(p.id).sort((a, b) => b.at - a.at), all = inbox.flatMap(r => r.items), ns = notes();
     const cnt = k => all.filter(it => (it.st || 'open') === k).length, done = cnt('done');
     const fps = V ? V.P.effFps() : (p.fps || 30), poster = posterOf(p.src, p.poster);
-    const missing = all.filter(it => !it.th).length + ns.filter(it => !it.th).length;
+    const here = it => itemVer(it) === vi.curN; // 장면 사진은 지금 보고 있는 차수 영상에서만 찍을 수 있다
+    const missing = all.filter(it => !it.th && here(it)).length + ns.filter(it => !it.th && here(it)).length;
     const sendable = all.length || ns.length;
     side.innerHTML = `
       <div class="side-tabs" role="tablist">
@@ -648,16 +712,19 @@ function renderInbox(side, p, getSel, setSel, hooks, initialPane) {
           </div>
         </div>
       </div>
-      <div class="list">${pane === 'notes' ? (ns.length ? ns.map(it => noteCard(it, fps, poster)).join('') : `<div class="empty">
+      <div class="list">${pane === 'notes' ? (ns.length ? notesByVer(ns, fps, poster) : `<div class="empty">
           <b>${t('클라이언트에게 남길 안내가 없어요')}</b>
           <span>${ic('pin', 14)} ${t('핀 ·')} ${ic('pen', 14)} ${t('펜으로 영상 위에 표시하고 내용을 적어 주세요.')}</span>
           <span>${t('예:')} "${t('이 컷은 색보정 전이에요')}", "${t('자막 위치는 여기로 바뀔 예정')}"</span>
           <span class="dim">${t('안내는 클라이언트 링크와')} "${t('안내 보내기')}"${t('에 함께 담겨요.')}</span></div>`)
-        : inbox.length ? inbox.map(r => {
+        : inbox.length ? (inbox.some(r => r.items.some(it => filter === 'all' || (it.st || 'open') === filter)) ? withVerLines(inbox.map(r => {
           const its = r.items.filter(it => filter === 'all' || (it.st || 'open') === filter).sort((a, b) => a.t - b.t);
-          if (!its.length) return '';
-          return `<div class="group">${dayLine(r.at, `${esc(r.from || t('클라이언트'))} · ${fmtTime(r.at)} · ${r.items.length}${t('건')}`)}${its.map(it => card(it, r, label(it), fps, poster)).join('')}</div>`;
-        }).join('') || t('<div class="empty"><b>이 상태의 요청이 없어요</b></div>') : `<div class="empty">
+          return { at: r.at, html: its.length ? `<div class="group">${dayLine(r.at, `${esc(r.from || t('클라이언트'))} · ${fmtTime(r.at)} · ${r.items.length}${t('건')}`)}${its.map(it => card(it, r, label(it), fps, poster)).join('')}</div>` : '' };
+        }), vi.vers) : t('<div class="empty"><b>이 상태의 요청이 없어요</b></div>')) : vi.vers.length > 1 ? withVerLines([], vi.vers) + `<div class="empty">
+          <b>${t('아직 받은 수정요청이 없어요')}</b>
+          <span>"${t('설정 · 공유')}"${t('에서 링크와 핀 번호를 클라이언트에게 보내 주세요.')}</span>
+          <span>${t('클라이언트가 메시지나 HTML 파일로 보냈다면 위의')} "${t('가져오기')}"${t('를 쓰거나 파일을 이 화면에 끌어 놓으세요.')}</span>
+          ${MODE === 'mock' ? t('<span class="dim">시험 버전: 같은 브라우저에서 "클라이언트 화면"을 열어 보내면 여기에 바로 들어와요.</span>') : ''}</div>` : `<div class="empty">
           <b>${t('아직 받은 수정요청이 없어요')}</b>
           <span>"${t('설정 · 공유')}"${t('에서 링크와 핀 번호를 클라이언트에게 보내 주세요.')}</span>
           <span>${t('클라이언트가 메시지나 HTML 파일로 보냈다면 위의')} "${t('가져오기')}"${t('를 쓰거나 파일을 이 화면에 끌어 놓으세요.')}</span>
@@ -666,10 +733,17 @@ function renderInbox(side, p, getSel, setSel, hooks, initialPane) {
     bindMenu(side);
     if (V) V.render();
   };
+  // 차수가 둘 이상이면 카드마다 몇 차 영상에 남긴 것인지 표시
+  const verTag = it => vi.vers.length > 1 ? `<span class="vtag${itemVer(it) === vi.curN ? ' on' : ''}" title="${esc(t('{v} 영상에 남긴 표시', { v: verName(itemVer(it)) }))}">${esc(verName(itemVer(it)))}</span>` : '';
+  // 내 안내: 차수별로 묶고, 차수가 바뀌는 자리에 구분선
+  function notesByVer(ns, fps, poster) {
+    if (vi.vers.length < 2) return ns.map(it => noteCard(it, fps, poster)).join('');
+    return vi.vers.map(v => (v.n > 1 ? verLine(v) : '') + ns.filter(it => itemVer(it) === v.n).map(it => noteCard(it, fps, poster)).join('')).join('');
+  }
   // 받은 요청: 클라이언트 말(왼쪽 말풍선, 장면 사진 + 내용) → 상태 → 댓글 대화 → 입력창
   function card(it, r, n, fps, poster) {
     const st = it.st || 'open', sel = getSel() === it.id, who = r.from || t('클라이언트');
-    const body = `<div class="item-head"><span class="no">${n}</span><button class="tcbtn" data-seek title="${t('이 시점으로')}">${tc(it.t, fps)}</button>
+    const body = `<div class="item-head"><span class="no">${n}</span><button class="tcbtn" data-seek title="${t('이 시점으로')}">${tc(it.t, fps)}</button>${verTag(it)}
         <button class="icon-x tonly" data-full aria-label="${t('크게 보기')}" title="${t('장면과 함께 크게 보기')}">${ic('expand', 14)}</button><button class="icon-x" data-loop title="${t('앞뒤 2초 반복 재생')}" aria-label="${t('앞뒤 재생')}">${ic('loop', 15)}</button></div>
       <div data-snapseek role="button" tabindex="0" aria-label="${n}${t('번 장면으로 이동')}">${snapHTML(it, n, p.ar || [16, 9], poster, undefined, { full: true })}</div>
       ${it.tx ? `<p class="tx">${esc(it.tx)}</p>` : `<p class="tx dim">${t('(내용 없음)')}</p>`}`;
@@ -682,7 +756,7 @@ function renderInbox(side, p, getSel, setSel, hooks, initialPane) {
   function noteCard(it, fps, poster) {
     const n = label(it), sel = getSel() === it.id;
     const kind = it.x != null ? (it.s && it.s.length ? t('핀 + 그림') : t('핀')) : it.s && it.s.length ? t('그림') : t('메모');
-    const body = `<div class="item-head"><span class="no d">${n}</span><button class="tcbtn" data-seek title="${t('이 시점으로')}">${tc(it.t, fps)}</button><span class="kind">${kind}</span><button class="icon-x tonly" data-full aria-label="${t('크게 보기')}" title="${t('장면과 함께 크게 보기')}">${ic('expand', 14)}</button>
+    const body = `<div class="item-head"><span class="no d">${n}</span><button class="tcbtn" data-seek title="${t('이 시점으로')}">${tc(it.t, fps)}</button>${verTag(it)}<span class="kind">${kind}</span><button class="icon-x tonly" data-full aria-label="${t('크게 보기')}" title="${t('장면과 함께 크게 보기')}">${ic('expand', 14)}</button>
         <button class="icon-x" data-ndel aria-label="${t('안내 삭제')}" title="${t('삭제')}">${ic('trash', 15)}</button></div>
       <div data-snapseek role="button" tabindex="0" aria-label="${n} ${t('장면으로 이동')}">${snapHTML(it, n, p.ar || [16, 9], poster, V && V.needsShare() ? t('장면 사진 없음 — 위 버튼으로 만들 수 있어요') : t('장면 사진 없음'), { full: true })}</div>
       <textarea rows="2" placeholder="${t('클라이언트에게 남길 안내를 적어 주세요')}" data-ntx>${esc(it.tx || '')}</textarea>`;
@@ -703,6 +777,7 @@ function renderInbox(side, p, getSel, setSel, hooks, initialPane) {
   };
   const addReply = (rid, id, b) => update(rid, id, it => { it.rp = [...(it.rp || []), { by: 'd', n: p.by || t('디렉터'), b, at: Date.now() }]; if ((it.st || 'open') === 'open' && /반영하겠|반영할게|will (apply|fix)/i.test(b)) it.st = 'doing'; });
   const noteOf = id => (p.notes || []).find(n => n.id === id);
+  const goVer = it => { jumpTo = { id: it.id, t: it.t, th: it.th }; setViewed(p.id, itemVer(it), vi.lastN); toast(t('{v} 영상으로 바꿨어요', { v: verName(itemVer(it)) }), 2200); rerender(); };
   const noteReply = (id, b) => { const n = noteOf(id); if (!n) return; n.rp = [...(n.rp || []), { by: 'd', n: p.by || t('디렉터'), b, at: Date.now() }]; saveNotes(); draw(); };
   const noteDelete = id => {
     const k = (p.notes || []).findIndex(n => n.id === id); if (k < 0) return;
@@ -742,7 +817,7 @@ function renderInbox(side, p, getSel, setSel, hooks, initialPane) {
           api.refresh();
         });
       },
-      onClose: it => { if (it && V) { setSel(it.id); if (it.by === 'd') activeNote = it.id; V.P.pause(); V.P.seek(it.t); if (it.th) V.P.showFreeze(it.th, it.t); draw(); } },
+      onClose: it => { if (it && itemVer(it) !== vi.curN) { goVer(it); return; } if (it && V) { setSel(it.id); if (it.by === 'd') activeNote = it.id; V.P.pause(); V.P.seek(it.t); if (it.th) V.P.showFreeze(it.th, it.t); draw(); } },
     });
   }
   // 썸네일 = 그 프레임으로 이동, 오른쪽 아래 버튼 = 전체화면으로 장면·수정사항 보기
@@ -757,7 +832,7 @@ function renderInbox(side, p, getSel, setSel, hooks, initialPane) {
     const pb = e.target.closest('[data-pane]'); if (pb) { pane = pb.dataset.pane; draw(); return; }
     const fb = e.target.closest('[data-filter]'); if (fb) { filter = fb.dataset.filter; draw(); return; }
     if (e.target.closest('[data-act=thumbs]')) {
-      const inbox = Store.inbox(p.id), items = [...inbox.flatMap(r => r.items), ...(p.notes || [])], tp = $('[data-tp]', side);
+      const inbox = Store.inbox(p.id), items = [...inbox.flatMap(r => r.items), ...(p.notes || [])].filter(it => itemVer(it) === vi.curN), tp = $('[data-tp]', side);
       if (V.needsShare()) {
         const ok = await modal({ title: t('장면 사진 만들기'), body: `<p class="note">${t('이 탭 화면을 잠깐 공유해서 사진이 없는')} ${items.filter(it => !it.th).length}${t('개 장면을 자동으로 찍어요. 끝나면 공유는 바로 꺼져요.')}</p>`, actions: [{ label: t('취소'), value: null }, { label: `${ic('cam')}${t('만들기')}`, kind: 'primary', value: 'go' }] });
         if (ok !== 'go') return;
@@ -777,6 +852,7 @@ function renderInbox(side, p, getSel, setSel, hooks, initialPane) {
     if (e.target.closest('[data-loop]')) { setSel(id); V && V.loopAround(it.t); draw(); return; }
     if (e.target.closest('form,input,textarea')) { if (isNote) activeNote = id; return; }
     if (e.target.closest('[data-full]')) { zoom(id); return; }
+    if (itemVer(it) !== vi.curN) { goVer(it); return; }
     setSel(id); if (isNote) activeNote = id;
     if (V) { V.P.pause(); V.P.seek(it.t); if (it.th) V.P.showFreeze(it.th, it.t); const st = V.P.stage.getBoundingClientRect(); if (st.bottom < 0 || st.top > innerHeight) V.P.stage.scrollIntoView({ block: 'start', behavior: 'smooth' }); }
     $$('.item', side).forEach(c => c.classList.toggle('sel', c.dataset.id === id)); V && V.render();
@@ -811,7 +887,7 @@ function renderInbox(side, p, getSel, setSel, hooks, initialPane) {
     } else {
       items = [
         copy(it.tx || ''),
-        { label: t('이 장면으로 이동'), icon: 'next', act: () => { setSel(id); if (V) { V.P.pause(); V.P.seek(it.t); if (it.th) V.P.showFreeze(it.th, it.t); } draw(); } },
+        { label: t('이 장면으로 이동'), icon: 'next', act: () => { if (itemVer(it) !== vi.curN) { goVer(it); return; } setSel(id); if (V) { V.P.pause(); V.P.seek(it.t); if (it.th) V.P.showFreeze(it.th, it.t); } draw(); } },
         '-',
         ...['done', 'doing', 'hold', 'open'].filter(k => (it.st || 'open') !== k).map(k => ({ label: t('{s}(으)로 표시', { s: STATUS[k] }), icon: k === 'done' ? 'check' : 'sliders', act: () => update(rid, id, x => x.st = k) })),
       ];

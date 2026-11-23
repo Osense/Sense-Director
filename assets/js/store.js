@@ -1,6 +1,7 @@
 /* 저장소 — 지금은 서버 없는 목업(이 브라우저 localStorage).
    나중에 서버를 붙일 때 이 파일의 함수만 바꾸면 화면 코드는 그대로 쓴다. */
 export const MODE = 'mock';
+import { syncLatest } from './versions.js';
 const handlers = {};
 addEventListener('storage', e => { if (e.key && e.key.startsWith('sd:')) Object.values(handlers).forEach(f => f(e.key)); });
 
@@ -11,7 +12,7 @@ const K = { projects: 'sd:projects', inbox: id => 'sd:inbox:' + id, client: id =
 export const Store = {
   projects() { return Object.values(read(K.projects, {})).sort((a, b) => (!!b.pinned - !!a.pinned) || (b.updatedAt || 0) - (a.updatedAt || 0)); },
   getProject(id) { return read(K.projects, {})[id] || null; },
-  saveProject(p) { const all = read(K.projects, {}); p.updatedAt = Date.now(); all[p.id] = p; return write(K.projects, all); },
+  saveProject(p) { const all = read(K.projects, {}); p.updatedAt = Date.now(); syncLatest(p); all[p.id] = p; return write(K.projects, all); },
   deleteProject(id) { const all = read(K.projects, {}); delete all[id]; write(K.projects, all); localStorage.removeItem(K.inbox(id)); localStorage.removeItem(K.dl(id)); },
   /* 폴더 — DB의 folders 표와 같은 모양으로 둔다 (server/schema.sql 참고)
      { id, name, parentId: 폴더 id | null(맨 위), sort, createdAt, updatedAt }

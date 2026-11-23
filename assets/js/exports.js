@@ -6,8 +6,8 @@ import { t, tn, lang, fmtDateL, fmtMD } from './i18n.js';
 export const STATUS = { open: t('대기'), doing: t('진행 중'), done: t('반영'), hold: t('보류') };
 
 /** 클라이언트 링크에 담는 프로젝트 정보 (핀 번호 자체는 담지 않고 해시만) */
-export const projectPayload = p => ({ v: 1, id: p.id, t: p.title, n: p.notice, d: p.due, src: p.src, ar: p.ar, fps: p.fps, dn: p.notes && p.notes.length ? p.notes.map(slimItem) : undefined, fh: p.fpsHow || '', pv: p.src && p.src.k === 'vimeo' ? p.poster || '' : undefined, ph: p.pinHash, s: p.salt, by: p.by || '' });
-function slimItem(it) { return ({ id: it.id, t: Math.round(it.t * 1000) / 1000, x: it.x, y: it.y, s: it.s && it.s.length ? it.s : undefined, tx: it.tx || '', st: it.st, rp: it.rp && it.rp.length ? it.rp : undefined, ar: it.ar }); }
+export const projectPayload = p => ({ v: 1, id: p.id, t: p.title, n: p.notice, d: p.due, src: p.src, ar: p.ar, fps: p.fps, dn: p.notes && p.notes.length ? p.notes.map(slimItem) : undefined, fh: p.fpsHow || '', pv: p.src && p.src.k === 'vimeo' ? p.poster || '' : undefined, ph: p.pinHash, s: p.salt, by: p.by || '', vs: p.vers && p.vers.length > 1 ? p.vers.map(v => ({ n: v.n, src: v.src, ar: v.ar, fps: v.fps, fpsHow: v.fpsHow || '', poster: v.src && v.src.k === 'vimeo' ? v.poster || '' : '', at: v.at })) : undefined });
+function slimItem(it) { return ({ id: it.id, t: Math.round(it.t * 1000) / 1000, x: it.x, y: it.y, s: it.s && it.s.length ? it.s : undefined, tx: it.tx || '', st: it.st, v: it.v > 1 ? it.v : undefined, rp: it.rp && it.rp.length ? it.rp : undefined, ar: it.ar }); }
 export const slimRequest = r => ({ rid: r.rid, from: r.from, at: r.at, items: r.items.map(slimItem), nr: r.nr && r.nr.length ? r.nr : undefined });
 /** 디렉터 안내 번호: 시간순 D1, D2 … */
 export const noteLabel = (notes, id) => 'D' + ((notes || []).slice().sort((a, b) => a.t - b.t).findIndex(x => x.id === id) + 1);
